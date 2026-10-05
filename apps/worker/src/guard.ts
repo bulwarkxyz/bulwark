@@ -10,6 +10,7 @@ import {
   windowStart,
   type AccountSnapshot,
   type AssetIndex,
+  type BackstopPricing,
   type ExecutionContext,
   type GuardContext,
   type OpenOrder,
@@ -58,6 +59,17 @@ export interface EngineDeps {
   commandSignerFor(user: Hex): Promise<CommandSigner>;
   /** Builder field from config (null while the mainnet switch is off). */
   builder: BuilderWire | null;
+  /**
+   * How backstops are priced for pools with several positions: 'together' (as if every position moves
+   * against the user at once; fires earlier) or 'single' (each position alone). Default 'single'.
+   */
+  backstopPricing?: BackstopPricing;
+  /**
+   * The exchange no longer accepts this account's guard key. Usually the user has just approved a
+   * replacement under the same name (which replaces the old one on Hyperliquid): promote it now
+   * rather than at the next periodic check.
+   */
+  onAgentGone?(account: Hex): Promise<void>;
   /** Agents the user has approved on Hyperliquid (`extraAgents`), to tell when the guard key expired or was removed. */
   agents?(user: Hex): Promise<Array<{ address: string; validUntil?: number | null }>>;
   now(): number;
@@ -80,12 +92,22 @@ interface AccountCache {
   signerError: boolean;
   agentExpired: boolean;
   keyCheckedAt: number;
+  /** Hash of the signed policy the backstops were last priced for. */
+  policyHash?: string;
 }
 
 const coinsOf = (c: AccountCache) => new Set(Object.values(c.dexStates).flatMap((s) => s.assetPositions.map((p) => p.position.coin)));
+/**
+ * What the backstops are priced from, apart from prices: positions, each pool's cash (moves with fills,
+ * transfers, deposits, withdrawals and funding, not with the mark) and isolated margin. When it changes,
+ * the backstops are re-priced on the next run.
+ */
 const positionsKey = (c: AccountCache) =>
-  Object.values(c.dexStates)
-    .flatMap((s) => s.assetPositions.map((p) => `${p.position.coin}:${p.position.szi}`))
+  Object.entries(c.dexStates)
+    .flatMap(([dex, s]) => [
+      `${dex}$${Number(s.crossMarginSummary.totalRawUsd).toFixed(2)}`,
+      ...s.assetPositions.map((p) => `${p.position.coin}:${p.position.szi}${p.position.leverage.type === 'isolated' ? `@${Number(p.position.marginUsed).toFixed(2)}` : ''}`),
+    ])
     .sort()
     .join('|');
 
@@ -141,6 +163,14 @@ export class GuardEngine {
     const what = `Hyperliquid liquidated ${fill.sz ?? 'part of your'} ${fill.coin ?? ''} position${fill.px ? ` at ${fill.px}` : ''}`.replace(/\s+/g, ' ');
     await this.audit({ account: account as Hex, at, kind: 'alert', why: 'Liquidation reported by the exchange', what, proof: { fill } });
     if (user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, `Bulwark: ${what}.`).catch(() => undefined);
+  }
+
+  /** The account's guard key changed (created, replaced or wiped): check it again on the next run. */
+  keyChanged(account: string): void {
+    const c = this.entry(account);
+    c.keyCheckedAt = 0;
+    c.agentExpired = false;
+    c.signerError = false;
   }
 
   /** Re-runs every known account, so the status stays current while nothing moves. */
@@ -286,6 +316,10 @@ export class GuardEngine {
     }
     if (JSON.stringify(chains) !== JSON.stringify(before)) await store.saveRetries(account, chains);
 
+    if (c.policyHash !== confirmed.hash) {
+      c.policyHash = confirmed.hash;
+      c.lastBackstopAt = 0; // rules changed: re-price backstops now
+    }
     if (now - c.lastBackstopAt >= BACKSTOP_EVERY_MS && user.region === 'allowed' && !user.killSwitch) {
       c.lastBackstopAt = now;
       await this.backstops(account, user, confirmed, snapshot, marks, ctx);
@@ -383,7 +417,10 @@ export class GuardEngine {
       if (r.result) {
         c.exchangeDownAt = 0;
         c.signerError = false;
-        if (!r.result.ok && AGENT_GONE.test(r.error ?? '')) c.agentExpired = true; // cleared only by the key check
+        if (!r.result.ok && AGENT_GONE.test(r.error ?? '')) {
+          c.agentExpired = true; // cleared only by the key check
+          await this.deps.onAgentGone?.(account).catch(() => undefined);
+        }
       } else if (r.failedAt === 'send') c.exchangeDownAt = now();
       else if (r.failedAt === 'sign') c.signerError = true;
     }
@@ -404,8 +441,15 @@ export class GuardEngine {
         at: now(),
         kind: r.status === 'rejected' ? 'rejected' : r.status === 'alert' ? 'alert' : a.type === 'trigger' ? 'backstop' : 'guard_action',
         why: a.reason,
-        what: r.status === 'rejected' ? `Held back by ${r.violation?.invariant}: ${r.violation?.message}${attempt}` : `${a.type} ${r.status}${fill}${attempt}${r.error ? `: ${r.error}` : ''}`,
-        proof: { ruleId: a.ruleId, nonce: r.nonce, cloid: r.cloid, statuses: r.result?.statuses, latencyMs: r.latencyMs, builderRetried: r.builderRetried, ...(order ? { attempt: order.attempt ?? 1, filled: filledSize(r), limitPx: order.limitPx, keys: order.keys } : {}), ...(r.failedAt ? { failedAt: r.failedAt } : {}) },
+        what:
+          r.status === 'rejected'
+            ? `Held back by ${r.violation?.invariant}: ${r.violation?.message}${attempt}`
+            : a.type === 'trigger'
+              ? `Stop ${r.status === 'sent' ? 'resting' : r.status}: ${a.isBuy ? 'buy' : 'sell'} ${a.size} ${a.coin} if the mark ${a.isBuy ? 'rises to' : 'falls to'} ${a.triggerPx} (limit ${a.limitPx})${r.error ? `: ${r.error}` : ''}`
+              : a.type === 'cancel'
+                ? `Cancel ${r.status === 'sent' ? 'done' : r.status}: ${a.coin} order ${a.oid}${r.error ? `: ${r.error}` : ''}`
+                : `${a.type} ${r.status}${fill}${attempt}${r.error ? `: ${r.error}` : ''}`,
+        proof: { ruleId: a.ruleId, nonce: r.nonce, cloid: r.cloid, statuses: r.result?.statuses, latencyMs: r.latencyMs, builderRetried: r.builderRetried, ...(order ? { attempt: order.attempt ?? 1, filled: filledSize(r), limitPx: order.limitPx, keys: order.keys } : {}), ...(a.type === 'trigger' ? { coin: a.coin, triggerPx: a.triggerPx, limitPx: a.limitPx, size: a.size, line: a.line, pricing: a.pricing } : {}), ...(a.type === 'cancel' ? { coin: a.coin, oid: a.oid } : {}), ...(r.failedAt ? { failedAt: r.failedAt } : {}) },
       });
     }
   }
@@ -467,7 +511,7 @@ export class GuardEngine {
     if (gone.length) await store.removeGuardOrders(account, gone);
     const live = mine.filter((o) => !gone.includes(o.oid));
     const existing: OpenOrder[] = live.map((o) => ({ coin: o.coin, oid: o.oid, side: 'A', reduceOnly: true, isTrigger: true, triggerPx: o.triggerPx, size: o.size }));
-    const plan = planBackstops(confirmed.policy, snapshot, marks, existing);
+    const plan = planBackstops(confirmed.policy, snapshot, marks, existing, this.deps.backstopPricing ?? 'single');
     if (!plan.cancel.length && !plan.place.length) return;
     const records = await this.execute(account, user, confirmed, snapshot, marks, { ...ctx, openOrders: [...open, ...existing], guardOwnedOids: new Set(live.map((o) => o.oid)) }, [...plan.cancel, ...plan.place]);
     for (const r of records) {
@@ -475,7 +519,8 @@ export class GuardEngine {
       if (r.action.type === 'cancel') await store.removeGuardOrders(account, [r.action.oid]);
       if (r.action.type === 'trigger') {
         const resting = r.result?.statuses.find((s) => s.kind === 'resting') as { oid: number } | undefined;
-        if (resting) await store.addGuardOrder(account, { oid: resting.oid, coin: r.action.coin, kind: 'backstop', triggerPx: r.action.triggerPx, size: r.action.size, placedAt: this.deps.now() });
+        if (resting)
+          await store.addGuardOrder(account, { oid: resting.oid, coin: r.action.coin, kind: 'backstop', triggerPx: r.action.triggerPx, size: r.action.size, placedAt: this.deps.now(), ruleId: r.action.ruleId, line: r.action.line ?? null, pricing: r.action.pricing ?? null });
       }
     }
     c.openOrders = undefined;

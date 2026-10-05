@@ -40,8 +40,8 @@ describe.skipIf(!url)('postgres store', () => {
     expect((await store.baselines(A)).weekend?.accountValue).toBe(99.5);
     await store.setBaseline(A, 'weekend', null);
     expect(await store.baselines(A)).toEqual({});
-    await store.addGuardOrder(A, { oid: 7, coin: 'xyz:CL', kind: 'backstop', triggerPx: 80.1, size: 0.24, placedAt: 5 });
-    expect(await store.guardOrders(A)).toEqual([{ oid: 7, coin: 'xyz:CL', kind: 'backstop', triggerPx: 80.1, size: 0.24, placedAt: 5 }]);
+    await store.addGuardOrder(A, { oid: 7, coin: 'xyz:CL', kind: 'backstop', triggerPx: 80.1, size: 0.24, placedAt: 5, ruleId: 'stage-3', line: 1.2, pricing: 'together' });
+    expect(await store.guardOrders(A)).toEqual([{ oid: 7, coin: 'xyz:CL', kind: 'backstop', triggerPx: 80.1, size: 0.24, placedAt: 5, ruleId: 'stage-3', line: 1.2, pricing: 'together' }]);
     await store.removeGuardOrders(A, [7]);
     expect(await store.guardOrders(A)).toEqual([]);
     await store.addAction(A, 100);

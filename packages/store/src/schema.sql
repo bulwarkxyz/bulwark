@@ -146,6 +146,11 @@ create table if not exists guard_status (
   check ((state = 'paused') = (reason is not null))
 );
 
+-- Guard orders: the rule and buffer line each belongs to, and how a backstop was priced.
+alter table guard_orders add column if not exists rule_id text;
+alter table guard_orders add column if not exists line double precision;
+alter table guard_orders add column if not exists pricing text;
+
 -- Keys held in AWS KMS: the key id (no key material), and when the API disabled it and scheduled deletion.
 alter table agent_keys add column if not exists kms_key_id text;
 alter table agent_keys add column if not exists kms_retired_at bigint;

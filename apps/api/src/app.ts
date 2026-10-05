@@ -197,7 +197,7 @@ export function createApp(deps: ApiDeps) {
     if (!user?.agentAddress) return c.json({ error: 'no guard key yet' }, 409);
     if (deps.keyCustody === 'sealed') {
       await deps.store.requestAgentKey(account, deps.network, 'rotate', deps.now());
-      return c.json({ status: 'creating' }, 202);
+      return c.json({ status: 'creating', pendingAgent: null }, 202);
     }
     const pending = (await deps.store.agentKeys(account, deps.network)).find((k) => k.status === 'pending');
     if (pending) return c.json({ status: 'pending', pendingAgent: { address: pending.address } });

@@ -347,3 +347,86 @@ describe('guard status', () => {
     expect((await status())!.updatedAt).toBe(t);
   });
 });
+
+describe('backstops priced as if the pool moves together', () => {
+  // Two cross longs on xyz, $1,000 each, `equity` of margin: buffer ≈ 4.4 at 200.
+  function twoState(equity: number): RawClearinghouseState {
+    const cl = { coin: 'xyz:CL', size: 10, mark: 100 };
+    const gold = { coin: 'xyz:GOLD', size: 0.25, mark: 4000 };
+    const mm = [cl, gold].reduce((s, p) => s + maintenanceMargin(assets.get(p.coin)!.tiers, p.size * p.mark), 0);
+    const ntl = 2000;
+    const sum = (av: number, raw: number) => ({ accountValue: String(av), totalNtlPos: '0', totalRawUsd: String(raw), totalMarginUsed: '0' });
+    return {
+      marginSummary: sum(equity, equity - ntl),
+      crossMarginSummary: sum(equity, equity - ntl),
+      crossMaintenanceMarginUsed: String(mm),
+      withdrawable: '0',
+      assetPositions: [cl, gold].map((p) => ({ type: 'oneWay', position: { coin: p.coin, szi: String(p.size), leverage: { type: 'cross', value: 10 }, entryPx: String(p.mark), positionValue: String(p.size * p.mark), unrealizedPnl: '0', liquidationPx: null, marginUsed: '0', maxLeverage: 20 } })),
+      time: 0,
+    };
+  }
+  const marks = new Map([['xyz:CL', 100], ['xyz:GOLD', 4000]]);
+  async function feedTwo(equity: number) {
+    await engine.onUserState(ACCOUNT, [['', emptyMain], ['xyz', twoState(equity)]], t);
+    await engine.onSpotState(ACCOUNT, { balances: [{ coin: 'USDC', token: 0, total: '0', hold: '0', entryNtl: '0' }] }, t);
+    await engine.onMarks(marks, t);
+  }
+  const fallTo = (px: number, mark: number) => +((1 - px / mark) * 100).toFixed(2);
+
+  beforeEach(() => {
+    setup();
+    (engine as unknown as { deps: { backstopPricing: string } }).deps.backstopPricing = 'together';
+    // As on Hyperliquid: the guard's stops stay open until cancelled.
+    (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = async () =>
+      (await store.guardOrders(ACCOUNT)).map((o) => ({ coin: o.coin, oid: o.oid, side: 'A', reduceOnly: true, isTrigger: true, triggerPx: o.triggerPx, size: o.size }));
+  });
+
+  it('places each stop where the pool would reach the lowest line if both fell together, and records line and pricing', async () => {
+    await feedTwo(200);
+    const orders = await store.guardOrders(ACCOUNT);
+    expect(orders.map((o) => [o.coin, o.kind, o.ruleId, o.line, o.pricing])).toEqual([
+      ['xyz:CL', 'backstop', 'stage-3', 1.2, 'together'],
+      ['xyz:GOLD', 'backstop', 'stage-3', 1.2, 'together'],
+    ]);
+    const cl = orders.find((o) => o.coin === 'xyz:CL')!;
+    const gold = orders.find((o) => o.coin === 'xyz:GOLD')!;
+    expect(Math.abs(fallTo(cl.triggerPx, 100) - fallTo(gold.triggerPx, 4000))).toBeLessThan(0.05); // the same move for both
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.kind === 'backstop').map((e) => e.why)).toEqual([
+      'backstop at your 1.2× line, priced as if every position in this pool moves against you at once',
+      'backstop at your 1.2× line, priced as if every position in this pool moves against you at once',
+    ]);
+  });
+
+  it('re-prices on a margin change and on new rules, and the audit log shows each cancel and re-placement', async () => {
+    await feedTwo(200);
+    const first = await store.guardOrders(ACCOUNT);
+    // A deposit: more margin, so the stops move further away.
+    t += 1000;
+    await feedTwo(260);
+    const second = await store.guardOrders(ACCOUNT);
+    expect(second.map((o) => o.oid)).not.toEqual(first.map((o) => o.oid));
+    expect(second.find((o) => o.coin === 'xyz:CL')!.triggerPx).toBeLessThan(first.find((o) => o.coin === 'xyz:CL')!.triggerPx);
+    // New rules (lowest line 1.5): re-priced at once, without waiting for the minute's sync.
+    const raised: Policy = { ...policy, version: 2, rules: policy.rules.map((r) => (r.id === 'stage-3' ? { ...r, when: { kind: 'buffer' as const, below: 1.5 } } : r)) };
+    store.putPolicy(ACCOUNT, { policy: raised, hash: policyHash(raised), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 99.99], ['xyz:GOLD', 3999.9]]), t);
+    const third = await store.guardOrders(ACCOUNT);
+    expect(third.every((o) => o.line === 1.5)).toBe(true);
+    const log = store.audit.raw(ACCOUNT).filter((e) => e.kind === 'backstop' || (e.kind === 'guard_action' && /backstop/.test(e.why)));
+    // Placed twice per change (CL, GOLD), with the old ones cancelled in between.
+    expect(log.map((e) => `${e.kind}: ${e.why}`).filter((x) => /replacing backstop/.test(x))).toHaveLength(4);
+    expect(log.filter((e) => e.kind === 'backstop')).toHaveLength(6);
+    if (process.env.DUMP_AUDIT) console.log('AUDIT ' + JSON.stringify(store.audit.raw(ACCOUNT).filter((e) => e.kind !== 'window').map((e) => ({ at: new Date(e.at).toISOString(), kind: e.kind, why: e.why, what: e.what, triggerPx: (e.proof as { statuses?: unknown })?.statuses ? undefined : undefined }))));
+  });
+
+  it('when the exchange no longer knows the guard key, the replacement check runs at once', async () => {
+    const gone: string[] = [];
+    (engine as unknown as { deps: { onAgentGone: (a: string) => Promise<void> } }).deps.onAgentGone = async (a) => void gone.push(a);
+    orderReplies = [() => ({ status: 'err', response: 'User or API Wallet 0x0000000000000000000000000000000000000a6e does not exist.' })];
+    await feed(91.5);
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 69]]), t);
+    expect(gone).toEqual([ACCOUNT]);
+  });
+});

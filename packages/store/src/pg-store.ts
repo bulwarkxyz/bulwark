@@ -119,11 +119,11 @@ export class PgStore implements ApiStore, KeyVault {
   }
   async guardOrders(account: string): Promise<GuardOrder[]> {
     const rows = await this.sql`select * from guard_orders where account = ${this.k(account)} order by placed_at`;
-    return rows.map((r) => ({ oid: Number(r.oid), coin: r.coin, kind: r.kind, triggerPx: r.trigger_px, size: r.size, placedAt: Number(r.placed_at) }));
+    return rows.map((r) => ({ oid: Number(r.oid), coin: r.coin, kind: r.kind, triggerPx: r.trigger_px, size: r.size, placedAt: Number(r.placed_at), ruleId: r.rule_id ?? null, line: r.line ?? null, pricing: r.pricing ?? null }));
   }
   async addGuardOrder(account: string, o: GuardOrder) {
-    await this.sql`insert into guard_orders (account, oid, coin, kind, trigger_px, size, placed_at)
-      values (${this.k(account)}, ${o.oid}, ${o.coin}, ${o.kind}, ${o.triggerPx}, ${o.size}, ${o.placedAt}) on conflict do nothing`;
+    await this.sql`insert into guard_orders (account, oid, coin, kind, trigger_px, size, placed_at, rule_id, line, pricing)
+      values (${this.k(account)}, ${o.oid}, ${o.coin}, ${o.kind}, ${o.triggerPx}, ${o.size}, ${o.placedAt}, ${o.ruleId ?? null}, ${o.line ?? null}, ${o.pricing ?? null}) on conflict do nothing`;
   }
   async removeGuardOrders(account: string, oids: readonly number[]) {
     if (oids.length) await this.sql`delete from guard_orders where account = ${this.k(account)} and oid in ${this.sql(oids as number[])}`;

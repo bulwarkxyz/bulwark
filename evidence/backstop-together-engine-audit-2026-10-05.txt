@@ -1,0 +1,12 @@
+# Worker engine with a mock exchange (not live testnet): two-position account, backstops priced together,
+# re-placed after a deposit and after new rules. apps/worker/test/guard.test.ts, DUMP_AUDIT=1.
+21:40:00 backstop     Stop resting: sell 10 xyz:CL if the mark falls to 92.784 (limit 91.857) | backstop at your 1.2× line, priced as if every position in this pool moves against you at once
+21:40:00 backstop     Stop resting: sell 0.25 xyz:GOLD if the mark falls to 3711.4 (limit 3674.3) | backstop at your 1.2× line, priced as if every position in this pool moves against you at once
+21:40:01 guard_action Cancel done: xyz:CL order 100 | replacing backstop
+21:40:01 guard_action Cancel done: xyz:GOLD order 101 | replacing backstop
+21:40:01 backstop     Stop resting: sell 10 xyz:CL if the mark falls to 89.691 (limit 88.795) | backstop at your 1.2× line, priced as if every position in this pool moves against you at once
+21:40:01 backstop     Stop resting: sell 0.25 xyz:GOLD if the mark falls to 3587.7 (limit 3551.9) | backstop at your 1.2× line, priced as if every position in this pool moves against you at once
+21:40:02 guard_action Cancel done: xyz:CL order 102 | replacing backstop
+21:40:02 guard_action Cancel done: xyz:GOLD order 103 | replacing backstop
+21:40:02 backstop     Stop resting: sell 10 xyz:CL if the mark falls to 90.387 (limit 89.484) | backstop at your 1.5× line, priced as if every position in this pool moves against you at once
+21:40:02 backstop     Stop resting: sell 0.25 xyz:GOLD if the mark falls to 3615.8 (limit 3579.7) | backstop at your 1.5× line, priced as if every position in this pool moves against you at once

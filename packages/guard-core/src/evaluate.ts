@@ -70,6 +70,10 @@ export type GuardAction =
       limitPx: number;
       reduceOnly: true;
       tpsl: 'sl';
+      /** The buffer line this stop belongs to. */
+      line?: number;
+      /** How it was priced: this position alone, or every position in the pool moving together. */
+      pricing?: 'single' | 'together';
     })
   | (Base & { type: 'transfer'; source: IdleSource['id']; toDex: string; amount: number; token: number })
   | (Base & { type: 'isolatedMargin'; dex: string; coin: string; assetId: number; amount: number })

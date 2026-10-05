@@ -128,6 +128,8 @@ async function main() {
       return new CommandSigner(await digestSigner(user, u.agentKeyRef), network === 'mainnet');
     },
     builder: builderField(network as ConfigNetwork) as { b: Hex; f: number } | null,
+    backstopPricing: process.env.BACKSTOP_PRICING === 'together' ? 'together' : 'single',
+    onAgentGone: async (account) => void (await keys.promoteRotations([account])),
     agents: async (user) => (await info.extraAgents(user)) as Array<{ address: string; validUntil?: number | null }>,
     now: Date.now,
   });
@@ -231,7 +233,10 @@ async function main() {
     master,
     network,
     approvedAgents: async (account) => ((await info.extraAgents(account as Hex)) as Array<{ address: string }>).map((a) => a.address),
-    onKeyChanged: dropSigners,
+    onKeyChanged: (account) => {
+      dropSigners(account);
+      engine.keyChanged(account);
+    },
     now: Date.now,
   });
   const resealed = await keys.resealAll();

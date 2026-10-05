@@ -36,13 +36,21 @@ export interface Baseline {
 }
 
 /** An order the guard placed itself. The guard may only ever cancel these. */
+/**
+ * An order the guard placed and left resting on Hyperliquid (contract: apps/api/CONTRACT.md).
+ * `kind` 'backstop' is the only kind today; 'stage' is reserved for stages placed on the exchange.
+ */
 export interface GuardOrder {
   oid: number;
   coin: string;
-  kind: 'backstop';
+  kind: 'backstop' | 'stage';
   triggerPx: number;
   size: number;
   placedAt: number;
+  /** The rule and buffer line the order belongs to (absent on orders placed before these were recorded). */
+  ruleId?: string | null;
+  line?: number | null;
+  pricing?: 'single' | 'together' | null;
 }
 
 /** What the guard is doing for an account, as the worker last judged it. */
