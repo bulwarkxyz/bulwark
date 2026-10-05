@@ -5,7 +5,7 @@ import { DisconnectButton } from '@/components/app/connect';
 import { fmtBuffer, fmtSignedUsd, fmtUsd, shortAddr, upDown } from '@/components/app/format';
 import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
-import { KEY_TEXT } from '@/components/app/keys';
+import { KEY_STORAGE, KEY_TEXT, shownCustody } from '@/components/app/keys';
 import { poolState } from '@/components/app/positions-table';
 import { NETWORK } from '@/lib/env';
 import { tickerOf, useGuardView, useNow } from '@/lib/guard';
@@ -218,7 +218,7 @@ export default function AccountPage() {
                 </div>
                 <div className="kv line">
                   <span className="small">Key storage</span>
-                  <span className="small">{me.data?.keyCustody === 'kms' ? 'AWS KMS' : 'Encrypted on Bulwark’s server'}</span>
+                  <span className="small">{shownCustody(me.data) ? KEY_STORAGE[shownCustody(me.data)!] : '—'}</span>
                 </div>
                 <div className="kv">
                   <span className="small">Explorer</span>
@@ -227,7 +227,7 @@ export default function AccountPage() {
                   </a>
                 </div>
                 <span className="small t2" style={{ marginTop: 10 }}>
-                  {KEY_TEXT[me.data?.keyCustody ?? 'sealed']}
+                  {shownCustody(me.data) ? KEY_TEXT[shownCustody(me.data)!] : 'Sign in to see where your guard key is stored.'}
                 </span>
                 <div className="disclose" style={{ marginTop: 10 }}>
                   {Icon.shield(14)}

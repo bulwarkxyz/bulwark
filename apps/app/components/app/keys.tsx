@@ -36,14 +36,23 @@ function useWalletSigner() {
 }
 
 /**
- * The guard key, one per user, approved by the user as a named agent on Hyperliquid. Its description
- * follows where the key actually lives (the API reports `keyCustody`), so the app never overstates it.
+ * The guard key, one per user, approved by the user as a named agent on Hyperliquid. What the app says
+ * about it follows where this user's key actually lives (`keyCustody` from /v1/me), or, before a key
+ * exists, where a new one would be made (`newKeyCustody`). Wording from apps/docs key-storage.mdx.
  */
-export const KEY_TEXT = {
-  sealed:
-    'A key made for you on Bulwark’s server and stored there encrypted (AES-256-GCM). Hyperliquid lets it trade for you but never withdraw. If our server were compromised, someone could place trades with it, but could not withdraw your funds. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule. Hardware-backed key storage is planned.',
-  kms: 'A key held in AWS KMS, created for you and never exported. Hyperliquid lets it trade for you but never withdraw. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule.',
+export const KEY_STORAGE = {
+  kms: 'AWS KMS, hardware-backed',
+  sealed: 'Encrypted on Bulwark’s server',
 } as const;
+export const KEY_TEXT = {
+  kms: 'A non-exportable key in AWS KMS, held in hardware security modules. Its private key never leaves KMS: Bulwark never sees it, and no one can copy it. If Bulwark’s signing service were compromised, an attacker could ask KMS to sign trades on your account for as long as they controlled the service. They could not copy the key, and they could not withdraw your funds.',
+  sealed: 'An encrypted key (AES-256-GCM) on Bulwark’s signing service. It is not hardware-backed: if that server and its master key were compromised, the key itself could be copied and used to place trades. It still could not withdraw.',
+} as const;
+/** The custody to describe: this user's key if there is one, else where a new key would be made. */
+export function shownCustody(me: Me | null | undefined): 'sealed' | 'kms' | null {
+  if (!me) return null;
+  return me.agent || me.keyStatus === 'ready' ? me.keyCustody : (me.newKeyCustody ?? me.keyCustody);
+}
 
 export function GuardKeyCard() {
   const me = useMe();
@@ -53,7 +62,9 @@ export function GuardKeyCard() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
   const agent = me.data?.agent;
+  const pending = me.data?.pendingAgent ?? null;
   const region = me.data?.user?.region;
+  const [confirmReplace, setConfirmReplace] = useState(false);
 
   async function create() {
     setBusy(true);
@@ -93,18 +104,73 @@ export function GuardKeyCard() {
     }
   }
 
+  async function replace() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ status: 'creating' | 'pending'; pendingAgent?: { address: Hex } }>('/v1/guard-key/rotate', { method: 'POST', body: {} });
+      if (r.status === 'creating') {
+        setMsg({ ok: true, text: 'Creating your new guard key…' });
+        for (let i = 0; i < 30; i++) {
+          await new Promise((res) => setTimeout(res, 2000));
+          const fresh = await qc.fetchQuery({ queryKey: ['me'], queryFn: () => api<Me>('/v1/me'), staleTime: 0 });
+          if (fresh?.pendingAgent) break;
+        }
+        setMsg(null);
+      }
+      setConfirmReplace(false);
+      await qc.invalidateQueries({ queryKey: ['me'] });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function approvePending() {
+    if (!pending) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await sendUserSigned(sign, approveAgentFor(chainId, pending.address, 'bulwark-guard', validUntil(days)));
+      if (!res.ok) throw new Error(res.error);
+      setMsg({ ok: true, text: 'New guard key approved. It takes over and the old key stops signing.' });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const custody = shownCustody(me.data);
+  const days_ = (
+    <div className="field">
+      <label htmlFor="gk-days">Approval lasts (days, leave empty for no expiry)</label>
+      <div className="input">
+        <input id="gk-days" inputMode="numeric" placeholder="Your number" value={days} onChange={(e) => setDays(e.target.value)} />
+        <span className="unit">days</span>
+      </div>
+    </div>
+  );
   return (
     <section className="panel" aria-labelledby="gk-h">
       <div className="ph">
         <h2 id="gk-h">Guard key</h2>
         <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
-          {agent?.approved ? 'Approved' : agent ? 'Created, not approved' : 'Not created'}
+          {pending ? 'Replacement waiting for approval' : agent?.approved ? 'Approved' : agent ? 'Created, not approved' : me.data?.keyStatus === 'creating' ? 'Being created' : me.data?.keyStatus === 'wiped' ? 'Wiped' : 'Not created'}
         </span>
       </div>
       <div className="pb col" style={{ gap: 10 }}>
-        <span className="small t2">
-          {KEY_TEXT[me.data?.keyCustody ?? 'sealed']}
-        </span>
+        {custody ? (
+          <div className="kv line">
+            <span className="small">{agent ? 'Key storage' : 'Your key will be stored in'}</span>
+            <span className="small">
+              <b>{KEY_STORAGE[custody]}</b>
+            </span>
+          </div>
+        ) : null}
+        <span className="small t2">{custody ? KEY_TEXT[custody] : 'Sign in to see where your guard key is stored.'}</span>
+        <span className="small t2">Hyperliquid lets the key trade for you but never withdraw. Reduce-only is our engine’s limit, not Hyperliquid’s: every order is re-checked against your rules before it is signed.</span>
         {region === 'guardOff' ? <div className="banner b-warn">In your region the guard is off: trading and alerts only.</div> : null}
         {agent ? (
           <div className="kv">
@@ -118,24 +184,55 @@ export function GuardKeyCard() {
             <span className="num">{new Date(agent.validUntil).toISOString().slice(0, 10)}</span>
           </div>
         ) : null}
+        {agent && me.data?.keyCustody === 'sealed' && me.data.newKeyCustody === 'kms' && !pending ? (
+          <div className="banner">
+            <span>
+              <b>Your key is an older encrypted key.</b> New keys are made in AWS KMS. To move to a KMS key, replace your key.
+            </span>
+          </div>
+        ) : null}
         {!agent ? (
-          <button type="button" className="btn" disabled={busy || !me.data?.user || region !== 'allowed'} onClick={create}>
+          <button type="button" className="btn" disabled={busy || !me.data?.user || region !== 'allowed' || me.data?.keyStatus === 'creating'} onClick={create}>
             {busy ? 'Creating…' : 'Create my guard key'}
           </button>
         ) : !agent.approved ? (
           <>
-            <div className="field">
-              <label htmlFor="gk-days">Approval lasts (days, leave empty for no expiry)</label>
-              <div className="input">
-                <input id="gk-days" inputMode="numeric" placeholder="Your number" value={days} onChange={(e) => setDays(e.target.value)} />
-                <span className="unit">days</span>
-              </div>
-            </div>
+            {days_}
             <button type="button" className="btn btn-ink" disabled={busy} onClick={approve}>
               {busy ? 'Waiting for signature…' : 'Approve guard key'}
             </button>
           </>
-        ) : null}
+        ) : pending ? (
+          <>
+            <div className="kv">
+              <span>New key</span>
+              <span className="num">{shortAddr(pending.address)}</span>
+            </div>
+            <span className="small t2">It takes over once you approve it on Hyperliquid. The old key then stops signing at once.</span>
+            {days_}
+            <button type="button" className="btn btn-ink" disabled={busy} onClick={approvePending}>
+              {busy ? 'Waiting for signature…' : 'Approve the new key'}
+            </button>
+          </>
+        ) : confirmReplace ? (
+          <div className="col" style={{ gap: 8 }}>
+            <span className="small">
+              A new key is made {me.data?.newKeyCustody === 'kms' ? 'in AWS KMS' : 'on Bulwark’s signing service'}. Your current key keeps working until you approve the new one.
+            </span>
+            <div className="row">
+              <button type="button" className="btn btn-ink" disabled={busy} onClick={replace}>
+                {busy ? 'Creating…' : 'Make the new key'}
+              </button>
+              <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setConfirmReplace(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn" disabled={busy} onClick={() => setConfirmReplace(true)}>
+            Replace my guard key
+          </button>
+        )}
         <Status msg={msg} />
       </div>
     </section>

@@ -12,6 +12,7 @@ import { useAccount } from 'wagmi';
  *   ?rules=example   give that account example rules, labelled "Example rules" on screen
  *   ?state=empty|loading|error|closed   force a screen state
  *   ?guard=paused:signer_error   stand in for the guard status endpoint
+ *   ?key=sealed                  show an older encrypted key instead of a KMS key
  * Nothing here can sign, send or store anything.
  */
 export const REVIEW_BUILD = process.env.NEXT_PUBLIC_REVIEW_MODE === '1';
@@ -26,6 +27,8 @@ interface Review {
   state: ForcedState;
   /** ?guard=paused:signer_error: stand in for the guard status endpoint. */
   guard?: string;
+  /** ?key=sealed|kms: where the example guard key lives (default kms, the active custody). */
+  key?: 'sealed' | 'kms';
 }
 const OFF: Review = { on: false, exampleRules: false, state: null };
 const Ctx = createContext<Review>(OFF);
@@ -41,6 +44,7 @@ export function ReviewProvider({ children }: { children: React.ReactNode }) {
       on: true,
       ...(watch && /^0x[0-9a-fA-F]{40}$/.test(watch) ? { watch: watch.toLowerCase() as Hex } : {}),
       exampleRules: q.get('rules') === 'example',
+      ...(q.get('key') === 'sealed' || q.get('key') === 'kms' ? { key: q.get('key') as 'sealed' | 'kms' } : {}),
       ...(q.get('guard') && /^(protected|acting|at_risk|paused|stopped|no_rules|alerts_only)(:(stale_data|exchange_unreachable|signer_error|agent_expired))?$/.test(q.get('guard')!) ? { guard: q.get('guard')! } : {}),
       state: state === 'empty' || state === 'loading' || state === 'error' || state === 'closed' ? state : null,
     });
