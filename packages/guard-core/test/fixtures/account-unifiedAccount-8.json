@@ -1,7 +1,7 @@
 {
- "label": "unifiedAccount-5",
+ "label": "unifiedAccount-8",
  "mode": "unifiedAccount",
- "capturedAt": "2026-10-05T02:54:49.247Z",
+ "capturedAt": "2026-10-05T09:24:34.263Z",
  "dexNames": [
   "",
   "xyz",
@@ -32,50 +32,143 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "xyz": {
    "marginSummary": {
-    "accountValue": "3915.92164",
-    "totalNtlPos": "54860.8968",
-    "totalRawUsd": "-50944.97516",
-    "totalMarginUsed": "3915.92164"
+    "accountValue": "125.702905",
+    "totalNtlPos": "1996.26288",
+    "totalRawUsd": "2121.965785",
+    "totalMarginUsed": "124.820772"
    },
    "crossMarginSummary": {
-    "accountValue": "0.0",
-    "totalNtlPos": "0.0",
-    "totalRawUsd": "0.0",
-    "totalMarginUsed": "0.0"
+    "accountValue": "100.710899",
+    "totalNtlPos": "1497.4315",
+    "totalRawUsd": "1598.142399",
+    "totalMarginUsed": "99.828766"
    },
-   "crossMaintenanceMarginUsed": "0.0",
-   "withdrawable": "0.0",
+   "crossMaintenanceMarginUsed": "25.899793",
+   "withdrawable": "0.882133",
    "assetPositions": [
     {
      "type": "oneWay",
      "position": {
-      "coin": "xyz:CL",
-      "szi": "609.2",
+      "coin": "xyz:XYZ100",
+      "szi": "-0.0161",
+      "leverage": {
+       "type": "cross",
+       "value": 15
+      },
+      "entryPx": "30776.0",
+      "positionValue": "495.4131",
+      "unrealizedPnl": "0.0805",
+      "returnOnEquity": "0.0024369639",
+      "liquidationPx": "38247.4555747887",
+      "marginUsed": "33.02754",
+      "maxLeverage": 30,
+      "cumFunding": {
+       "allTime": "0.00193",
+       "sinceOpen": "0.0",
+       "sinceChange": "0.0"
+      }
+     }
+    },
+    {
+     "type": "oneWay",
+     "position": {
+      "coin": "xyz:KR200",
+      "szi": "-0.1786",
       "leverage": {
        "type": "isolated",
        "value": 20,
-       "rawUsd": "-50944.97516"
+       "rawUsd": "209.828089"
       },
-      "entryPx": "90.672",
-      "positionValue": "54860.8968",
-      "unrealizedPnl": "-376.564286",
-      "returnOnEquity": "-0.1363438068",
-      "liquidationPx": "85.7702832803",
-      "marginUsed": "3915.92164",
+      "entryPx": "1118.76",
+      "positionValue": "199.83554",
+      "unrealizedPnl": "-0.02487",
+      "returnOnEquity": "-0.0024893565",
+      "liquidationPx": "1146.1944609838",
+      "marginUsed": "9.992549",
       "maxLeverage": 20,
       "cumFunding": {
-       "allTime": "-869.52445",
-       "sinceOpen": "3.57693",
+       "allTime": "0.0",
+       "sinceOpen": "0.0",
+       "sinceChange": "0.0"
+      }
+     }
+    },
+    {
+     "type": "oneWay",
+     "position": {
+      "coin": "xyz:JP225",
+      "szi": "-0.00429",
+      "leverage": {
+       "type": "isolated",
+       "value": 20,
+       "rawUsd": "313.995297"
+      },
+      "entryPx": "69704.0",
+      "positionValue": "298.99584",
+      "unrealizedPnl": "0.03474",
+      "returnOnEquity": "0.0023235082",
+      "liquidationPx": "71407.1969981238",
+      "marginUsed": "14.999457",
+      "maxLeverage": 20,
+      "cumFunding": {
+       "allTime": "0.0",
+       "sinceOpen": "0.0",
+       "sinceChange": "0.0"
+      }
+     }
+    },
+    {
+     "type": "oneWay",
+     "position": {
+      "coin": "xyz:BRENTOIL",
+      "szi": "-4.99",
+      "leverage": {
+       "type": "cross",
+       "value": 15
+      },
+      "entryPx": "102.1873",
+      "positionValue": "508.1816",
+      "unrealizedPnl": "1.7335",
+      "returnOnEquity": "0.0509937831",
+      "liquidationPx": "125.7663144826",
+      "marginUsed": "33.878773",
+      "maxLeverage": 20,
+      "cumFunding": {
+       "allTime": "0.0",
+       "sinceOpen": "0.0",
+       "sinceChange": "0.0"
+      }
+     }
+    },
+    {
+     "type": "oneWay",
+     "position": {
+      "coin": "xyz:SP500",
+      "szi": "-0.064",
+      "leverage": {
+       "type": "cross",
+       "value": 15
+      },
+      "entryPx": "7716.518",
+      "positionValue": "493.8368",
+      "unrealizedPnl": "0.0204",
+      "returnOnEquity": "0.0006196123",
+      "liquidationPx": "9609.4103496287",
+      "marginUsed": "32.922453",
+      "maxLeverage": 50,
+      "cumFunding": {
+       "allTime": "0.037835",
+       "sinceOpen": "0.0",
        "sinceChange": "0.0"
       }
      }
     }
    ],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "flx": {
    "marginSummary": {
@@ -93,7 +186,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "vntl": {
    "marginSummary": {
@@ -111,7 +204,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "hyna": {
    "marginSummary": {
@@ -129,7 +222,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "km": {
    "marginSummary": {
@@ -147,7 +240,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "abcd": {
    "marginSummary": {
@@ -165,7 +258,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270701
   },
   "cash": {
    "marginSummary": {
@@ -183,7 +276,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "para": {
    "marginSummary": {
@@ -201,7 +294,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "mkts": {
    "marginSummary": {
@@ -219,7 +312,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   },
   "io": {
    "marginSummary": {
@@ -237,7 +330,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168885648
+   "time": 1791192270639
   }
  },
  "spot": {
@@ -245,8 +338,8 @@
    {
     "coin": "USDC",
     "token": 0,
-    "total": "3915.928323",
-    "hold": "3915.92164",
+    "total": "173.26891676",
+    "hold": "124.820772",
     "entryNtl": "0.0"
    },
    {
@@ -274,7 +367,7 @@
   "tokenToAvailableAfterMaintenance": [
    [
     0,
-    "0.006683"
+    "122.37711776"
    ]
   ]
  }

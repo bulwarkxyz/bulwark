@@ -1,7 +1,7 @@
 {
  "label": "unifiedAccount-7",
  "mode": "unifiedAccount",
- "capturedAt": "2026-10-05T02:54:56.203Z",
+ "capturedAt": "2026-10-05T09:24:30.759Z",
  "dexNames": [
   "",
   "xyz",
@@ -32,49 +32,72 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "xyz": {
    "marginSummary": {
-    "accountValue": "21438.968657",
-    "totalNtlPos": "149982.85683",
-    "totalRawUsd": "-128543.888173",
-    "totalMarginUsed": "21426.122404"
+    "accountValue": "1786.163578",
+    "totalNtlPos": "63188.3191",
+    "totalRawUsd": "-61402.155522",
+    "totalMarginUsed": "1794.135338"
    },
    "crossMarginSummary": {
-    "accountValue": "21438.968657",
-    "totalNtlPos": "149982.85683",
-    "totalRawUsd": "-128543.888173",
-    "totalMarginUsed": "21426.122404"
+    "accountValue": "1786.163578",
+    "totalNtlPos": "63188.3191",
+    "totalRawUsd": "-61402.155522",
+    "totalMarginUsed": "1794.135338"
    },
-   "crossMaintenanceMarginUsed": "3749.57142",
-   "withdrawable": "12.846253",
+   "crossMaintenanceMarginUsed": "897.067669",
+   "withdrawable": "0.0",
    "assetPositions": [
     {
      "type": "oneWay",
      "position": {
-      "coin": "xyz:CL",
-      "szi": "1665.255",
+      "coin": "xyz:XYZ100",
+      "szi": "1.2927",
       "leverage": {
        "type": "cross",
-       "value": 7
+       "value": 30
       },
-      "entryPx": "91.06",
-      "positionValue": "149982.85683",
-      "unrealizedPnl": "-1655.943679",
-      "returnOnEquity": "-0.0764422148",
-      "liquidationPx": "26.6002871275",
-      "marginUsed": "21426.122404",
-      "maxLeverage": 20,
+      "entryPx": "30852.37",
+      "positionValue": "39777.6717",
+      "unrealizedPnl": "-105.195",
+      "returnOnEquity": "-0.079127963",
+      "liquidationPx": "29072.4550735355",
+      "marginUsed": "1325.92239",
+      "maxLeverage": 30,
       "cumFunding": {
-       "allTime": "11.684294",
-       "sinceOpen": "11.684294",
+       "allTime": "-49.288802",
+       "sinceOpen": "0.982602",
+       "sinceChange": "0.0"
+      }
+     }
+    },
+    {
+     "type": "oneWay",
+     "position": {
+      "coin": "xyz:SP500",
+      "szi": "3.034",
+      "leverage": {
+       "type": "cross",
+       "value": 50
+      },
+      "entryPx": "7723.947",
+      "positionValue": "23410.6474",
+      "unrealizedPnl": "-23.8078",
+      "returnOnEquity": "-0.0507965724",
+      "liquidationPx": "6997.2723444065",
+      "marginUsed": "468.212948",
+      "maxLeverage": 50,
+      "cumFunding": {
+       "allTime": "12.556155",
+       "sinceOpen": "0.650785",
        "sinceChange": "0.0"
       }
      }
     }
    ],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "flx": {
    "marginSummary": {
@@ -92,7 +115,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "vntl": {
    "marginSummary": {
@@ -110,7 +133,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "hyna": {
    "marginSummary": {
@@ -128,7 +151,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "km": {
    "marginSummary": {
@@ -146,7 +169,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "abcd": {
    "marginSummary": {
@@ -164,7 +187,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "cash": {
    "marginSummary": {
@@ -182,7 +205,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "para": {
    "marginSummary": {
@@ -200,7 +223,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "mkts": {
    "marginSummary": {
@@ -218,7 +241,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   },
   "io": {
    "marginSummary": {
@@ -236,7 +259,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168892719
+   "time": 1791192267130
   }
  },
  "spot": {
@@ -244,23 +267,58 @@
    {
     "coin": "USDC",
     "token": 0,
-    "total": "106794.002218",
-    "hold": "21426.122404",
+    "total": "3056.18154504",
+    "hold": "1794.135338",
     "entryNtl": "0.0"
    },
    {
-    "coin": "PURR",
-    "token": 1,
+    "coin": "HBOOST",
+    "token": 31,
     "total": "0.0",
     "hold": "0.0",
     "entryNtl": "0.0"
    },
    {
-    "coin": "HYPE",
-    "token": 150,
+    "coin": "CAT",
+    "token": 48,
     "total": "0.0",
     "hold": "0.0",
     "entryNtl": "0.0"
+   },
+   {
+    "coin": "DROP",
+    "token": 56,
+    "total": "1124.5974767",
+    "hold": "0.0",
+    "entryNtl": "3.76065266"
+   },
+   {
+    "coin": "BRIDGE",
+    "token": 73,
+    "total": "31.99",
+    "hold": "0.0",
+    "entryNtl": "4.3899877"
+   },
+   {
+    "coin": "MONAD",
+    "token": 112,
+    "total": "1999.0",
+    "hold": "0.0",
+    "entryNtl": "7.99679967"
+   },
+   {
+    "coin": "FATCAT",
+    "token": 126,
+    "total": "9.999",
+    "hold": "0.0",
+    "entryNtl": "12.45"
+   },
+   {
+    "coin": "EARTH",
+    "token": 141,
+    "total": "5.39648202",
+    "hold": "0.0",
+    "entryNtl": "8.09553234"
    },
    {
     "coin": "USDE",
@@ -282,19 +340,12 @@
     "total": "0.0",
     "hold": "0.0",
     "entryNtl": "0.0"
-   },
-   {
-    "coin": "MAX",
-    "token": 734,
-    "total": "10315264.5715999994",
-    "hold": "0.0",
-    "entryNtl": "0.0"
    }
   ],
   "tokenToAvailableAfterMaintenance": [
    [
     0,
-    "103044.430798"
+    "2159.11387604"
    ]
   ]
  }

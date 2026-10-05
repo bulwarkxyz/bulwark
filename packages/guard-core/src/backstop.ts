@@ -1,6 +1,5 @@
-import type { MarginTier } from './assets.js';
 import type { GuardAction, OpenOrder } from './evaluate.js';
-import { maintenanceRate } from './margin.js';
+import { priceForBuffer } from './margin.js';
 import type { Policy } from './policy.js';
 import { assessRisk, markOf, type Marks, type PoolRisk, type PositionRisk } from './risk.js';
 import { roundPrice } from './rounding.js';
@@ -28,32 +27,12 @@ import type { AccountSnapshot } from './snapshot.js';
 /** Re-place a backstop when its trigger has drifted this far from where it should be (engine constant). */
 export const BACKSTOP_DRIFT = 0.005;
 
-function deduction(tiers: readonly MarginTier[], n: number): number {
-  let d = 0;
-  for (let i = 1; i <= n; i++) d += (tiers[i] as MarginTier).lowerBound * (maintenanceRate(tiers[i] as MarginTier) - maintenanceRate(tiers[i - 1] as MarginTier));
-  return d;
-}
-
 /**
- * Price at which the pool buffer equals `line`, moving only this position's mark:
- *   E + s(P − m) = L · (MMo + |s|·P·r_n − d_n)   ⇒   P = (L·(MMo − d_n) − E + s·m) / (s − L·|s|·r_n)
+ * Price at which the pool buffer equals `line`, moving only this position's mark (see
+ * `priceForBuffer` in margin.ts, which also gives the liquidation price at a line of 1).
  */
 export function priceAtBuffer(pool: PoolRisk, row: PositionRisk, line: number): number | null {
-  const s = row.position.size;
-  const abs = Math.abs(s);
-  const tiers = row.position.tiers;
-  const others = pool.maintenance - row.maintenance;
-  for (let n = 0; n < tiers.length; n++) {
-    const r = maintenanceRate(tiers[n] as MarginTier);
-    const denom = s - line * abs * r;
-    if (denom === 0) continue;
-    const px = (line * (others - deduction(tiers, n)) - pool.equity + s * row.mark) / denom;
-    if (!(px > 0) || !Number.isFinite(px)) continue;
-    const lo = (tiers[n] as MarginTier).lowerBound;
-    const hi = n + 1 < tiers.length ? (tiers[n + 1] as MarginTier).lowerBound : Number.POSITIVE_INFINITY;
-    if (abs * px >= lo && abs * px < hi) return px;
-  }
-  return null;
+  return priceForBuffer({ mark: row.mark, size: row.position.size, equity: pool.equity, otherMaintenance: pool.maintenance - row.maintenance, tiers: row.position.tiers, buffer: line });
 }
 
 /**

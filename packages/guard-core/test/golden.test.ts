@@ -71,7 +71,9 @@ describe.each(accounts.map((a) => [a.label, a] as const))('%s', (_label, fx) => 
     it('worst pool ratio equals the official computeUnifiedAccountRatio', () => {
       const official = officialUnifiedRatio(fx);
       const ours = Math.max(0, ...risk.pools.filter((p) => p.pool.kind === 'token').map((p) => p.ratio));
-      expect(ours).toBeCloseTo(official, 10);
+      // Relative: the API rounds crossMaintenanceMarginUsed to 6 decimals, so on large accounts the
+      // official ratio itself carries ~1e-9 relative rounding (seen on a $9.8k unified account).
+      expect(rel(ours, official)).toBeLessThan(1e-8);
     });
 
     it('token available-after-maintenance matches the API', () => {

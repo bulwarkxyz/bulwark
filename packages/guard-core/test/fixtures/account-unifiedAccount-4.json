@@ -1,7 +1,7 @@
 {
  "label": "unifiedAccount-4",
  "mode": "unifiedAccount",
- "capturedAt": "2026-10-05T02:54:45.804Z",
+ "capturedAt": "2026-10-05T09:24:19.968Z",
  "dexNames": [
   "",
   "xyz",
@@ -32,50 +32,49 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "xyz": {
    "marginSummary": {
-    "accountValue": "598.134618",
-    "totalNtlPos": "3073.431168",
-    "totalRawUsd": "-2475.29655",
-    "totalMarginUsed": "598.134618"
+    "accountValue": "24220.360124",
+    "totalNtlPos": "169892.749196",
+    "totalRawUsd": "-145672.389072",
+    "totalMarginUsed": "24270.392742"
    },
    "crossMarginSummary": {
-    "accountValue": "0.0",
-    "totalNtlPos": "0.0",
-    "totalRawUsd": "0.0",
-    "totalMarginUsed": "0.0"
+    "accountValue": "24220.360124",
+    "totalNtlPos": "169892.749196",
+    "totalRawUsd": "-145672.389072",
+    "totalMarginUsed": "24270.392742"
    },
-   "crossMaintenanceMarginUsed": "0.0",
+   "crossMaintenanceMarginUsed": "4247.318729",
    "withdrawable": "0.0",
    "assetPositions": [
     {
      "type": "oneWay",
      "position": {
       "coin": "xyz:CL",
-      "szi": "34.128",
+      "szi": "1882.948",
       "leverage": {
-       "type": "isolated",
-       "value": 5,
-       "rawUsd": "-2475.29655"
+       "type": "cross",
+       "value": 7
       },
-      "entryPx": "90.64",
-      "positionValue": "3073.431168",
-      "unrealizedPnl": "-19.94151",
-      "returnOnEquity": "-0.0322326342",
-      "liquidationPx": "74.389524505",
-      "marginUsed": "598.134618",
+      "entryPx": "90.939",
+      "positionValue": "169892.749196",
+      "unrealizedPnl": "-1341.021186",
+      "returnOnEquity": "-0.05482066",
+      "liquidationPx": "34.1995566565",
+      "marginUsed": "24270.392742",
       "maxLeverage": 20,
       "cumFunding": {
-       "allTime": "-15.420005",
-       "sinceOpen": "0.407541",
+       "allTime": "12.448325",
+       "sinceOpen": "12.448325",
        "sinceChange": "0.0"
       }
      }
     }
    ],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "flx": {
    "marginSummary": {
@@ -93,7 +92,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "vntl": {
    "marginSummary": {
@@ -111,7 +110,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "hyna": {
    "marginSummary": {
@@ -129,7 +128,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "km": {
    "marginSummary": {
@@ -147,7 +146,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "abcd": {
    "marginSummary": {
@@ -165,7 +164,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "cash": {
    "marginSummary": {
@@ -183,7 +182,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "para": {
    "marginSummary": {
@@ -201,7 +200,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "mkts": {
    "marginSummary": {
@@ -219,7 +218,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   },
   "io": {
    "marginSummary": {
@@ -237,7 +236,7 @@
    "crossMaintenanceMarginUsed": "0.0",
    "withdrawable": "0.0",
    "assetPositions": [],
-   "time": 1791168882278
+   "time": 1791192256365
   }
  },
  "spot": {
@@ -245,23 +244,30 @@
    {
     "coin": "USDC",
     "token": 0,
-    "total": "1185.09262157",
-    "hold": "598.134618",
+    "total": "107106.662059",
+    "hold": "24270.392742",
+    "entryNtl": "0.0"
+   },
+   {
+    "coin": "PURR",
+    "token": 1,
+    "total": "0.0",
+    "hold": "0.0",
     "entryNtl": "0.0"
    },
    {
     "coin": "HYPE",
     "token": 150,
-    "total": "0.00989249",
+    "total": "0.0",
     "hold": "0.0",
-    "entryNtl": "0.78054731"
+    "entryNtl": "0.0"
    },
    {
     "coin": "USDE",
     "token": 235,
-    "total": "0.0319839",
+    "total": "0.0",
     "hold": "0.0",
-    "entryNtl": "0.0319839"
+    "entryNtl": "0.0"
    },
    {
     "coin": "USDT0",
@@ -271,13 +277,6 @@
     "entryNtl": "0.0"
    },
    {
-    "coin": "UPUMP",
-    "token": 299,
-    "total": "1.798305",
-    "hold": "0.0",
-    "entryNtl": "0.00788655"
-   },
-   {
     "coin": "USDH",
     "token": 360,
     "total": "0.0",
@@ -285,62 +284,9 @@
     "entryNtl": "0.0"
    },
    {
-    "coin": "+82600",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+82601",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+84900",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+84901",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+71730",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+71731",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+71790",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+71791",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+77690",
-    "total": "0.0",
-    "hold": "0.0",
-    "entryNtl": "0.0"
-   },
-   {
-    "coin": "+77691",
-    "total": "0.0",
+    "coin": "MAX",
+    "token": 734,
+    "total": "10315264.5715999994",
     "hold": "0.0",
     "entryNtl": "0.0"
    }
@@ -348,11 +294,7 @@
   "tokenToAvailableAfterMaintenance": [
    [
     0,
-    "586.95800357"
-   ],
-   [
-    235,
-    "0.0319839"
+    "102859.34333"
    ]
   ]
  }

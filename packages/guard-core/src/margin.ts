@@ -55,7 +55,11 @@ export function maintenanceRateAt(tiers: readonly MarginTier[], notional: number
  * choosing the tier n whose range contains the notional |s|·P. Returns null when no positive price
  * liquidates the position.
  */
-export function liquidationPrice(args: {
+export function liquidationPrice(args: PriceForBufferArgs): number | null {
+  return priceForBuffer({ ...args, buffer: 1 });
+}
+
+export interface PriceForBufferArgs {
   mark: number;
   /** Signed size: positive long, negative short. */
   size: number;
@@ -64,16 +68,25 @@ export function liquidationPrice(args: {
   /** Maintenance margin of the other positions in the same pool. */
   otherMaintenance: number;
   tiers: readonly MarginTier[];
-}): number | null {
-  const { mark, size, equity, otherMaintenance, tiers } = args;
-  if (size === 0) return null;
+}
+
+/**
+ * The mark at which a pool's buffer (equity ÷ maintenance) equals `buffer`, moving only this
+ * position's mark. `buffer = 1` is the liquidation price; a user's line gives the price at which the
+ * guard acts ("guard acts at"). Same derivation as the liquidation price with the line as a factor:
+ *   E + s·(P − m) = B · (MMo + |s|·P·r_n − d_n)   ⇒   P = (B·(MMo − d_n) − E + s·m) / (s − B·|s|·r_n)
+ * choosing the tier n whose range contains |s|·P. Returns null when no positive price reaches the line.
+ */
+export function priceForBuffer(args: PriceForBufferArgs & { buffer: number }): number | null {
+  const { mark, size, equity, otherMaintenance, tiers, buffer } = args;
+  if (size === 0 || !(buffer > 0)) return null;
   const abs = Math.abs(size);
   for (let n = 0; n < tiers.length; n++) {
     const r = maintenanceRate(tiers[n] as MarginTier);
     const d = deductionAt(tiers, n);
-    const denom = size - abs * r;
+    const denom = size - buffer * abs * r;
     if (denom === 0) continue;
-    const px = (otherMaintenance - d - equity + size * mark) / denom;
+    const px = (buffer * (otherMaintenance - d) - equity + size * mark) / denom;
     if (!(px > 0) || !Number.isFinite(px)) continue;
     const notional = abs * px;
     const lo = (tiers[n] as MarginTier).lowerBound;
