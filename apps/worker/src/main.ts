@@ -250,6 +250,7 @@ async function main() {
     },
     now: Date.now,
   });
+  setInterval(() => console.log(JSON.stringify({ msg: 'info budget', perMinute: INFO_WEIGHT_PER_MIN, usedLastMinute: limiter.used(), ...limiter.stats, weightByType: limiter.takeUsage() })), 60_000);
   const resealed = await keys.resealAll();
   console.log(JSON.stringify({ msg: 'agent keys', sealedSigner: Boolean(master), activeMasterKey: master?.activeId ?? null, resealed }));
 

@@ -26,6 +26,13 @@ export class WeightLimiter {
   private pausedUntil = 0;
   private queue: Promise<void> = Promise.resolve();
   readonly stats = { requests: 0, waited: 0, refused: 0, throttled: 0 };
+  /** Weight taken per request type since the last call to takeUsage(). */
+  private byType: Record<string, number> = {};
+  takeUsage(): Record<string, number> {
+    const u = this.byType;
+    this.byType = {};
+    return u;
+  }
 
   constructor(
     readonly perMinute: number,
@@ -53,7 +60,7 @@ export class WeightLimiter {
   }
 
   /** Waits its turn and for room in the window; refuses if that would take longer than maxWaitMs. */
-  acquire(w: number, maxWaitMs: number): Promise<void> {
+  acquire(w: number, maxWaitMs: number, type = 'other'): Promise<void> {
     const turn = this.queue.then(async () => {
       const start = this.now();
       for (;;) {
@@ -68,6 +75,7 @@ export class WeightLimiter {
       }
       this.spent.push({ at: this.now(), w });
       this.stats.requests++;
+      this.byType[type] = (this.byType[type] ?? 0) + w;
     });
     this.queue = turn.catch(() => undefined);
     return turn;
@@ -89,7 +97,7 @@ export function limitedFetch(limiter: WeightLimiter, base: Fetch = fetch, maxWai
     } catch {
       body = null;
     }
-    await limiter.acquire(infoWeight(body), maxWaitMs);
+    await limiter.acquire(infoWeight(body), maxWaitMs, body?.type ?? 'other');
     const res = await base(input, init);
     if (res.status === 429) limiter.backoff(backoffMs);
     return res;
