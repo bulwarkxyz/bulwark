@@ -69,6 +69,9 @@ importers:
 
   apps/ops:
     dependencies:
+      '@aws-sdk/client-kms':
+        specifier: ^3
+        version: 3.1146.0
       '@bulwarkxyz/config':
         specifier: workspace:*
         version: link:../../packages/config

@@ -9,9 +9,11 @@
     "testnet:actions": "tsx src/testnet-actions.ts",
     "testnet:builder-drain": "tsx src/builder-drain.ts",
     "latency": "tsx src/latency.ts",
-    "return-funds": "tsx src/return-funds.ts"
+    "return-funds": "tsx src/return-funds.ts",
+    "kms-check": "tsx src/kms-check.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3",
     "@bulwarkxyz/config": "workspace:*",
     "@bulwarkxyz/executor": "workspace:*",
     "@bulwarkxyz/guard-core": "workspace:*",
