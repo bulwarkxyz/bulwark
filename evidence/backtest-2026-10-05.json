@@ -1,0 +1,298 @@
+{
+ "ranAt": "2026-10-05T09:31:29.355Z",
+ "source": "Hyperliquid candleSnapshot (trade prices)",
+ "priceKind": "trade-candles",
+ "assumptions": {
+  "account": "cross long on the xyz dex, 10000 USDC equity, opened at the first price of each window",
+  "leverages": [
+   3,
+   5,
+   10,
+   20
+  ],
+  "policy": [
+   "stage-1: {\"kind\":\"buffer\",\"below\":2} → [{\"kind\":\"reduceToBuffer\",\"buffer\":3}]",
+   "stage-2: {\"kind\":\"buffer\",\"below\":1.5} → [{\"kind\":\"reduceToBuffer\",\"buffer\":2.5}]",
+   "stage-3: {\"kind\":\"buffer\",\"below\":1.2} → [{\"kind\":\"close\",\"target\":{\"kind\":\"all\"}}]"
+  ],
+  "slippage": "guard orders fill at the worst price the 1% slippage limit allows",
+  "feeRate": "4.5 bps per fill (assumed)",
+  "intraCandle": "O → low → high → close, 12 guard looks per segment (continuous path assumed; real moves can gap)",
+  "margin": "current xyz maintenance tiers from allPerpMetas (historical tiers may have differed)",
+  "notModelled": "funding, order-book depth, exchange outages, mark vs trade divergence"
+ },
+ "results": [
+  {
+   "case": "silver-2026-01-30",
+   "title": "Silver −35% in a day",
+   "coin": "xyz:SILVER",
+   "leverage": 3,
+   "entry": 117.85,
+   "lowest": 76.23,
+   "dropToLowPct": -35.32,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-01-30T16:00:00.000Z",
+    "markAtLiquidation": 79.9205
+   },
+   "guarded": {
+    "liquidated": true,
+    "endEquity": 176.49,
+    "equityKeptPct": 1.8,
+    "guardOrders": 1,
+    "firstActionAt": "2026-01-30T16:00:00.000Z",
+    "feesPaid": 3.87,
+    "finalPositionSize": 148.28,
+    "markAtEnd": 78.07525000000001
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "silver-2026-01-30",
+   "title": "Silver −35% in a day",
+   "coin": "xyz:SILVER",
+   "leverage": 5,
+   "entry": 117.85,
+   "lowest": 76.23,
+   "dropToLowPct": -35.32,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-01-30T08:00:00.000Z",
+    "markAtLiquidation": 95.64083333333333
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 47.48,
+    "equityKeptPct": 0.5,
+    "guardOrders": 4,
+    "firstActionAt": "2026-01-30T08:00:00.000Z",
+    "feesPaid": 18.03,
+    "finalPositionSize": 0,
+    "markAtEnd": 85.349
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "silver-2026-01-30",
+   "title": "Silver −35% in a day",
+   "coin": "xyz:SILVER",
+   "leverage": 10,
+   "entry": 117.85,
+   "lowest": 76.23,
+   "dropToLowPct": -35.32,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-01-29T12:00:00.000Z",
+    "markAtLiquidation": 107.88833333333334
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 8.19,
+    "equityKeptPct": 0.1,
+    "guardOrders": 8,
+    "firstActionAt": "2026-01-29T12:00:00.000Z",
+    "feesPaid": 40.52,
+    "finalPositionSize": 0,
+    "markAtEnd": 85.349
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "silver-2026-01-30",
+   "title": "Silver −35% in a day",
+   "coin": "xyz:SILVER",
+   "leverage": 20,
+   "entry": 117.85,
+   "lowest": 76.23,
+   "dropToLowPct": -35.32,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-01-29T12:00:00.000Z",
+    "markAtLiquidation": 113.69833333333334
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 2,
+    "equityKeptPct": 0,
+    "guardOrders": 11,
+    "firstActionAt": "2026-01-29T00:00:00.000Z",
+    "feesPaid": 85.54,
+    "finalPositionSize": 0,
+    "markAtEnd": 85.349
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "oil-2026-03-23",
+   "title": "Oil −16.5% in one hour",
+   "coin": "xyz:CL",
+   "leverage": 3,
+   "entry": 98.197,
+   "lowest": 82.5,
+   "dropToLowPct": -15.99,
+   "unguarded": {
+    "liquidated": false,
+    "endEquity": 6808.97
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 6808.97,
+    "equityKeptPct": 68.1,
+    "guardOrders": 0,
+    "firstActionAt": null,
+    "feesPaid": 0,
+    "finalPositionSize": 305.508,
+    "markAtEnd": 87.752
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "oil-2026-03-23",
+   "title": "Oil −16.5% in one hour",
+   "coin": "xyz:CL",
+   "leverage": 5,
+   "entry": 98.197,
+   "lowest": 82.5,
+   "dropToLowPct": -15.99,
+   "unguarded": {
+    "liquidated": false,
+    "endEquity": 4681.61
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 3378.32,
+    "equityKeptPct": 33.8,
+    "guardOrders": 1,
+    "firstActionAt": "2026-03-23T11:00:00.000Z",
+    "feesPaid": 7.83,
+    "finalPositionSize": 296.005,
+    "markAtEnd": 87.752
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "oil-2026-03-23",
+   "title": "Oil −16.5% in one hour",
+   "coin": "xyz:CL",
+   "leverage": 10,
+   "entry": 98.197,
+   "lowest": 82.5,
+   "dropToLowPct": -15.99,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-03-23T11:00:00.000Z",
+    "markAtLiquidation": 90.5275
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 752.48,
+    "equityKeptPct": 7.5,
+    "guardOrders": 4,
+    "firstActionAt": "2026-03-23T11:00:00.000Z",
+    "feesPaid": 37.93,
+    "finalPositionSize": 73.98600000000002,
+    "markAtEnd": 87.752
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "oil-2026-03-23",
+   "title": "Oil −16.5% in one hour",
+   "coin": "xyz:CL",
+   "leverage": 20,
+   "entry": 98.197,
+   "lowest": 82.5,
+   "dropToLowPct": -15.99,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-03-23T11:00:00.000Z",
+    "markAtLiquidation": 94.54125
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 564.2,
+    "equityKeptPct": 5.6,
+    "guardOrders": 6,
+    "firstActionAt": "2026-03-22T00:00:00.000Z",
+    "feesPaid": 83.6,
+    "finalPositionSize": 55.473999999999926,
+    "markAtEnd": 87.752
+   },
+   "meaningfulOnTrades": true
+  },
+  {
+   "case": "skhx-2026-07-27",
+   "title": "SK hynix bad-print wick",
+   "coin": "xyz:SKHX",
+   "leverage": 3,
+   "entry": 1222.5,
+   "lowest": 927,
+   "dropToLowPct": -24.17,
+   "unguarded": {
+    "liquidated": false,
+    "endEquity": 6063.94
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 6063.94,
+    "equityKeptPct": 60.6,
+    "guardOrders": 0,
+    "firstActionAt": null,
+    "feesPaid": 0,
+    "finalPositionSize": 24.539,
+    "markAtEnd": 1062.1
+   },
+   "meaningfulOnTrades": false
+  },
+  {
+   "case": "skhx-2026-07-27",
+   "title": "SK hynix bad-print wick",
+   "coin": "xyz:SKHX",
+   "leverage": 5,
+   "entry": 1222.5,
+   "lowest": 927,
+   "dropToLowPct": -24.17,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-07-27T23:00:00.000Z",
+    "markAtLiquidation": 1027.6
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 2114.6,
+    "equityKeptPct": 21.1,
+    "guardOrders": 3,
+    "firstActionAt": "2026-07-27T23:00:00.000Z",
+    "feesPaid": 15.06,
+    "finalPositionSize": 8.146,
+    "markAtEnd": 1062.1
+   },
+   "meaningfulOnTrades": false
+  },
+  {
+   "case": "skhx-2026-07-27",
+   "title": "SK hynix bad-print wick",
+   "coin": "xyz:SKHX",
+   "leverage": 10,
+   "entry": 1222.5,
+   "lowest": 927,
+   "dropToLowPct": -24.17,
+   "unguarded": {
+    "liquidated": true,
+    "at": "2026-07-27T14:00:00.000Z",
+    "markAtLiquidation": 1156.9333333333334
+   },
+   "guarded": {
+    "liquidated": false,
+    "endEquity": 1676.14,
+    "equityKeptPct": 16.8,
+    "guardOrders": 5,
+    "firstActionAt": "2026-07-26T00:00:00.000Z",
+    "feesPaid": 38.19,
+    "finalPositionSize": 6.4570000000000105,
+    "markAtEnd": 1062.1
+   },
+   "meaningfulOnTrades": false
+  }
+ ]
+}

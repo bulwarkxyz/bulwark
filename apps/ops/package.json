@@ -10,7 +10,8 @@
     "testnet:builder-drain": "tsx src/builder-drain.ts",
     "latency": "tsx src/latency.ts",
     "return-funds": "tsx src/return-funds.ts",
-    "kms-check": "tsx src/kms-check.ts"
+    "kms-check": "tsx src/kms-check.ts",
+    "backtest": "tsx src/backtest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3",
