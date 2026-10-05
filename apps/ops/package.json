@@ -1,0 +1,29 @@
+{
+  "name": "@bulwarkxyz/ops",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "testnet:actions": "tsx src/testnet-actions.ts",
+    "testnet:builder-drain": "tsx src/builder-drain.ts",
+    "latency": "tsx src/latency.ts",
+    "return-funds": "tsx src/return-funds.ts"
+  },
+  "dependencies": {
+    "@bulwarkxyz/config": "workspace:*",
+    "@bulwarkxyz/executor": "workspace:*",
+    "@bulwarkxyz/guard-core": "workspace:*",
+    "@bulwarkxyz/hyperliquid": "workspace:*",
+    "@bulwarkxyz/signer": "workspace:*",
+    "viem": "^2",
+    "ws": "^8"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}
