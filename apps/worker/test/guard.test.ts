@@ -5,7 +5,7 @@ import { HttpError, NonceManager, parseExchangeResponse, type Hex, type SignedRe
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { verifyChain } from '@bulwarkxyz/store';
-import { BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
+import { BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, positionsKey, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
 import { RETRY_ALERT_AFTER } from '@bulwarkxyz/guard-core';
 import { ConsoleNotifier } from '../src/notify.js';
 import { MemoryStore, type GuardUser } from '@bulwarkxyz/store';
@@ -137,6 +137,17 @@ describe('guard engine', () => {
     }
     expect(sent.map((r) => r.action.type)).toContain('order');
     expect(errors.some((e) => e.includes('guard run failed') && e.includes(OTHER) && e.includes('429'))).toBe(true);
+  });
+
+  it('an isolated position whose PnL moves keeps the same positions key; adding margin changes it', () => {
+    const iso = (marginUsed: number, pnl: number) => {
+      const st = xyzState(0.24, 91.5, 6);
+      const p = st.assetPositions[0]!.position;
+      return { dexStates: { xyz: { ...st, assetPositions: [{ ...st.assetPositions[0]!, position: { ...p, leverage: { type: 'isolated', value: 5 }, marginUsed: String(marginUsed), unrealizedPnl: String(pnl) } }] } } } as never;
+    };
+    expect(positionsKey(iso(4.4, 0))).toBe(positionsKey(iso(4.9, 0.5)));
+    expect(positionsKey(iso(4.4, 0))).toBe(positionsKey(iso(3.1, -1.3)));
+    expect(positionsKey(iso(5.4, 0))).not.toBe(positionsKey(iso(4.4, 0)));
   });
 
   it('does not fire twice for the same breach (latch persisted in the store)', async () => {

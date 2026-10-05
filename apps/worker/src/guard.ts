@@ -107,11 +107,13 @@ const coinsOf = (c: AccountCache) => new Set(Object.values(c.dexStates).flatMap(
  * transfers, deposits, withdrawals and funding, not with the mark) and isolated margin. When it changes,
  * the backstops are re-priced on the next run.
  */
-const positionsKey = (c: AccountCache) =>
+export const positionsKey = (c: Pick<AccountCache, 'dexStates'>) =>
   Object.entries(c.dexStates)
     .flatMap(([dex, s]) => [
       `${dex}$${Number(s.crossMarginSummary.totalRawUsd).toFixed(2)}`,
-      ...s.assetPositions.map((p) => `${p.position.coin}:${p.position.szi}${p.position.leverage.type === 'isolated' ? `@${Number(p.position.marginUsed).toFixed(2)}` : ''}`),
+      // Isolated margin as posted: Hyperliquid's marginUsed includes unrealised PnL, which moves with every price
+      // and made this key change on every update (a backstop re-plan and an open-orders fetch each time).
+      ...s.assetPositions.map((p) => `${p.position.coin}:${p.position.szi}${p.position.leverage.type === 'isolated' ? `@${(Number(p.position.marginUsed) - Number(p.position.unrealizedPnl)).toFixed(2)}` : ''}`),
     ])
     .sort()
     .join('|');
