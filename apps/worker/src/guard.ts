@@ -204,7 +204,13 @@ export class GuardEngine {
     try {
       do {
         this.again.delete(k);
-        await this.run(k as Hex);
+        try {
+          await this.run(k as Hex);
+        } catch (e) {
+          // One account's failure (for example Hyperliquid refusing a request) never stops the others or the process.
+          // Its status then ages and reads as paused (stale data) until a run succeeds.
+          console.error(JSON.stringify({ msg: 'guard run failed', account: k, error: String(e) }));
+        }
       } while (this.again.has(k));
     } finally {
       this.busy.delete(k);

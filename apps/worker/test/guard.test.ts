@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, maintenanceMargin, policyHash, type Policy, type RawClearinghouseState } from '@bulwarkxyz/guard-core';
-import { NonceManager, parseExchangeResponse, type Hex, type SignedRequest } from '@bulwarkxyz/hyperliquid';
+import { HttpError, NonceManager, parseExchangeResponse, type Hex, type SignedRequest } from '@bulwarkxyz/hyperliquid';
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { verifyChain } from '@bulwarkxyz/store';
@@ -113,6 +113,30 @@ describe('guard engine', () => {
     expect(chain.some((e) => e.kind === 'guard_action')).toBe(true);
     expect(verifyChain(chain)).toBeNull();
     expect(notifier.sent.at(-1)?.text).toMatch(/Bulwark guard: buffer .* below your 2× line/);
+  });
+
+  it('when Hyperliquid refuses a request for one account (429), the others still run and nothing rejects', async () => {
+    const OTHER = '0x00000000000000000000000000000000000b0b00';
+    store.putUser({ account: OTHER, agentKeyRef: 'local:test', agentAddress: AGENT, region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
+    store.putPolicy(OTHER, { policy: { ...policy, account: OTHER }, hash: policyHash({ ...policy, account: OTHER }), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    (engine as unknown as { deps: { abstraction: (u: string) => Promise<string> } }).deps.abstraction = async (u) => {
+      if (u.toLowerCase() === OTHER) throw new HttpError(429, 'null');
+      return 'default';
+    };
+    const errors: string[] = [];
+    const orig = console.error;
+    console.error = (m: string) => void errors.push(m);
+    try {
+      await engine.onUserState(OTHER, [['', emptyMain], ['xyz', xyzState(0.24, 91.5, 6)]], t);
+      await feed(91.5, 6);
+      sent = [];
+      t += 1000;
+      await expect(engine.onMarks(new Map([['xyz:CL', 69]]), t)).resolves.toBeDefined();
+    } finally {
+      console.error = orig;
+    }
+    expect(sent.map((r) => r.action.type)).toContain('order');
+    expect(errors.some((e) => e.includes('guard run failed') && e.includes(OTHER) && e.includes('429'))).toBe(true);
   });
 
   it('does not fire twice for the same breach (latch persisted in the store)', async () => {

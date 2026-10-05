@@ -16,7 +16,7 @@ import http from 'node:http';
 import { builderField, type Network as ConfigNetwork } from '@bulwarkxyz/config';
 import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, type AssetIndex, type OpenOrder, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
-import { ExchangeClient, InfoClient, NonceManager, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
+import { ExchangeClient, InfoClient, NonceManager, WeightLimiter, limitedFetch, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, SealedDigestSigner, parseMasterKeys, type DigestSigner } from '@bulwarkxyz/signer';
 import postgres from 'postgres';
 import { GuardEngine, STATUS_WRITE_EVERY_MS } from './guard.js';
@@ -30,7 +30,14 @@ import { TelegramBot } from './telegram-bot.js';
 
 const network = (process.env.NETWORK ?? 'testnet') as Network;
 const WS_URL = network === 'mainnet' ? 'wss://api.hyperliquid.xyz/ws' : 'wss://api.hyperliquid-testnet.xyz/ws';
-const info = new InfoClient(network);
+/**
+ * Every info request this process makes shares one budget, under Hyperliquid's 1200 weight a minute per IP
+ * (the REST state fallback's own 600 is part of it). The rest is headroom for orders and the API.
+ * Without it, open-order and key checks across many accounts went over the limit and a 429 stopped the worker.
+ */
+export const INFO_WEIGHT_PER_MIN = 1000;
+const limiter = new WeightLimiter(INFO_WEIGHT_PER_MIN);
+const info = new InfoClient(network, limitedFetch(limiter), 15_000);
 const sql = postgres(process.env.DATABASE_URL as string, { onnotice: () => undefined, max: 5 });
 const store = new PgStore(sql);
 const notifier = process.env.TELEGRAM_BOT_TOKEN ? new TelegramNotifier(process.env.TELEGRAM_BOT_TOKEN) : new ConsoleNotifier();
@@ -81,23 +88,22 @@ async function loadAssets(): Promise<{ assets: AssetIndex; collateral: Map<strin
   };
 }
 
-/** Railway's private DNS can take a few seconds to come up after the container starts: retry. */
-async function migrateWithRetry() {
+/** Startup steps that depend on the network: Railway's private DNS (the database) and Hyperliquid can be briefly unavailable. */
+async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
-      await migrate(sql);
-      return;
+      return await fn();
     } catch (e) {
       if (attempt >= 12) throw e;
-      console.error(JSON.stringify({ msg: 'database not reachable yet', attempt, error: String(e) }));
+      console.error(JSON.stringify({ msg: `${what} not reachable yet`, attempt, error: String(e) }));
       await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** attempt)));
     }
   }
 }
 
 async function main() {
-  await migrateWithRetry();
-  let meta = await loadAssets();
+  await withRetry('database', () => migrate(sql));
+  let meta = await withRetry('Hyperliquid', loadAssets);
   const status = { network, startedAt: new Date().toISOString(), users: 0, lastMarkAt: 0, streams: 0 };
 
   const engine = new GuardEngine({
@@ -278,11 +284,14 @@ async function main() {
       const markAgeMs = status.lastMarkAt ? Date.now() - status.lastMarkAt : null;
       res.statusCode = markAgeMs !== null && markAgeMs < 15_000 ? 200 : 503;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ...status, markAgeMs, state: { hydromancer: hydro ? { url: HYDRO_URL, disabled: hydro.disabled, ...hydro.stats, pointsLastMinute: hydro.budget.used(), usage: hydroUsage } : 'off', nativeWsUsers: nativeWs.size, restFallback: fallback.stats, builderStream: builderStream ? { lastMessageAt: builderStream.lastMessageAt, events: builderStream.events } : 'off' } }));
+      res.end(JSON.stringify({ ...status, markAgeMs, state: { hydromancer: hydro ? { url: HYDRO_URL, disabled: hydro.disabled, ...hydro.stats, pointsLastMinute: hydro.budget.used(), usage: hydroUsage } : 'off', nativeWsUsers: nativeWs.size, restFallback: fallback.stats, infoBudget: { perMinute: INFO_WEIGHT_PER_MIN, usedLastMinute: limiter.used(), ...limiter.stats }, builderStream: builderStream ? { lastMessageAt: builderStream.lastMessageAt, events: builderStream.events } : 'off' } }));
     })
     .listen(Number(process.env.PORT ?? 8080));
   console.log(JSON.stringify({ msg: 'worker started', network }));
 }
+
+// A guard must keep running: anything that escapes an account's run is logged, not fatal.
+process.on('unhandledRejection', (e) => console.error(JSON.stringify({ msg: 'unhandled rejection', error: String(e) })));
 
 main().catch((e) => {
   console.error(e);
