@@ -16,7 +16,8 @@ export type AuditKind =
   | 'command' // panic unwind or kill switch
   | 'alert' // a message sent to the user
   | 'window' // a rule window opened and its baseline was set
-  | 'degraded'; // data stale or exchange unreachable: the guard held off
+  | 'degraded' // data stale or exchange unreachable: the guard held off
+  | 'key'; // a guard key was created, replaced or wiped (never the key itself)
 
 export interface AuditInput {
   account: string;

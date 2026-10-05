@@ -13,8 +13,8 @@ import {
   type RawClearinghouseState,
 } from '@bulwarkxyz/guard-core';
 import { NonceManager, l1ActionHash, l1TypedData, type ExchangeResult, type Hex, type L1Action, type SignedRequest } from '@bulwarkxyz/hyperliquid';
-import { LocalDigestSigner } from '@bulwarkxyz/signer';
-import { recoverTypedDataAddress } from 'viem';
+import { LocalDigestSigner, SealedDigestSigner, addressOf, parseMasterKeys, sealAgentKey } from '@bulwarkxyz/signer';
+import { recoverTypedDataAddress, hexToBytes } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { GuardedSigner, InvariantViolation, executeActions, toWireAction } from '../src/index.js';
 
@@ -237,5 +237,36 @@ describe('user commands', () => {
     const wire = stopCancels([{ asset: 110029, oid: 5 }])!;
     await expect(cmdSigner.signStopCancel(cmd, wire, new Set([5]), 1, now)).resolves.toBeDefined();
     await expect(cmdSigner.signStopCancel(cmd, stopCancels([{ asset: 110029, oid: 6 }])!, new Set([5]), 1, now)).rejects.toThrow(/only cancels orders the guard placed/);
+  });
+});
+
+describe('encrypted-at-rest signer behind the guard', () => {
+  // The same invariant checks run in front of the sealed signer as in front of any other key.
+  const master = parseMasterKeys(`t1:${Buffer.alloc(32, 7).toString('base64')}`);
+  const sealedKey = sealAgentKey(master, ACCOUNT, 'testnet', hexToBytes(AGENT_KEY));
+  const sealed = new GuardedSigner(new SealedDigestSigner(master, ACCOUNT, 'testnet', sealedKey, addressOf(hexToBytes(AGENT_KEY))), false);
+  const sealedDeps = (ex: ReturnType<typeof mockExchange>) => ({ ...deps(ex), signer: sealed });
+  const decision = evaluate(policy, snapshot, { 'xyz:CL': 90 }, ctx());
+
+  it('signs checked guard actions, and every request recovers to the agent address', async () => {
+    const ex = mockExchange([]);
+    const records = await executeActions(decision.actions, { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx() }, sealedDeps(ex));
+    expect(records.filter((r) => r.status === 'sent')).toHaveLength(2);
+    for (const req of ex.sent) expect(await recovered(req)).toBe(sealed.address);
+    expect(sealed.address).toBe(signer.address);
+  });
+
+  it('refuses invariant breaks and tampered wire actions before decrypting anything', async () => {
+    const ex = mockExchange([]);
+    const bad: GuardAction = { ...(decision.actions.find((a) => a.type === 'order') as Extract<GuardAction, { type: 'order' }>), isBuy: true };
+    const [rec] = await executeActions([bad], { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx() }, sealedDeps(ex));
+    expect(rec).toMatchObject({ status: 'rejected', violation: { invariant: 'I1' } });
+    const off = await executeActions(decision.actions, { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx({ killSwitch: true }) }, sealedDeps(ex));
+    expect(off.filter((r) => r.action.type !== 'alert').every((r) => r.violation?.invariant === 'I4')).toBe(true);
+    const action = decision.actions.find((a) => a.type === 'order')!;
+    const params = { network: 'testnet' as const, account: ACCOUNT, nonce: 1, assets, snapshot, builder: null };
+    const wire = toWireAction(action, params) as Extract<L1Action, { type: 'order' }>;
+    await expect(sealed.sign(action, { ...wire, orders: [{ ...wire.orders[0]!, s: '0.24' }] }, params, { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx() })).rejects.toBeInstanceOf(InvariantViolation);
+    expect(ex.sent).toEqual([]);
   });
 });

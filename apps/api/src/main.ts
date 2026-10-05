@@ -40,6 +40,8 @@ async function main() {
     proxySecret: need('PROXY_SECRET'),
     siweDomain: process.env.SIWE_DOMAIN ?? 'bulwark.0xo.in',
     ...(process.env.ANTHROPIC_API_KEY ? { translator: new Anthropic({ maxRetries: 2, timeout: 60_000 }) as unknown as MessagesClient } : {}),
+    keyCustody: process.env.KEY_CUSTODY === 'kms' ? 'kms' : 'sealed',
+    network,
     ...(kms ? { provisionAgent: (account: Hex) => createGuardKey(kms, { user: account, env: network }) } : {}),
     now: Date.now,
   });

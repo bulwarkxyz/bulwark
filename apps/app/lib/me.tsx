@@ -18,6 +18,10 @@ export interface Me {
   };
   agent: null | { address: Hex; approved: boolean; validUntil: number | null };
   builder: { address: Hex; feeTenthsBps: number; approvedMaxTenthsBps: number };
+  /** Where guard keys live: 'sealed' = encrypted on Bulwark's server; 'kms' = AWS KMS. */
+  keyCustody: 'sealed' | 'kms';
+  keyStatus: 'none' | 'creating' | 'ready' | 'wiped';
+  pendingAgent: null | { address: Hex };
   policy: null | { version: number; hash: string; confirmedAt: number; policy: Policy };
 }
 

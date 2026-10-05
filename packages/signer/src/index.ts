@@ -202,3 +202,4 @@ export async function retireGuardKey(kms: ProvisionerKms, keyId: string): Promis
 }
 
 export { pad32 };
+export * from './sealed.js';

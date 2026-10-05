@@ -102,3 +102,33 @@ create index if not exists commands_pending on commands (created_at) where done_
 alter table users add column if not exists agent_address text;
 alter table users add column if not exists residency text;
 alter table users add column if not exists citizenship text;
+
+-- Encrypted-at-rest agent keys: AES-256-GCM blobs under a master key that only the signing service holds.
+-- `sealed` becomes null when a key is wiped; the row stays as a record.
+create table if not exists agent_keys (
+  account        text not null references users (account),
+  network        text not null,
+  address        text not null,
+  sealed         text,
+  master_key_id  text,
+  status         text not null check (status in ('pending', 'active', 'retired', 'wiped')),
+  created_at     bigint not null,
+  updated_at     bigint not null,
+  primary key (account, network, address)
+);
+
+-- The API asks for keys here; the signing service creates them. No key material ever passes through.
+create table if not exists agent_key_requests (
+  id            bigserial primary key,
+  account       text not null references users (account),
+  network       text not null,
+  kind          text not null check (kind in ('create', 'rotate')),
+  requested_at  bigint not null,
+  done_at       bigint,
+  result        jsonb
+);
+create unique index if not exists agent_key_requests_one_open on agent_key_requests (account, network) where done_at is null;
+
+-- Commands gain 'wipe' (destroy the user's sealed agent key).
+alter table commands drop constraint if exists commands_command_check;
+alter table commands add constraint commands_command_check check (command in ('unwind', 'stop', 'resume', 'wipe'));

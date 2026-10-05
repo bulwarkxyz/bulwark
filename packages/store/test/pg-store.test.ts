@@ -16,7 +16,7 @@ describe.skipIf(!url)('postgres store', () => {
   const store = new PgStore(sql);
 
   beforeAll(async () => {
-    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands cascade`;
+    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands, agent_keys, agent_key_requests cascade`;
     await migrate(sql);
     await migrate(sql); // idempotent
     await store.upsertUser({ account: A, agentKeyRef: 'kms:key-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
@@ -74,4 +74,34 @@ describe.skipIf(!url)('postgres store', () => {
     await expect(sql`update audit_log set what = 'edited' where account = ${A} and seq = 1`).rejects.toThrow(/append-only/);
     await expect(sql`delete from audit_log where account = ${A}`).rejects.toThrow(/append-only/);
   });
+
+  it('agent keys: one open request per account, metadata never includes the blob, wipe destroys it', async () => {
+    const r1 = await store.requestAgentKey(A, 'testnet', 'create', 10);
+    const r2 = await store.requestAgentKey(A, 'testnet', 'create', 11);
+    expect(r1.created).toBe(true);
+    expect(r2).toEqual({ id: r1.id, created: false });
+    expect((await store.pendingKeyRequests('testnet')).map((r) => r.id)).toEqual([r1.id]);
+    await store.putSealedKey({ account: A, network: 'testnet', address: '0x00000000000000000000000000000000000000aa', sealed: 'bwk1.m1.iv.ct.tag', masterKeyId: 'm1', status: 'active', createdAt: 12, updatedAt: 12 });
+    await store.finishKeyRequest(r1.id, { address: '0x…aa' }, 12);
+    expect(await store.pendingKeyRequests('testnet')).toEqual([]);
+    const meta = await store.agentKeys(A, 'testnet');
+    expect(meta).toHaveLength(1);
+    expect(JSON.stringify(meta)).not.toContain('bwk1');
+    expect(await store.sealedKey(A, 'testnet', '0x00000000000000000000000000000000000000AA')).toEqual({ sealed: 'bwk1.m1.iv.ct.tag', masterKeyId: 'm1' });
+    expect(await store.sealedKeysNotUnder('m2', 'testnet')).toHaveLength(1);
+    await store.replaceSealed(A, 'testnet', '0x00000000000000000000000000000000000000aa', 'bwk1.m2.iv.ct.tag', 'm2', 13);
+    expect(await store.sealedKeysNotUnder('m2', 'testnet')).toHaveLength(0);
+    await store.setUserAgent(A, 'sealed:0x00000000000000000000000000000000000000aa', '0x00000000000000000000000000000000000000aa');
+    expect((await store.user(A))?.agentKeyRef).toBe('sealed:0x00000000000000000000000000000000000000aa');
+    expect(await store.wipeAgentKeys(A, 'testnet', 14)).toBe(1);
+    expect(await store.sealedKey(A, 'testnet', '0x00000000000000000000000000000000000000aa')).toBeNull();
+    const [row] = await sql`select sealed, status from agent_keys where account = ${A}`;
+    expect(row).toEqual({ sealed: null, status: 'wiped' });
+  });
+
+  it('accepts the wipe command', async () => {
+    const id = await store.addCommand({ account: A, command: 'wipe', minutes: 0, issuedAt: 20, signature: '0xsig' }, 20);
+    expect((await store.pendingCommands()).find((c) => c.id === id)?.command).toBe('wipe');
+  });
 });
+

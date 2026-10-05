@@ -71,8 +71,52 @@ export interface PendingCommand {
   issuedAt: number;
 }
 
+export type AgentKeyStatus = 'pending' | 'active' | 'retired' | 'wiped';
+export type KeyRequestKind = 'create' | 'rotate';
+
+/** An agent key's metadata. The sealed blob is never part of this shape. */
+export interface AgentKeyInfo {
+  account: string;
+  network: string;
+  address: Hex;
+  status: AgentKeyStatus;
+  masterKeyId: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KeyRequest {
+  id: number;
+  account: string;
+  network: string;
+  kind: KeyRequestKind;
+  requestedAt: number;
+}
+
+/**
+ * Sealed agent keys: the signing service's view only. The API's store type does not include it, so
+ * API code has no way to read a blob, and no route can return one.
+ */
+export interface KeyVault {
+  agentKeys(account: string, network: string): Promise<AgentKeyInfo[]>;
+  pendingKeyRequests(network: string): Promise<KeyRequest[]>;
+  finishKeyRequest(id: number, result: Record<string, unknown>, now: number): Promise<void>;
+  putSealedKey(k: AgentKeyInfo & { sealed: string }): Promise<void>;
+  sealedKey(account: string, network: string, address: string): Promise<{ sealed: string; masterKeyId: string } | null>;
+  /** Live blobs not sealed under `masterKeyId` (to reseal after a master-key rotation). */
+  sealedKeysNotUnder(masterKeyId: string, network: string): Promise<Array<{ account: string; address: string; sealed: string }>>;
+  replaceSealed(account: string, network: string, address: string, sealed: string, masterKeyId: string, now: number): Promise<void>;
+  setAgentKeyStatus(account: string, network: string, address: string, status: AgentKeyStatus, now: number): Promise<void>;
+  /** Destroys the account's blobs on the network (all, or one address); status 'wiped'. Returns how many were live. */
+  wipeAgentKeys(account: string, network: string, now: number, address?: string): Promise<number>;
+  setUserAgent(account: string, agentKeyRef: string, agentAddress: string | null): Promise<void>;
+}
+
 /** What the API needs on top of the worker's view. */
 export interface ApiStore extends GuardStore {
+  /** Asks the signing service for a new agent key. Idempotent while a request is pending. */
+  requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number): Promise<{ id: number; created: boolean }>;
+  agentKeys(account: string, network: string): Promise<AgentKeyInfo[]>;
   upsertUser(u: GuardUser, now: number): Promise<void>;
   setKillSwitch(account: string, on: boolean): Promise<void>;
   confirmPolicy(account: string, cp: ConfirmedPolicy): Promise<void>;
@@ -82,7 +126,7 @@ export interface ApiStore extends GuardStore {
   finishCommand(id: number, result: Record<string, unknown>, now: number): Promise<void>;
 }
 
-export class MemoryStore implements ApiStore {
+export class MemoryStore implements ApiStore, KeyVault {
   readonly audit = new MemoryAuditStore();
   private readonly u = new Map<string, GuardUser>();
   private readonly p = new Map<string, ConfirmedPolicy>();
@@ -163,6 +207,62 @@ export class MemoryStore implements ApiStore {
     const c = this.cmds.find((x) => x.id === id);
     if (c) Object.assign(c, { doneAt: now, result });
   }
+  // ---------------------------------------------------------------- agent keys
+  private readonly keys: Array<AgentKeyInfo & { sealed: string | null }> = [];
+  private readonly keyReqs: Array<KeyRequest & { doneAt?: number; result?: Record<string, unknown> }> = [];
+  async requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number) {
+    const open = this.keyReqs.find((r) => r.account === this.k(account) && r.network === network && r.doneAt === undefined);
+    if (open) return { id: open.id, created: false };
+    const id = this.keyReqs.length + 1;
+    this.keyReqs.push({ id, account: this.k(account), network, kind, requestedAt: now });
+    return { id, created: true };
+  }
+  async agentKeys(account: string, network: string): Promise<AgentKeyInfo[]> {
+    return this.keys.filter((x) => x.account === this.k(account) && x.network === network).map(({ sealed: _s, ...info }) => info);
+  }
+  async pendingKeyRequests(network: string) {
+    return this.keyReqs.filter((r) => r.network === network && r.doneAt === undefined).map(({ id, account, network: n, kind, requestedAt }) => ({ id, account, network: n, kind, requestedAt }));
+  }
+  async finishKeyRequest(id: number, result: Record<string, unknown>, now: number) {
+    const r = this.keyReqs.find((x) => x.id === id);
+    if (r) Object.assign(r, { doneAt: now, result });
+  }
+  async putSealedKey(k: AgentKeyInfo & { sealed: string }) {
+    this.keys.push({ ...k, account: this.k(k.account), address: k.address.toLowerCase() as Hex });
+  }
+  private findKey(account: string, network: string, address: string) {
+    return this.keys.find((x) => x.account === this.k(account) && x.network === network && x.address === address.toLowerCase());
+  }
+  async sealedKey(account: string, network: string, address: string) {
+    const x = this.findKey(account, network, address);
+    return x?.sealed && x.masterKeyId ? { sealed: x.sealed, masterKeyId: x.masterKeyId } : null;
+  }
+  async sealedKeysNotUnder(masterKeyId: string, network: string) {
+    return this.keys.filter((x) => x.network === network && x.sealed && x.masterKeyId !== masterKeyId).map((x) => ({ account: x.account, address: x.address, sealed: x.sealed! }));
+  }
+  async replaceSealed(account: string, network: string, address: string, sealed: string, masterKeyId: string, now: number) {
+    const x = this.findKey(account, network, address);
+    if (x && x.sealed) Object.assign(x, { sealed, masterKeyId, updatedAt: now });
+  }
+  async setAgentKeyStatus(account: string, network: string, address: string, status: AgentKeyStatus, now: number) {
+    const x = this.findKey(account, network, address);
+    if (x) Object.assign(x, { status, updatedAt: now });
+  }
+  async wipeAgentKeys(account: string, network: string, now: number, address?: string) {
+    let n = 0;
+    for (const x of this.keys) {
+      if (x.account !== this.k(account) || x.network !== network || x.sealed === null) continue;
+      if (address && x.address !== address.toLowerCase()) continue;
+      Object.assign(x, { sealed: null, masterKeyId: null, status: 'wiped' as const, updatedAt: now });
+      n++;
+    }
+    return n;
+  }
+  async setUserAgent(account: string, agentKeyRef: string, agentAddress: string | null) {
+    const u = this.u.get(this.k(account));
+    if (u) this.u.set(this.k(account), { ...u, agentKeyRef, agentAddress: (agentAddress?.toLowerCase() ?? null) as Hex | null });
+  }
+
   private readonly codes = new Map<string, { account: string; expiresAt: number; used: boolean }>();
   putTelegramCode(code: string, account: string, expiresAt: number) {
     this.codes.set(code, { account: this.k(account), expiresAt, used: false });

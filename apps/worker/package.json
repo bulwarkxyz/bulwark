@@ -16,16 +16,17 @@
     "@bulwarkxyz/guard-core": "workspace:*",
     "@bulwarkxyz/hyperliquid": "workspace:*",
     "@bulwarkxyz/signer": "workspace:*",
+    "@bulwarkxyz/store": "workspace:*",
     "@noble/hashes": "^2",
     "postgres": "^3",
-    "ws": "^8",
-    "@bulwarkxyz/store": "workspace:*"
+    "ws": "^8"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^5",
+    "viem": "^2",
     "vitest": "^3"
   }
 }

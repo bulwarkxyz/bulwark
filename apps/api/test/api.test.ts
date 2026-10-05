@@ -26,7 +26,7 @@ const info = {
 
 beforeEach(() => {
   store = new MemoryStore();
-  app = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now });
+  app = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now });
 });
 
 async function signIn(account = user): Promise<string> {
@@ -71,7 +71,7 @@ describe('region gate', () => {
   it('answers 503, not 500, when KMS refuses to create a key', async () => {
     const token = await signIn();
     await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
-    const refusing = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now, provisionAgent: async () => { throw Object.assign(new Error('not authorized to perform: kms:TagResource'), { name: 'AccessDeniedException' }); } });
+    const refusing = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, provisionAgent: async () => { throw Object.assign(new Error('not authorized to perform: kms:TagResource'), { name: 'AccessDeniedException' }); } });
     const res = await refusing.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
     expect(res.status).toBe(503);
     expect((await store.user(ACCOUNT))?.agentKeyRef).toBe('pending');
@@ -81,7 +81,7 @@ describe('region gate', () => {
     const token = await signIn();
     await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
     expect((await app.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) })).status).toBe(503);
-    const withKms = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now, provisionAgent: async () => ({ keyId: 'key-1', address: '0x00000000000000000000000000000000000000aa' }) });
+    const withKms = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, provisionAgent: async () => ({ keyId: 'key-1', address: '0x00000000000000000000000000000000000000aa' }) });
     const res = await withKms.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
     expect(await res.json()).toEqual({ agentAddress: '0x00000000000000000000000000000000000000aa' });
     expect((await store.user(ACCOUNT))?.agentKeyRef).toBe('kms:key-1');
@@ -147,7 +147,7 @@ describe('telegram', () => {
 describe('AI translator', () => {
   const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
   const reply = (out: unknown) => ({ messages: { create: async () => ({ content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }) } });
-  const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now, translator: reply(out) });
+  const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: reply(out) });
   const draft = (a: ReturnType<typeof createApp>, token: string, text: string) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text }) });
   const confirm = () => store.confirmPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x', signatureVerified: true, confirmedAt: now });
 
@@ -180,5 +180,60 @@ describe('AI translator', () => {
     const a = withTranslator({ outcome: 'clarify', rule: null, message: 'Which market?' });
     for (let i = 0; i < 30; i++) expect((await draft(a, token, 'cut it')).status).toBe(200);
     expect((await draft(a, token, 'cut it')).status).toBe(429);
+  });
+});
+
+describe('encrypted-at-rest guard keys (sealed custody)', () => {
+  const sealedApp = () => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'sealed', network: 'testnet', now: () => now });
+  const BLOB = 'bwk1.m1.AAAAAAAAAAAAAAAA.c2VjcmV0LWNpcGhlcnRleHQ.dGFnLXRhZy10YWctdGFnLQ';
+  const ADDR = '0x00000000000000000000000000000000000000bb';
+
+  it('files a key request (202) for the signing service and returns the address once it exists', async () => {
+    const token = await signIn();
+    const a = sealedApp();
+    await a.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    const first = await a.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
+    expect(first.status).toBe(202);
+    await a.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
+    expect(await store.pendingKeyRequests('testnet')).toHaveLength(1); // idempotent
+    // the signing service fulfils it
+    await store.putSealedKey({ account: ACCOUNT, network: 'testnet', address: ADDR, sealed: BLOB, masterKeyId: 'm1', status: 'active', createdAt: now, updatedAt: now });
+    await store.setUserAgent(ACCOUNT, `sealed:${ADDR}`, ADDR);
+    const done = await a.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
+    expect(await done.json()).toEqual({ agentAddress: ADDR });
+  });
+
+  it('no route returns key material', async () => {
+    const token = await signIn();
+    const a = sealedApp();
+    await a.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    await store.putSealedKey({ account: ACCOUNT, network: 'testnet', address: ADDR, sealed: BLOB, masterKeyId: 'm1', status: 'active', createdAt: now, updatedAt: now });
+    await store.setUserAgent(ACCOUNT, `sealed:${ADDR}`, ADDR);
+    const bodies: string[] = [];
+    for (const path of ['/v1/me', '/v1/policy', '/v1/guard-orders', '/v1/audit']) bodies.push(await (await a.request(path, { headers: authed(token) })).text());
+    for (const [path, body] of [['/v1/onboarding/agent', {}], ['/v1/guard-key/rotate', {}]] as const) bodies.push(await (await a.request(path, { method: 'POST', headers: authed(token), body: JSON.stringify(body) })).text());
+    for (const b of bodies) {
+      expect(b).not.toContain('bwk1');
+      expect(b).not.toContain('c2VjcmV0');
+    }
+    const me = JSON.parse(bodies[0]!);
+    expect(me).toMatchObject({ keyCustody: 'sealed', keyStatus: 'ready', agent: { address: ADDR } });
+  });
+
+  it('the API code has no way to read a sealed key', () => {
+    const { readdirSync, readFileSync } = require('node:fs') as typeof import('node:fs');
+    const dir = new URL('../src/', import.meta.url);
+    const src = readdirSync(dir).map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n');
+    for (const forbidden of ['sealedKey(', 'sealedKeysNotUnder', 'SIGNER_MASTER_KEYS', 'withAgentKey', 'SealedDigestSigner', 'parseMasterKeys']) expect(src).not.toContain(forbidden);
+  });
+
+  it('wipe is a signed command that stops the guard at once', async () => {
+    const token = await signIn();
+    await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: ACCOUNT, command: 'wipe', minutes: 0, issuedAt: BigInt(now) } });
+    const res = await app.request('/v1/commands', { method: 'POST', headers: authed(token), body: JSON.stringify({ command: 'wipe', issuedAt: now, signature: sig, chainId: 42161 }) });
+    expect(res.status).toBe(200);
+    expect((await store.user(ACCOUNT))?.killSwitch).toBe(true);
+    expect((await store.pendingCommands()).map((c) => c.command)).toContain('wipe');
   });
 });

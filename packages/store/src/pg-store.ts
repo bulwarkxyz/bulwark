@@ -3,7 +3,7 @@ import { Policy, type CommandName } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardUser, PendingCommand } from './store.js';
+import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardUser, KeyRequest, KeyRequestKind, KeyVault, PendingCommand } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -34,7 +34,7 @@ class PgAudit implements AuditStore {
   }
 }
 
-export class PgStore implements ApiStore {
+export class PgStore implements ApiStore, KeyVault {
   readonly audit: AuditStore;
   constructor(private readonly sql: Sql) {
     this.audit = new PgAudit(sql);
@@ -130,6 +130,62 @@ export class PgStore implements ApiStore {
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     await this.sql`update commands set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;
   }
+  // ---------------------------------------------------------------- agent keys
+  async requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number) {
+    const [open] = await this.sql`select id from agent_key_requests where account = ${this.k(account)} and network = ${network} and done_at is null`;
+    if (open) return { id: Number(open.id), created: false };
+    const [row] = await this.sql`insert into agent_key_requests (account, network, kind, requested_at) values (${this.k(account)}, ${network}, ${kind}, ${now})
+      on conflict do nothing returning id`;
+    if (row) return { id: Number(row.id), created: true };
+    const [again] = await this.sql`select id from agent_key_requests where account = ${this.k(account)} and network = ${network} and done_at is null`;
+    return { id: Number(again?.id), created: false };
+  }
+  private toKey(r: Record<string, unknown>): AgentKeyInfo {
+    return { account: r.account as string, network: r.network as string, address: r.address as Hex, status: r.status as AgentKeyStatus, masterKeyId: (r.master_key_id as string | null) ?? null, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at) };
+  }
+  async agentKeys(account: string, network: string): Promise<AgentKeyInfo[]> {
+    // The sealed column is deliberately not selected here.
+    const rows = await this.sql`select account, network, address, status, master_key_id, created_at, updated_at from agent_keys where account = ${this.k(account)} and network = ${network} order by created_at`;
+    return rows.map((r) => this.toKey(r));
+  }
+  async pendingKeyRequests(network: string): Promise<KeyRequest[]> {
+    const rows = await this.sql`select id, account, network, kind, requested_at from agent_key_requests where network = ${network} and done_at is null order by requested_at`;
+    return rows.map((r) => ({ id: Number(r.id), account: r.account, network: r.network, kind: r.kind, requestedAt: Number(r.requested_at) }));
+  }
+  async finishKeyRequest(id: number, result: Record<string, unknown>, now: number) {
+    await this.sql`update agent_key_requests set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;
+  }
+  async putSealedKey(k: AgentKeyInfo & { sealed: string }) {
+    await this.sql`insert into agent_keys (account, network, address, sealed, master_key_id, status, created_at, updated_at)
+      values (${this.k(k.account)}, ${k.network}, ${k.address.toLowerCase()}, ${k.sealed}, ${k.masterKeyId}, ${k.status}, ${k.createdAt}, ${k.updatedAt})`;
+  }
+  async sealedKey(account: string, network: string, address: string) {
+    const [r] = await this.sql`select sealed, master_key_id from agent_keys where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and sealed is not null`;
+    return r ? { sealed: r.sealed as string, masterKeyId: r.master_key_id as string } : null;
+  }
+  async sealedKeysNotUnder(masterKeyId: string, network: string) {
+    const rows = await this.sql`select account, address, sealed from agent_keys where network = ${network} and sealed is not null and master_key_id <> ${masterKeyId}`;
+    return rows.map((r) => ({ account: r.account as string, address: r.address as string, sealed: r.sealed as string }));
+  }
+  async replaceSealed(account: string, network: string, address: string, sealed: string, masterKeyId: string, now: number) {
+    await this.sql`update agent_keys set sealed = ${sealed}, master_key_id = ${masterKeyId}, updated_at = ${now}
+      where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and sealed is not null`;
+  }
+  async setAgentKeyStatus(account: string, network: string, address: string, status: AgentKeyStatus, now: number) {
+    await this.sql`update agent_keys set status = ${status}, updated_at = ${now} where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()}`;
+  }
+  async wipeAgentKeys(account: string, network: string, now: number, address?: string) {
+    const rows = address
+      ? await this.sql`update agent_keys set sealed = null, master_key_id = null, status = 'wiped', updated_at = ${now}
+          where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and sealed is not null returning address`
+      : await this.sql`update agent_keys set sealed = null, master_key_id = null, status = 'wiped', updated_at = ${now}
+          where account = ${this.k(account)} and network = ${network} and sealed is not null returning address`;
+    return rows.length;
+  }
+  async setUserAgent(account: string, agentKeyRef: string, agentAddress: string | null) {
+    await this.sql`update users set agent_key_ref = ${agentKeyRef}, agent_address = ${agentAddress?.toLowerCase() ?? null} where account = ${this.k(account)}`;
+  }
+
   async createTelegramCode(code: string, account: string, expiresAt: number) {
     await this.sql`insert into telegram_links (code, account, expires_at) values (${code}, ${this.k(account)}, ${expiresAt})`;
   }

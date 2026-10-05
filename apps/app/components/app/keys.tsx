@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { useCommand } from '@/lib/commands';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { info } from '@/lib/hl';
-import { useMe } from '@/lib/me';
+import { useMe, type Me } from '@/lib/me';
 import { approveAgentFor, approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type SignTypedData } from '@/lib/signing';
 import { shortAddr } from './format';
 
@@ -35,7 +35,16 @@ function useWalletSigner() {
   return { chainId, sign: signTypedDataAsync as unknown as SignTypedData };
 }
 
-/** The guard key: a per-user, non-exportable KMS key the API creates; the user approves it as a named agent. */
+/**
+ * The guard key, one per user, approved by the user as a named agent on Hyperliquid. Its description
+ * follows where the key actually lives (the API reports `keyCustody`), so the app never overstates it.
+ */
+const KEY_TEXT = {
+  sealed:
+    'A key made for you on Bulwark’s server and stored there encrypted (AES-256-GCM). Hyperliquid lets it trade for you but never withdraw. If our server were compromised, someone could place trades with it, but could not withdraw your funds. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule. Hardware-backed key storage is planned.',
+  kms: 'A key held in AWS KMS, created for you and never exported. Hyperliquid lets it trade for you but never withdraw. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule.',
+} as const;
+
 export function GuardKeyCard() {
   const me = useMe();
   const qc = useQueryClient();
@@ -50,7 +59,17 @@ export function GuardKeyCard() {
     setBusy(true);
     setMsg(null);
     try {
-      await api<{ agentAddress: Hex }>('/v1/onboarding/agent', { method: 'POST', body: {} });
+      const r = await api<{ agentAddress?: Hex; status?: 'creating' }>('/v1/onboarding/agent', { method: 'POST', body: {} });
+      if (r.status === 'creating') {
+        // The signing service makes the key within a few seconds; poll until it appears.
+        setMsg({ ok: true, text: 'Creating your guard key…' });
+        for (let i = 0; i < 30; i++) {
+          await new Promise((res) => setTimeout(res, 2000));
+          const fresh = await qc.fetchQuery({ queryKey: ['me'], queryFn: () => api<Me>('/v1/me'), staleTime: 0 });
+          if (fresh?.agent) break;
+        }
+        setMsg(null);
+      }
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
@@ -85,7 +104,7 @@ export function GuardKeyCard() {
       </div>
       <div className="card-b stack">
         <span className="muted" style={{ fontSize: 13 }}>
-          A key held in AWS KMS that cannot be exported. Hyperliquid lets it trade for you but never withdraw. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule.
+          {KEY_TEXT[me.data?.keyCustody ?? 'sealed']}
         </span>
         {region === 'guardOff' ? <div className="callout warn">In your region the guard is off: trading and alerts only.</div> : null}
         {agent ? (

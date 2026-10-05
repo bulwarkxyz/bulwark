@@ -118,7 +118,7 @@ export const COMMAND_TYPES = {
   ],
 } as const;
 
-export type CommandName = 'unwind' | 'stop' | 'resume';
+export type CommandName = 'unwind' | 'stop' | 'resume' | 'wipe';
 
 /** Ordered stage lines (buffer triggers) for display and validation: must be strictly decreasing. */
 export function stageLines(policy: Policy): number[] {

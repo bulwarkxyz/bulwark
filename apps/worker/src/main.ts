@@ -5,19 +5,22 @@
  *   NETWORK                         mainnet | testnet
  *   DATABASE_URL                    Postgres (Railway)
  *   TELEGRAM_BOT_TOKEN              optional; alerts and /link go to the console without it
+ *   SIGNER_MASTER_KEYS              `id:base64` master keys, active first: enables encrypted-at-rest agent keys
  *   AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY   KMS signer (bulwark-signer IAM user)
  *   BUILDER_CODE_ENABLED_MAINNET    default false (decision D6)
  *   PORT                            health endpoint
- * Agent keys: `kms:<keyId>` in production. `env:<VAR>` (a raw key in an env var) is accepted on testnet only.
+ * Agent keys: `sealed:<address>` (AES-256-GCM under the master key; the active signer while KMS is
+ * unavailable), `kms:<keyId>`, or `env:<VAR>` (a raw key in an env var, testnet only).
  */
 import http from 'node:http';
 import { builderField, type Network as ConfigNetwork } from '@bulwarkxyz/config';
 import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, type AssetIndex, type OpenOrder, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
 import { ExchangeClient, InfoClient, NonceManager, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
-import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, type DigestSigner } from '@bulwarkxyz/signer';
+import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, SealedDigestSigner, parseMasterKeys, type DigestSigner } from '@bulwarkxyz/signer';
 import postgres from 'postgres';
 import { GuardEngine } from './guard.js';
+import { KeyService, SEALED_PREFIX } from './keys.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
 import { PgStore, migrate } from '@bulwarkxyz/store';
 import { HyperliquidStream, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
@@ -30,12 +33,24 @@ const sql = postgres(process.env.DATABASE_URL as string, { onnotice: () => undef
 const store = new PgStore(sql);
 const notifier = process.env.TELEGRAM_BOT_TOKEN ? new TelegramNotifier(process.env.TELEGRAM_BOT_TOKEN) : new ConsoleNotifier();
 
+// The master key is read once and removed from the environment so nothing later can print it.
+const master = process.env.SIGNER_MASTER_KEYS ? parseMasterKeys(process.env.SIGNER_MASTER_KEYS) : null;
+delete process.env.SIGNER_MASTER_KEYS;
+
 const signers = new Map<string, Promise<DigestSigner>>();
 let kms: AwsKmsBackend | null = null;
-function digestSigner(ref: string): Promise<DigestSigner> {
-  let s = signers.get(ref);
+function digestSigner(account: string, ref: string): Promise<DigestSigner> {
+  const cacheKey = `${account.toLowerCase()}|${ref}`;
+  let s = signers.get(cacheKey);
   if (!s) {
-    if (ref.startsWith('kms:')) {
+    if (ref.startsWith(SEALED_PREFIX)) {
+      if (!master) throw new Error('sealed agent keys need SIGNER_MASTER_KEYS on this service');
+      const address = ref.slice(SEALED_PREFIX.length) as Hex;
+      s = store.sealedKey(account, network, address).then((k) => {
+        if (!k) throw new Error('no stored guard key for this account');
+        return new SealedDigestSigner(master, account, network, k.sealed, address);
+      });
+    } else if (ref.startsWith('kms:')) {
       kms ??= AwsKmsBackend.fromEnv();
       s = KmsDigestSigner.load(kms, ref.slice(4));
     } else if (ref.startsWith('env:') && network === 'testnet') {
@@ -45,10 +60,14 @@ function digestSigner(ref: string): Promise<DigestSigner> {
     } else {
       throw new Error(`agent key ref not allowed on ${network}: ${ref.split(':')[0]}`);
     }
-    signers.set(ref, s);
+    signers.set(cacheKey, s);
+    s.catch(() => signers.delete(cacheKey));
   }
   return s;
 }
+const dropSigners = (account: string) => {
+  for (const k of signers.keys()) if (k.startsWith(`${account.toLowerCase()}|`)) signers.delete(k);
+};
 
 async function loadAssets(): Promise<{ assets: AssetIndex; collateral: Map<string, number>; universe: Map<string, string[]> }> {
   const perpDexs = (await info.perpDexs()) as RawPerpDexs;
@@ -99,12 +118,12 @@ async function main() {
     signerFor: async (user) => {
       const u = await store.user(user);
       if (!u) throw new Error('unknown user');
-      return new GuardedSigner(await digestSigner(u.agentKeyRef), network === 'mainnet');
+      return new GuardedSigner(await digestSigner(user, u.agentKeyRef), network === 'mainnet');
     },
     commandSignerFor: async (user) => {
       const u = await store.user(user);
       if (!u) throw new Error('unknown user');
-      return new CommandSigner(await digestSigner(u.agentKeyRef), network === 'mainnet');
+      return new CommandSigner(await digestSigner(user, u.agentKeyRef), network === 'mainnet');
     },
     builder: builderField(network as ConfigNetwork) as { b: Hex; f: number } | null,
     now: Date.now,
@@ -145,17 +164,45 @@ async function main() {
   setInterval(() => void syncUsers().catch((e) => console.error('syncUsers', e)), 30_000);
   setInterval(() => void loadAssets().then((m) => (meta = m)).catch((e) => console.error('loadAssets', e)), 10 * 60_000);
 
-  // Signed user commands queued by the API.
+  const keys = new KeyService({
+    vault: store,
+    store,
+    master,
+    network,
+    approvedAgents: async (account) => ((await info.extraAgents(account as Hex)) as Array<{ address: string }>).map((a) => a.address),
+    onKeyChanged: dropSigners,
+    now: Date.now,
+  });
+  const resealed = await keys.resealAll();
+  console.log(JSON.stringify({ msg: 'agent keys', sealedSigner: Boolean(master), activeMasterKey: master?.activeId ?? null, resealed }));
+
+  // Signed user commands and key requests queued by the API.
   setInterval(async () => {
     try {
+      await keys.processRequests();
       for (const cmd of await store.pendingCommands()) {
-        const result = await engine.command(cmd).catch((e) => ({ error: String(e) }));
+        let result: Record<string, unknown>;
+        if (cmd.command === 'wipe') {
+          // Cancel the guard's own orders while the key still exists, then destroy the key.
+          const cancelled = await engine.command({ ...cmd, command: 'stop' }).catch((e) => ({ error: String(e) }));
+          const wiped = await keys.wipe(cmd.account, 'You signed a command to wipe your guard key');
+          result = { cancelled, wiped };
+        } else {
+          result = await engine.command(cmd).catch((e) => ({ error: String(e) }));
+        }
         await store.finishCommand(cmd.id, result, Date.now());
       }
     } catch (e) {
       console.error('commands', e);
     }
   }, 2_000);
+  setInterval(async () => {
+    try {
+      await keys.promoteRotations((await store.users()).map((u) => u.account));
+    } catch (e) {
+      console.error('key rotation', e);
+    }
+  }, 30_000);
 
   if (process.env.TELEGRAM_BOT_TOKEN) void new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, store).start();
 

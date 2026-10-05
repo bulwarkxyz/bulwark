@@ -4,13 +4,16 @@
  *
  *   SIGNER=local  (default) — a throwaway key, measures the network legs
  *   SIGNER=kms KMS_KEY_ID=… AWS_REGION=ap-southeast-1 — real KMS signing
+ *   SIGNER=sealed — the encrypted-at-rest signer: a throwaway key sealed under a throwaway master key;
+ *                   every signature decrypts (AES-256-GCM), signs, zeroes and checks recovery
  *
  * For each sample: mainnet xyz mark tick arrives on the WebSocket → the guard evaluates → the action is
  * signed → POSTed to the testnet exchange → response. Prints p50/p90 per leg.
  */
 import { buildAssetIndex, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
 import { ExchangeClient, InfoClient, cancelAction, digestOf, l1ActionHash, l1TypedData } from '@bulwarkxyz/hyperliquid';
-import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, type DigestSigner } from '@bulwarkxyz/signer';
+import { randomBytes } from 'node:crypto';
+import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, SealedDigestSigner, createSealedAgentKey, parseMasterKeys, type DigestSigner } from '@bulwarkxyz/signer';
 import http from 'node:http';
 import { generatePrivateKey } from 'viem/accounts';
 import WebSocket from 'ws';
@@ -23,6 +26,12 @@ http.createServer((_, res) => res.end(JSON.stringify(result, null, 2))).listen(N
 
 async function signer(): Promise<DigestSigner> {
   if (process.env.SIGNER === 'kms') return KmsDigestSigner.load(AwsKmsBackend.fromEnv(), process.env.KMS_KEY_ID as string);
+  if (process.env.SIGNER === 'sealed') {
+    const master = parseMasterKeys(`probe:${randomBytes(32).toString('base64')}`);
+    const account = '0x0000000000000000000000000000000000000001';
+    const k = createSealedAgentKey(master, account, 'testnet');
+    return new SealedDigestSigner(master, account, 'testnet', k.sealed, k.address);
+  }
   return new LocalDigestSigner(generatePrivateKey());
 }
 

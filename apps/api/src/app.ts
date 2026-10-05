@@ -31,6 +31,12 @@ export interface ApiDeps {
   siweDomain: string;
   /** Creates a per-user KMS key; absent until AWS access exists. */
   provisionAgent?: (account: Hex) => Promise<{ keyId: string; address: Hex }>;
+  /**
+   * Where agent keys live. 'sealed': generated and stored encrypted by the signing service (the API
+   * only files a request and never sees key material). 'kms': per-user AWS KMS keys via provisionAgent.
+   */
+  keyCustody: 'sealed' | 'kms';
+  network: 'mainnet' | 'testnet';
   /** Claude client for the plain-language translator; absent without ANTHROPIC_API_KEY. */
   translator?: MessagesClient;
   now: () => number;
@@ -110,10 +116,15 @@ export function createApp(deps: ApiDeps) {
     const agents = user?.agentAddress ? await deps.info.extraAgents(account).catch(() => []) : [];
     const agent = user?.agentAddress ? agents.find((a) => a.address.toLowerCase() === user.agentAddress?.toLowerCase()) : undefined;
     const maxFee = await deps.info.maxBuilderFee(account, BUILDER_ADDRESS).catch(() => 0);
+    const keyMeta = await deps.store.agentKeys(account, deps.network);
+    const pending = keyMeta.find((k) => k.status === 'pending');
     return c.json({
       account,
       user,
       agent: user?.agentAddress ? { address: user.agentAddress, approved: Boolean(agent), validUntil: agent?.validUntil ?? null } : null,
+      keyCustody: deps.keyCustody,
+      keyStatus: user?.agentKeyRef === 'wiped' ? 'wiped' : user?.agentAddress ? 'ready' : keyMeta.length || user?.agentKeyRef === 'requested' ? 'creating' : 'none',
+      pendingAgent: pending ? { address: pending.address } : null,
       builder: { address: BUILDER_ADDRESS, feeTenthsBps: BUILDER_FEE_TENTHS_BPS, approvedMaxTenthsBps: maxFee },
       policy: confirmed ? { version: confirmed.policy.version, hash: confirmed.hash, confirmedAt: confirmed.confirmedAt, policy: confirmed.policy } : null,
     });
@@ -149,6 +160,12 @@ export function createApp(deps: ApiDeps) {
     const user = await deps.store.user(account);
     if (!user) return c.json({ error: 'complete the region step first' }, 409);
     if (user.agentAddress && user.agentKeyRef !== 'pending') return c.json({ agentAddress: user.agentAddress });
+    if (user.region !== 'allowed') return c.json({ error: 'the guard is off in your region' }, 403);
+    if (deps.keyCustody === 'sealed') {
+      // The signing service creates the key; this only files the request (idempotent).
+      await deps.store.requestAgentKey(account, deps.network, 'create', deps.now());
+      return c.json({ status: 'creating' }, 202);
+    }
     if (!deps.provisionAgent) return c.json({ error: 'guard keys are not available yet' }, 503);
     let key: { keyId: string; address: Hex };
     try {
@@ -160,6 +177,16 @@ export function createApp(deps: ApiDeps) {
     }
     await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, deps.now());
     return c.json({ agentAddress: key.address });
+  });
+
+  // Replace the guard key (sealed custody). The new key takes over once the user approves it on Hyperliquid.
+  app.post('/v1/guard-key/rotate', async (c) => {
+    const account = c.get('account');
+    const user = await deps.store.user(account);
+    if (deps.keyCustody !== 'sealed') return c.json({ error: 'key rotation here applies to stored keys only' }, 409);
+    if (!user?.agentAddress) return c.json({ error: 'no guard key yet' }, 409);
+    await deps.store.requestAgentKey(account, deps.network, 'rotate', deps.now());
+    return c.json({ status: 'creating' }, 202);
   });
 
   // -------------------------------------------------------------- policy
@@ -230,7 +257,7 @@ export function createApp(deps: ApiDeps) {
     const account = c.get('account');
     const body = await c.req.json<{ command: CommandName; minutes?: number; issuedAt: number; signature: Hex; chainId: number }>();
     const minutes = body.minutes ?? 0;
-    if (!['unwind', 'stop', 'resume'].includes(body.command)) return c.json({ error: 'unknown command' }, 400);
+    if (!['unwind', 'stop', 'resume', 'wipe'].includes(body.command)) return c.json({ error: 'unknown command' }, 400);
     if (Math.abs(deps.now() - body.issuedAt) > COMMAND_MAX_AGE_MS) return c.json({ error: 'command expired; sign again' }, 400);
     if (body.command === 'unwind' && (minutes < 5 || minutes > 7 * 24 * 60)) return c.json({ error: 'unwind time must be 5 minutes to 7 days' }, 400);
     const ok = await verifyTypedData({
@@ -242,10 +269,11 @@ export function createApp(deps: ApiDeps) {
       signature: body.signature,
     });
     if (!ok) return c.json({ error: 'signature does not match' }, 401);
-    if (body.command === 'stop') await deps.store.setKillSwitch(account, true); // effective at once; the worker cancels guard orders
+    // Stop (and wipe, which implies stop) take effect at once; the worker cancels guard orders, then wipes.
+    if (body.command === 'stop' || body.command === 'wipe') await deps.store.setKillSwitch(account, true);
     if (body.command === 'resume') await deps.store.setKillSwitch(account, false);
     const id = body.command === 'resume' ? null : await deps.store.addCommand({ account, command: body.command, minutes, issuedAt: body.issuedAt, signature: body.signature }, deps.now());
-    await deps.store.audit.append({ account, at: deps.now(), kind: 'command', why: 'You signed this command', what: body.command === 'unwind' ? `Panic unwind over ${minutes} min` : body.command === 'stop' ? 'Kill switch on' : 'Guard resumed', proof: { signature: body.signature } });
+    await deps.store.audit.append({ account, at: deps.now(), kind: 'command', why: 'You signed this command', what: body.command === 'unwind' ? `Panic unwind over ${minutes} min` : body.command === 'stop' ? 'Kill switch on' : body.command === 'wipe' ? 'Guard stopped; stored guard key to be wiped' : 'Guard resumed', proof: { signature: body.signature } });
     return c.json({ id, command: body.command });
   });
 
