@@ -1,7 +1,9 @@
 'use client';
 
 import { bufferLines, guardActsAt, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { api, useSignedIn } from './api';
 import { useAccountView, useXyzMarkets } from './hl';
 import { useMe } from './me';
 import { REVIEW_WEEKEND, useReview, useViewer } from './review';
@@ -47,6 +49,52 @@ export const GUARD_CHIP: Record<GuardState, string> = {
   risk: 'chip-risk',
 };
 
+/**
+ * The guard's own reading, from the API (contract agreed 5 Oct 2026; the endpoint is the other
+ * session's). Path assumed: GET /v1/guard/status. Until it answers, the app falls back to its own
+ * data-age check below.
+ */
+export type ApiGuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
+export type PauseReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired';
+export interface GuardStatus {
+  state: ApiGuardState;
+  reason?: PauseReason | null;
+  /** Last successful evaluation, ms since epoch. */
+  lastEvaluatedAt: number | null;
+}
+const FROM_API: Record<ApiGuardState, GuardState> = {
+  protected: 'protected',
+  acting: 'acting',
+  at_risk: 'risk',
+  paused: 'paused',
+  stopped: 'stopped',
+  no_rules: 'norules',
+  alerts_only: 'alertsonly',
+};
+export const PAUSE_TEXT: Record<PauseReason, string> = {
+  stale_data: 'The guard’s data is too old to act on.',
+  exchange_unreachable: 'The guard can’t reach Hyperliquid.',
+  signer_error: 'The guard’s signer failed.',
+  agent_expired: 'Your guard key’s approval on Hyperliquid has expired. Approve it again in setup.',
+};
+
+export function useGuardStatus(enabled: boolean) {
+  const review = useReview();
+  return useQuery({
+    queryKey: ['guard-status', review.on ? review.guard : 'live'],
+    enabled: enabled || Boolean(review.guard),
+    queryFn: async (): Promise<GuardStatus> => {
+      if (review.on && review.guard) {
+        const [state, reason] = review.guard.split(':') as [ApiGuardState, PauseReason | undefined];
+        return { state, reason: reason ?? null, lastEvaluatedAt: Date.now() - 2_000 };
+      }
+      return api<GuardStatus>('/v1/guard/status');
+    },
+    refetchInterval: 5_000,
+    retry: 0,
+  });
+}
+
 /** The engine holds off when account state is older than this (apps/worker staleness rule, 30 s). */
 export const STATE_STALE_MS = 30_000;
 
@@ -66,6 +114,11 @@ export interface Crossed {
 
 export interface GuardView {
   state: GuardState;
+  /** Where the state came from: the guard's own report, or the app's fallback data-age check. */
+  source: 'guard' | 'fallback';
+  reason: PauseReason | null;
+  /** The guard's last successful evaluation (from the API), ms since epoch. */
+  lastEvaluatedAt: number | null;
   /** The worst pool's highest crossed line, when it is below any line. */
   crossed: Crossed | null;
   lines: number[];
@@ -124,6 +177,8 @@ export function useGuardView(): GuardView {
   const me = useMe();
   const view = useAccountView(address);
   const markets = useXyzMarkets();
+  const signedIn = useSignedIn();
+  const status = useGuardStatus(Boolean(address) && signedIn && !review.on);
   const now = useClock(5_000);
   const rules = me.data?.policy?.policy.rules ?? [];
   const lines = bufferLines(rules);
@@ -166,7 +221,12 @@ export function useGuardView(): GuardView {
   else if (worst.buffer < Math.max(...lines)) state = 'acting';
   else state = 'protected';
 
-  return { state, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
+  // The guard's own report wins once it answers; the data-age check above is only the fallback.
+  const reported = status.data && !status.isError ? status.data : null;
+  const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
+  if (reported && !clientOnly) state = FROM_API[reported.state];
+
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */

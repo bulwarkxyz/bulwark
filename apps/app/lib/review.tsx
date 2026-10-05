@@ -11,6 +11,7 @@ import { useAccount } from 'wagmi';
  *   ?watch=0x…   show a public account read-only, as if connected
  *   ?rules=example   give that account example rules, labelled "Example rules" on screen
  *   ?state=empty|loading|error|closed   force a screen state
+ *   ?guard=paused:signer_error   stand in for the guard status endpoint
  * Nothing here can sign, send or store anything.
  */
 export const REVIEW_BUILD = process.env.NEXT_PUBLIC_REVIEW_MODE === '1';
@@ -23,6 +24,8 @@ interface Review {
   watch?: Hex;
   exampleRules: boolean;
   state: ForcedState;
+  /** ?guard=paused:signer_error: stand in for the guard status endpoint. */
+  guard?: string;
 }
 const OFF: Review = { on: false, exampleRules: false, state: null };
 const Ctx = createContext<Review>(OFF);
@@ -38,6 +41,7 @@ export function ReviewProvider({ children }: { children: React.ReactNode }) {
       on: true,
       ...(watch && /^0x[0-9a-fA-F]{40}$/.test(watch) ? { watch: watch.toLowerCase() as Hex } : {}),
       exampleRules: q.get('rules') === 'example',
+      ...(q.get('guard') && /^(protected|acting|at_risk|paused|stopped|no_rules|alerts_only)(:(stale_data|exchange_unreachable|signer_error|agent_expired))?$/.test(q.get('guard')!) ? { guard: q.get('guard')! } : {}),
       state: state === 'empty' || state === 'loading' || state === 'error' || state === 'closed' ? state : null,
     });
   }, []);

@@ -2,7 +2,10 @@
  * Curated HIP-3 markets on trade.xyz and their home-market sessions.
  * Sessions and off-hours price bounds: trade.xyz Specification Index
  * https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md and
- * discovery bounds https://docs.trade.xyz/perpetuals/mechanics/discovery-bounds.md (checked 2026-10-05).
+ * discovery bounds https://docs.trade.xyz/perpetuals/mechanics/discovery-bounds.md.
+ * Every bound and reset count below was re-checked against the specification index table on 5 Oct 2026,
+ * and max leverage and margin mode against live mainnet meta (both list cross margin for all ten).
+ * The table is authoritative: it publishes XYZ100 at ±3.5% (not 1 ÷ 30×) and SKHX as SKHYNIX.
  * Off-hours the oracle is trade.xyz's internal price: https://docs.trade.xyz/perpetuals/mechanics/oracle-price.md
  */
 export type Category = 'Commodities' | 'Indices' | 'Stocks';
@@ -31,8 +34,9 @@ export const MARKETS: Market[] = [
   { coin: 'xyz:XYZ100', ticker: 'XYZ100', name: 'US tech 100 index', category: 'Indices', session: 'futures', bound: { pct: 3.5, resets: 1 } },
   { coin: 'xyz:NVDA', ticker: 'NVDA', name: 'NVIDIA', category: 'Stocks', session: 'usStocks', bound: { pct: 5, resets: 2 } },
   { coin: 'xyz:MU', ticker: 'MU', name: 'Micron', category: 'Stocks', session: 'usStocks', bound: { pct: 10, resets: 1 } },
-  { coin: 'xyz:TSLA', ticker: 'TSLA', name: 'Tesla', category: 'Stocks', session: 'usStocks' },
-  { coin: 'xyz:SKHX', ticker: 'SKHX', name: 'SK Hynix', category: 'Stocks', session: 'korea' },
+  { coin: 'xyz:TSLA', ticker: 'TSLA', name: 'Tesla', category: 'Stocks', session: 'usStocks', bound: { pct: 5, resets: 2 } },
+  // The API coin is xyz:SKHX; trade.xyz's specification index lists it as SKHYNIX.
+  { coin: 'xyz:SKHX', ticker: 'SKHX', name: 'SK Hynix', category: 'Stocks', session: 'korea', bound: { pct: 10, resets: 1 }, aliases: ['SKHYNIX'] },
 ];
 
 export const marketByCoin = (coin: string) => MARKETS.find((m) => m.coin === coin);

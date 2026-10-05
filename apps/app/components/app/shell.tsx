@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { GUARD_LABEL, STATE_STALE_MS, useGuardView, type GuardView } from '@/lib/guard';
+import { GUARD_LABEL, PAUSE_TEXT, STATE_STALE_MS, useClock, useGuardView, type GuardView } from '@/lib/guard';
 import { NETWORK } from '@/lib/env';
-import { useAccountView, useXyzMarkets } from '@/lib/hl';
+import { useAccountView, useStreamStatus, useXyzMarkets } from '@/lib/hl';
 import { useViewer } from '@/lib/review';
 import { BufferMeter, GuardChip } from './guard-ui';
 import { ConnectButton } from './connect';
@@ -106,6 +106,13 @@ function StateNote({ g }: { g: GuardView }) {
         </span>
       );
     case 'paused':
+      if (g.source === 'guard')
+        return (
+          <span className="small">
+            {g.reason ? PAUSE_TEXT[g.reason] : 'The guard is paused.'} It holds off until this clears, then resumes by itself.{' '}
+            {g.reason === 'agent_expired' ? <Link href="/app/onboarding?step=4" style={{ textDecoration: 'underline' }}>Approve again</Link> : null}
+          </span>
+        );
       return <span className="small">{g.ageMs !== null && g.ageMs > STATE_STALE_MS ? `Account data is ${Math.round(g.ageMs / 1000)} s old. ` : 'Can’t reach Hyperliquid’s data. '}The guard acts only on fresh data and holds off until it returns.</span>;
     case 'stopped':
       return (
@@ -237,25 +244,40 @@ function MobileGuard() {
   );
 }
 
-/** Testnet label, part 3 of 3, plus how fresh the data is. Engine health is not reported to the app yet. */
+/** Testnet label, part 3 of 3, plus how fresh every data source is. */
 function StatusBar() {
   const markets = useXyzMarkets();
+  const live = useStreamStatus();
   const g = useGuardView();
-  const marketsOk = !markets.isError && Boolean(markets.data);
+  const now = useClock(1_000);
+  const age = (t: number) => `${Math.max(0, Math.round((now - t) / 1000))} s`;
+  const marketsAge = markets.dataUpdatedAt ? age(markets.dataUpdatedAt) : null;
   return (
     <footer className="statusbar">
-      <span className="row" style={{ gap: 6 }}>
+      <span className="row nw" style={{ gap: 6 }}>
         <span className={`dot ${NETWORK === 'testnet' ? 'dot-net' : 'dot-ok'}`} />
         {NETWORK === 'testnet' ? 'Testnet' : 'Mainnet'}
       </span>
-      <span className={`row ${markets.isError ? 'ct' : ''}`} style={{ gap: 6 }}>
+      <span className={`row nw ${markets.isError ? 'ct' : ''}`} style={{ gap: 6 }}>
         <span className={`dot ${markets.isError ? 'dot-crit' : 'dot-ok'}`} />
-        {markets.isError ? 'Hyperliquid market data · can’t reach' : marketsOk ? 'Hyperliquid market data · live' : 'Hyperliquid market data · connecting'}
+        {markets.isError ? 'Prices · can’t reach Hyperliquid' : marketsAge ? `Prices · ${marketsAge} old` : 'Prices · connecting'}
       </span>
+      {live.lastMessageAt || !live.open ? (
+        <span className="row nw" style={{ gap: 6 }}>
+          <span className={`dot ${live.open ? 'dot-ok' : 'dot-crit'}`} />
+          {live.open ? `Book and trades · streaming · last update ${age(live.lastMessageAt)} ago` : 'Book and trades · stream down, polling'}
+        </span>
+      ) : null}
       {g.ageMs !== null ? (
-        <span className={`row ${g.state === 'paused' ? 'ct' : ''}`} style={{ gap: 6 }}>
+        <span className={`row nw ${g.state === 'paused' ? 'ct' : ''}`} style={{ gap: 6 }}>
           <span className={`dot ${g.state === 'paused' ? 'dot-crit' : 'dot-ok'}`} />
-          Account data · {Math.max(0, Math.round(g.ageMs / 1000))} s old
+          Account · {Math.max(0, Math.round(g.ageMs / 1000))} s old
+        </span>
+      ) : null}
+      {g.lastEvaluatedAt ? (
+        <span className="row nw" style={{ gap: 6 }}>
+          <span className={`dot ${g.state === 'paused' ? 'dot-crit' : 'dot-ok'}`} />
+          Guard checked {age(g.lastEvaluatedAt)} ago
         </span>
       ) : null}
       <span className="sp" />
