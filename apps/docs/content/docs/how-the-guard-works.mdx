@@ -1,6 +1,6 @@
 ---
 title: How the guard works
-description: Margin pools, the buffer, stages, backstops, and when the guard holds off.
+description: Margin pools, the buffer, stages, retries, backstops, the guard's status, and when it holds off.
 ---
 
 ## Margin pools and the buffer
@@ -31,6 +31,23 @@ Your rules set lines on the buffer and what happens at each. Typical actions:
 
 A stage fires once and stays quiet until the buffer recovers above its line. Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
 
+## When an order does not fill
+
+An IOC order fills at once or not at all. In a fast market it can miss: by the time it reaches the book, the price has moved past your slippage limit. Or it can fill only partly.
+
+When that happens, the stage is not done. The guard **sends the unfilled part again** on the next price update, as long as the stage's line is still crossed:
+
+- **Same checks:** every retry is a new reduce-only IOC and passes all seven checks below, including the limit of 20 guard actions a minute.
+- **Same slippage:** each retry is priced from the mark at that moment and never further from it than your slippage limit. The limit is never widened.
+- **Never more than needed:** a retry is never larger than the unfilled part, or than the position.
+- **No double sends:** a retry waits for account data newer than the last attempt, so a fill that has not shown up yet is never sent twice.
+- **After 3 attempts that did not fully fill,** you get a critical alert saying the guard cannot fill within your slippage limit. It keeps trying while the line is crossed; you may want to act yourself.
+- **It stops** when the stage's line is no longer crossed, the position is closed, or you stop the guard.
+
+Every attempt is in your [audit log](/docs/audit-log) with its number, its limit price and how much filled.
+
+Retries help when the price pauses or bounces between attempts. They cannot help when the account goes from its line to liquidation faster than an order can reach the exchange; the [crash-day replays](/docs/backtests) show both.
+
 Rules can also watch account drawdown, a market's price move, or a position's leverage, and can be limited to fixed windows (weekend, overnight, US session).
 
 ## Backstops on the exchange
@@ -40,6 +57,22 @@ For every guarded position, the guard keeps a **reduce-only stop order resting o
 ## When the guard holds off
 
 The guard acts only on fresh data: mark prices less than 10 seconds old and account state less than 30 seconds old. Otherwise it does nothing, records why in your audit log, and alerts you.
+
+## The guard's status
+
+The app shows what the guard is doing right now, as the guard itself reports it:
+
+| Status | Meaning |
+|---|---|
+| Protected | Rules are active and no line is crossed |
+| Acting | The guard has just acted, or is retrying an order that did not fill |
+| At risk | A line is crossed and that stage has already acted; the next line has not been reached |
+| Paused | The guard cannot act right now. The reason is shown: data too old, Hyperliquid not answering, the signer could not use your guard key, or your guard key's approval on Hyperliquid has expired or been removed |
+| Stopped | You turned on the kill switch |
+| No rules | You have not signed any rules yet |
+| Alerts only | Automatic action is off in your region; the guard alerts you instead |
+
+With the status comes the time the guard last checked your rules on fresh data. If the guard has not reported for a minute, the app shows it as paused rather than assume all is well.
 
 ## The checks before every signature
 

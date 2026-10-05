@@ -1,0 +1,1 @@
+2026-10-05T10:03:47.914769840Z [INFO]  region="asia-southeast1-eqsg3a" signer="kms" at="2026-10-05T10:03:44.211Z" sign_ms={"n":200,"p50":14.1,"p90":17.3,"max":60.1} tick_to_signed_and_sent_ms={"n":200,"p50":14.6,"p90":18.5,"max":44.2} post_round_trip_ms={"n":200,"p50":86.8,"p90":90,"max":219.2} tick_to_exchange_response_ms={"n":200,"p50":101.8,"p90":108.7,"max":236.6}

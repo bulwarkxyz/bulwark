@@ -50,6 +50,10 @@ Bulwark uses it to protect HIP-3 stock and commodity positions on [trade.xyz](ht
 
   Fired rules latch until their condition clears, so one breach does not fire twice.
 
+- **Retries for orders that did not fill.** `planRetries(decision, chains, options)` re-sends the unfilled part of a stage's order while that stage's condition still holds. Each retry is re-priced from the current mark within the user's slippage (never wider), is no larger than the unfilled part or the position, and goes through the same invariants. After `RETRY_ALERT_AFTER` (3) attempts that did not fully fill it adds a critical "cannot fill within your slippage" alert and keeps trying. `recordFill` updates the chains from each attempt's result. Both are pure; the caller keeps the chains between evaluations.
+
+- **A simulator.** `simulate()` replays a price path through `evaluate`, applying the guard's actions as it goes. It models fees, slippage, resting backstops, retries, the I6 rate cap, and congestion as a delay (a late IOC fills only if the price is still within its limit).
+
 - **Invariants I1–I7**, checked on every action before signing:
 
   | | Invariant |
@@ -75,6 +79,8 @@ Bulwark uses it to protect HIP-3 stock and commodity positions on [trade.xyz](ht
   - Any drafted number the user did not type is rejected.
 - **Scenario tests** cover each rule shape, top-ups in both modes, the latch, the region switch, and each invariant's rejection path.
 
+- **Retry tests** cover re-pricing, size caps, the gate, merging with a new stage order, stopping when the condition clears, the alert after 3 attempts, the rate cap, and a before/after replay where a late order missed.
+
 ```sh
 pnpm --filter @bulwarkxyz/guard-core test
 FC_RUNS=20000 pnpm --filter @bulwarkxyz/guard-core test   # deeper property run
@@ -99,6 +105,14 @@ const decision = evaluate(policy, snapshot, marks, context);
 const { approved, rejected } = gate(decision.actions, policy, snapshot, marks, executionContext);
 // sign and send `approved`; log `rejected`
 ```
+
+## Crash-day replays
+
+Bulwark replays three 2026 HIP-3 crash days through `simulate()`. Results, method and limits: the [crash-day replays](https://github.com/bulwarkxyz/bulwark/blob/main/apps/docs/content/docs/backtests.mdx) page; script: `apps/ops/src/backtest.ts`.
+
+**Data sources.**
+- **[Hydromancer](https://hydromancer.xyz):** the mark-price history: accepted marks (`perpPriceHistoryByTime`) for oil and SK hynix, and the deployer-submitted mark (`oraclePriceHistoryByTime`) for silver, whose crash predates Hydromancer's accepted HIP-3 rounds. Mark-price history courtesy of Hydromancer.
+- **Hyperliquid directly:** margin tiers, maximum leverage and lot sizes (`perpDexs`, `allPerpMetas`).
 
 ## Licence
 

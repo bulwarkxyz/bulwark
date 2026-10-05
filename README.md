@@ -49,11 +49,12 @@ Node 22+, pnpm 9.
 ## Reproduce the crash-day replays
 
 ```sh
-pnpm --filter @bulwarkxyz/ops backtest                     # from the stored inputs
-pnpm --filter @bulwarkxyz/ops backtest -- --mark-dir DIR   # mark prices: DIR/<case>.csv with block_minute,mark_price
+HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer   # mark prices from Hydromancer (the published results)
+pnpm --filter @bulwarkxyz/ops backtest -- --mark-dir DIR   # your own mark prices: DIR/<case>.csv with block_minute,mark_price
+pnpm --filter @bulwarkxyz/ops backtest                     # hourly trade prices stored in data/backtests/ (coarse)
 ```
 
-Method, settings and limits: the docs' crash-day replays page ([source](apps/docs/content/docs/backtests.mdx)).
+The mark-price history comes from [Hydromancer](https://hydromancer.xyz) (courtesy of Hydromancer; fetched with your own key and cached locally, not committed). Margin tiers and market limits come from Hyperliquid directly. Results, method and limits: the docs' crash-day replays page ([source](apps/docs/content/docs/backtests.mdx)); latest run: [`evidence/backtest-mark-2026-10-05.md`](evidence/backtest-mark-2026-10-05.md).
 
 ## Licence
 

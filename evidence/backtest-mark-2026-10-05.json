@@ -1,0 +1,841 @@
+{
+ "ranAt": "2026-10-05T10:23:22.872Z",
+ "priceKind": "mark",
+ "assumptions": {
+  "account": "A cross long on the xyz dex, opened at the first price of each window, with 10,000 USDC of equity and nothing else in the account",
+  "leverages": "3×, 5×, 10×, 20×",
+  "stageSettings": "Example settings chosen for the test (not product defaults): Stage 1: buffer below 2× → trim until the buffer is back at 3×; Stage 2: buffer below 1.5× → trim until the buffer is back at 2.5×; Stage 3: buffer below 1.2× → close the position",
+  "noGuard": "The same account, same prices, no guard",
+  "fees": "4.5 bps per fill, assumed",
+  "slippage": "Guard orders fill at the worst price a 1% slippage limit allows",
+  "congestion": "Guard orders reach the exchange 0, 1, 5 minutes after the decision; a late IOC fills only if the price is still within its limit",
+  "retry": "An order that did not fill, or filled partly, is retried once its result is known (one delay later) while its stage still holds, re-priced from the mark at that time within the same slippage; at most 20 guard actions a minute (I6). \"Before the fix\" runs the same path without retries",
+  "margin": "Current xyz maintenance tiers (historical tiers may have differed)",
+  "notModelled": "Funding, order-book depth and queue position, partial fills, Hyperliquid outages, other traders reacting"
+ },
+ "cases": [
+  {
+   "case": "silver-2026-01-30",
+   "title": "Silver, 30 January 2026",
+   "coin": "xyz:SILVER",
+   "priceKind": "mark",
+   "resolution": "deployer-submitted mark inputs (not the accepted mark), 85,513 rounds, one about every 3.0 s, from Hydromancer oraclePriceHistoryByTime",
+   "window": "2026-01-29T00:00:00Z → 2026-02-01T00:00:00Z",
+   "points": 85513,
+   "entryPrice": 117.78,
+   "lowestPrice": 73.954,
+   "dropToLowPct": -37.21,
+   "largestHourDrop": {
+    "pct": -17.74,
+    "from": "2026-01-30T17:26:17.622Z",
+    "to": "2026-01-30T18:22:35.868Z"
+   },
+   "conclusive": true,
+   "rows": [
+    {
+     "leverage": 3,
+     "positionSize": 254.71,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-30T18:16:35.491Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 202.53,
+       "equityKeptPct": 2,
+       "guardOrders": 5,
+       "missedOrders": 0,
+       "feesPaid": 8.58,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 202.53,
+       "equityKeptPct": 2,
+       "guardOrders": 5,
+       "missedOrders": 0,
+       "feesPaid": 8.58,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 202.53,
+        "equityKeptPct": 2,
+        "guardOrders": 5,
+        "missedOrders": 0,
+        "feesPaid": 8.58
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-30T18:18:56.450Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 0,
+       "feesPaid": 4.11,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-30T18:18:56.450Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 0,
+        "feesPaid": 4.11
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "positionSize": 424.52,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-30T09:45:26.549Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 3.83,
+       "equityKeptPct": 0,
+       "guardOrders": 13,
+       "missedOrders": 0,
+       "feesPaid": 18,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-30T18:10:32.440Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 10,
+       "missedOrders": 2,
+       "feesPaid": 17.76,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-30T18:10:32.440Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 10,
+        "missedOrders": 2,
+        "feesPaid": 17.76
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-30T09:45:26.549Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-30T09:45:26.549Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "positionSize": 849.04,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-29T15:27:53.595Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 0.19,
+       "equityKeptPct": 0,
+       "guardOrders": 16,
+       "missedOrders": 0,
+       "feesPaid": 40.52,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:27:53.595Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 1,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-29T15:27:53.595Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 1,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:27:53.595Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-29T15:27:53.595Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "positionSize": 1698.08,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-29T15:16:32.456Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 0.3,
+       "equityKeptPct": 0,
+       "guardOrders": 18,
+       "missedOrders": 0,
+       "feesPaid": 85.54,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:17:32.534Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 1,
+       "feesPaid": 35.6,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-29T15:17:32.534Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 1,
+        "feesPaid": 35.6
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:17:32.534Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 0,
+       "feesPaid": 35.6,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-01-29T15:17:32.534Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 0,
+        "feesPaid": 35.6
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "oil-2026-03-23",
+   "title": "Oil, 23 March 2026",
+   "coin": "xyz:CL",
+   "priceKind": "mark",
+   "resolution": "accepted mark prices, 85,311 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime",
+   "window": "2026-03-22T00:00:00Z → 2026-03-25T00:00:00Z",
+   "points": 85311,
+   "entryPrice": 97.864,
+   "lowestPrice": 84.058,
+   "dropToLowPct": -14.11,
+   "largestHourDrop": {
+    "pct": -15.4,
+    "from": "2026-03-23T10:28:03.972Z",
+    "to": "2026-03-23T11:09:34.024Z"
+   },
+   "submittedVsAccepted": {
+    "matched": 85311,
+    "medianPct": 0.047,
+    "p99Pct": 0.509,
+    "maxPct": 1.378
+   },
+   "conclusive": true,
+   "rows": [
+    {
+     "leverage": 3,
+     "positionSize": 306.547,
+     "noGuard": {
+      "liquidated": false,
+      "equityAtEnd": 7224.83,
+      "equityKeptPct": 72.2
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 7224.83,
+       "equityKeptPct": 72.2,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 7224.83,
+       "equityKeptPct": 72.2,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 7224.83,
+        "equityKeptPct": 72.2,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 7224.83,
+       "equityKeptPct": 72.2,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 7224.83,
+        "equityKeptPct": 72.2,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "positionSize": 510.913,
+     "noGuard": {
+      "liquidated": false,
+      "equityAtEnd": 5374.7,
+      "equityKeptPct": 53.7
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 5374.7,
+       "equityKeptPct": 53.7,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 5374.7,
+       "equityKeptPct": 53.7,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 5374.7,
+        "equityKeptPct": 53.7,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 5374.7,
+       "equityKeptPct": 53.7,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 5374.7,
+        "equityKeptPct": 53.7,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "positionSize": 1021.826,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-03-23T11:07:18.994Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 1134.61,
+       "equityKeptPct": 11.3,
+       "guardOrders": 4,
+       "missedOrders": 0,
+       "feesPaid": 36.7,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:07:18.994Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-03-23T11:07:18.994Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:07:18.994Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-03-23T11:07:18.994Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "positionSize": 2043.652,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-03-23T11:05:46.246Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 837.83,
+       "equityKeptPct": 8.4,
+       "guardOrders": 6,
+       "missedOrders": 0,
+       "feesPaid": 82.72,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:06:52.420Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 1,
+       "feesPaid": 36.37,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-03-23T11:06:52.420Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 1,
+        "feesPaid": 36.37
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:06:52.420Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 2,
+       "missedOrders": 0,
+       "feesPaid": 36.37,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-03-23T11:06:52.420Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 2,
+        "missedOrders": 0,
+        "feesPaid": 36.37
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "skhx-2026-07-27",
+   "title": "SK hynix, 27 July 2026",
+   "coin": "xyz:SKHX",
+   "priceKind": "mark",
+   "resolution": "accepted mark prices, 86,386 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime",
+   "window": "2026-07-26T00:00:00Z → 2026-07-29T00:00:00Z",
+   "points": 86386,
+   "entryPrice": 1222.5,
+   "lowestPrice": 917.25,
+   "dropToLowPct": -24.97,
+   "largestHourDrop": {
+    "pct": -19.38,
+    "from": "2026-07-27T22:01:21.649Z",
+    "to": "2026-07-27T23:01:18.654Z"
+   },
+   "submittedVsAccepted": {
+    "matched": 86386,
+    "medianPct": 0.173,
+    "p99Pct": 2.223,
+    "maxPct": 15.073
+   },
+   "conclusive": true,
+   "rows": [
+    {
+     "leverage": 3,
+     "positionSize": 24.539,
+     "noGuard": {
+      "liquidated": false,
+      "equityAtEnd": 6213.63,
+      "equityKeptPct": 62.1
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 6213.63,
+       "equityKeptPct": 62.1,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 6213.63,
+       "equityKeptPct": 62.1,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 6213.63,
+        "equityKeptPct": 62.1,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 6213.63,
+       "equityKeptPct": 62.1,
+       "guardOrders": 0,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": false,
+        "liquidatedAt": null,
+        "equityAtEnd": 6213.63,
+        "equityKeptPct": 62.1,
+        "guardOrders": 0,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "positionSize": 40.899,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-07-27T23:00:30.644Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 2480.33,
+       "equityKeptPct": 24.8,
+       "guardOrders": 3,
+       "missedOrders": 0,
+       "feesPaid": 14.38,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-07-27T23:00:30.644Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-07-27T23:00:30.644Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-07-27T23:00:30.644Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 1,
+       "missedOrders": 0,
+       "feesPaid": 0,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-07-27T23:00:30.644Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 1,
+        "missedOrders": 0,
+        "feesPaid": 0
+       }
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "positionSize": 81.799,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-07-27T14:21:09.753Z"
+     },
+     "withGuard": [
+      {
+       "delayMinutes": 0,
+       "liquidated": false,
+       "liquidatedAt": null,
+       "equityAtEnd": 1964.64,
+       "equityKeptPct": 19.6,
+       "guardOrders": 5,
+       "missedOrders": 0,
+       "feesPaid": 37.64,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": null
+      },
+      {
+       "delayMinutes": 1,
+       "liquidated": true,
+       "liquidatedAt": "2026-07-27T23:00:27.675Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 3,
+       "missedOrders": 0,
+       "feesPaid": 25.59,
+       "retryOrders": 0,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-07-27T23:00:27.675Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 3,
+        "missedOrders": 0,
+        "feesPaid": 25.59
+       }
+      },
+      {
+       "delayMinutes": 5,
+       "liquidated": true,
+       "liquidatedAt": "2026-07-27T23:00:27.675Z",
+       "equityAtEnd": null,
+       "equityKeptPct": null,
+       "guardOrders": 4,
+       "missedOrders": 1,
+       "feesPaid": 25.48,
+       "retryOrders": 1,
+       "cannotFillAlertAt": null,
+       "rateCapped": 0,
+       "withoutRetry": {
+        "liquidated": true,
+        "liquidatedAt": "2026-07-27T23:00:27.675Z",
+        "equityAtEnd": null,
+        "equityKeptPct": null,
+        "guardOrders": 4,
+        "missedOrders": 1,
+        "feesPaid": 27.39
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

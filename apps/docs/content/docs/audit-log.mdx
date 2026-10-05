@@ -9,6 +9,8 @@ Every guard action, every action its checks refused, every time it held off, eve
 - **what** happened (the order, the fill, the amount moved),
 - **proof** (order ids, fills, signatures, hashes).
 
+When an order is [retried](/docs/how-the-guard-works#when-an-order-does-not-fill), each attempt has its own entry: the attempt number, the limit price and how much filled.
+
 ## Tamper evidence
 
 Each entry includes the hash of the entry before it, one chain per account. Changing or deleting any entry breaks every hash after it. The database refuses updates and deletes on the log, and the app **recomputes the whole chain in your browser** and shows whether it is intact.
