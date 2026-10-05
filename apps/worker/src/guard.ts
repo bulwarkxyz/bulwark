@@ -30,6 +30,8 @@ export const STATE_MAX_AGE_MS = 30_000;
 export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
 export const BACKSTOP_EVERY_MS = 60_000;
 export const OPEN_ORDERS_TTL_MS = 15_000;
+/** After Hyperliquid refuses an open-orders request, wait this long before that account asks again. */
+export const OPEN_ORDERS_RETRY_MS = 5_000;
 /** The status is written when it changes, and at least this often while the account is evaluated. */
 export const STATUS_WRITE_EVERY_MS = 15_000;
 /** How often the guard key is checked: still approved on Hyperliquid, not expired, loadable by the signer. */
@@ -84,7 +86,11 @@ interface AccountCache {
   stateAt: number;
   spot?: RawSpotState;
   spotAt: number;
+  /** Open orders per dex, each cached on its own; cleared as a whole after the guard acts. */
   openOrders?: { at: number; orders: OpenOrder[] } | undefined;
+  openByDex?: Map<string, { at: number; orders: OpenOrder[] }> | undefined;
+  /** After a failed fetch, the account waits this long before asking again. */
+  openOrdersFailedAt?: number | undefined;
   lastBackstopAt: number;
   positionsKey: string;
   lastDegradedAlert: number;
@@ -150,7 +156,7 @@ export class GuardEngine {
     if (key !== c.positionsKey) {
       c.positionsKey = key;
       c.lastBackstopAt = 0; // positions changed: re-plan backstops
-      c.openOrders = undefined;
+      c.openOrders = c.openByDex = undefined;
     }
     return this.schedule(account);
   }
@@ -236,11 +242,37 @@ export class GuardEngine {
     });
   }
 
+  /**
+   * Open orders on the dexes where the account has a position or a guard order resting; nothing to fetch otherwise.
+   * Each dex is cached on its own, so when Hyperliquid refuses one request the other's answer isn't thrown away.
+   * Before, a refused request left nothing cached and the next run, a second later, asked again: a loop that
+   * spent the whole rate budget on open orders and starved everything else.
+   */
   private async openOrders(account: Hex, c: AccountCache): Promise<OpenOrder[]> {
     const now = this.deps.now();
     if (c.openOrders && now - c.openOrders.at < OPEN_ORDERS_TTL_MS) return c.openOrders.orders;
-    const dexes = new Set(['', ...Object.keys(c.dexStates)]);
-    const orders = (await Promise.all([...dexes].map((d) => this.deps.openOrders(account, d)))).flat();
+    if (c.openOrdersFailedAt !== undefined && now - c.openOrdersFailedAt < OPEN_ORDERS_RETRY_MS) throw new Error('open orders unavailable (retrying shortly)');
+    const guardOrders = await this.deps.store.guardOrders(account);
+    const dexOf = (coin: string) => (coin.includes(':') ? (coin.split(':')[0] as string) : '');
+    const dexes = new Set<string>([
+      ...Object.entries(c.dexStates)
+        .filter(([, st]) => st.assetPositions.length > 0)
+        .map(([d]) => d),
+      ...guardOrders.map((o) => dexOf(o.coin)),
+    ]);
+    const byDex = (c.openByDex ??= new Map());
+    try {
+      for (const d of dexes) {
+        const hit = byDex.get(d);
+        if (hit && now - hit.at < OPEN_ORDERS_TTL_MS) continue;
+        byDex.set(d, { at: now, orders: await this.deps.openOrders(account, d) });
+      }
+    } catch (e) {
+      c.openOrdersFailedAt = now;
+      throw e;
+    }
+    c.openOrdersFailedAt = undefined;
+    const orders = [...dexes].flatMap((d) => byDex.get(d)?.orders ?? []);
     c.openOrders = { at: now, orders };
     return orders;
   }
@@ -333,7 +365,7 @@ export class GuardEngine {
     let records: ExecutionRecord[] = [];
     if (plan.actions.length) {
       records = await this.execute(account, user, confirmed, snapshot, marks, ctx, plan.actions);
-      c.openOrders = undefined;
+      c.openOrders = c.openByDex = undefined;
       if (!user.killSwitch) for (const r of records) if (r.action.type === 'order') chains = recordFill(chains, r.action, filledSize(r), now);
       // A retry that missed again is in the audit log; the user hears about fills, and the alert after repeated misses.
       const told = records.filter((r) => !(r.action.type === 'order' && (r.action.attempt ?? 1) > 1 && filledSize(r) === 0));
@@ -496,7 +528,7 @@ export class GuardEngine {
       const sig = await signer.signStopCancel({ kind: 'stop', issuedAt: cmd.issuedAt, verified: true }, wire, new Set(mine.map((o) => o.oid)), nonce, now);
       const res = await this.deps.exchange.send({ action: wire, nonce, signature: sig });
       if (res.ok) await this.deps.store.removeGuardOrders(account, mine.map((o) => o.oid));
-      c.openOrders = undefined;
+      c.openOrders = c.openByDex = undefined;
       await this.audit({ account, at: now, kind: 'command', why: 'Kill switch', what: `Cancelled ${mine.length} guard order(s)${res.ok ? '' : `: ${res.error}`}`, proof: { statuses: res.statuses } });
       return { cancelled: res.ok ? mine.length : 0, error: res.error ?? null };
     }
@@ -549,6 +581,6 @@ export class GuardEngine {
           await store.addGuardOrder(account, { oid: resting.oid, coin: r.action.coin, kind: 'backstop', triggerPx: r.action.triggerPx, size: r.action.size, placedAt: this.deps.now(), ruleId: r.action.ruleId, line: r.action.line ?? null, pricing: r.action.pricing ?? null });
       }
     }
-    c.openOrders = undefined;
+    c.openOrders = c.openByDex = undefined;
   }
 }

@@ -150,6 +150,39 @@ describe('guard engine', () => {
     expect(positionsKey(iso(5.4, 0))).not.toBe(positionsKey(iso(4.4, 0)));
   });
 
+  it('open orders: fetched only for dexes with a position or guard order, and a refusal waits instead of retrying every update', async () => {
+    const calls: string[] = [];
+    let refuse = false;
+    (engine as unknown as { deps: { openOrders: (u: string, d: string) => Promise<unknown[]> } }).deps.openOrders = async (_u, d) => {
+      calls.push(d);
+      if (refuse) throw new HttpError(429, 'null');
+      return [];
+    };
+    // No positions anywhere: nothing to fetch, however often it runs.
+    await engine.onUserState(ACCOUNT, [['', emptyMain], ['xyz', xyzState(0, 91.5, 6)]], t);
+    await engine.onMarks(new Map([['xyz:CL', 91.5]]), t);
+    t += BACKSTOP_EVERY_MS;
+    await engine.heartbeat();
+    expect(calls).toEqual([]);
+    // A position on xyz only: only xyz is asked.
+    t += BACKSTOP_EVERY_MS;
+    await feed(91.6, 6);
+    expect(new Set(calls)).toEqual(new Set(['xyz']));
+    // Refused: the next updates within 5 s don't ask again.
+    calls.length = 0;
+    refuse = true;
+    t += BACKSTOP_EVERY_MS;
+    await engine.onUserState(ACCOUNT, [['', emptyMain], ['xyz', xyzState(0.24, 91.5, 6)]], t);
+    await engine.onMarks(new Map([['xyz:CL', 91.7]]), t);
+    const afterRefusal = calls.length;
+    expect(afterRefusal).toBeGreaterThan(0);
+    for (let i = 0; i < 4; i++) {
+      t += 1000;
+      await engine.onMarks(new Map([['xyz:CL', 91.8 + i / 100]]), t);
+    }
+    expect(calls.length).toBe(afterRefusal);
+  });
+
   it('does not fire twice for the same breach (latch persisted in the store)', async () => {
     await feed(91.5);
     sent = [];
