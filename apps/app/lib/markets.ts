@@ -101,8 +101,8 @@ export function sessionLabel(kind: SessionKind, t: number, utc = true): string {
 }
 
 /**
- * Which curated market the trade screen opens on: the one with the most real activity recently on this
- * network, read live (useMarketActivity): the most traded value in the last 24 hours, then the latest trade. Ties and missing data fall back to a fixed order per network. A market with
+ * Which curated market the trade screen opens on: the first in a fixed order per network that has recent
+ * data, read live (useMarketActivity, from the API's GET /markets/activity). Ties and missing data fall back to a fixed order per network. A market with
  * no trade in the last 7 days and no 24h volume counts as having no data here, and is never the default.
  */
 export const FALLBACK_ORDER: Record<'mainnet' | 'testnet', string[]> = {
@@ -112,14 +112,20 @@ export const FALLBACK_ORDER: Record<'mainnet' | 'testnet', string[]> = {
 export const NO_DATA_AFTER_MS = 7 * 86_400_000;
 
 export interface MarketActivity {
-  /** Time of the latest trade Hyperliquid reports, or null for none. */
+  /** Time of the latest trade, or null for none. */
   lastTradeAt: number | null;
   dayVolumeUsd: number;
   delisted: boolean;
+  /** From the API (GET /markets/activity): traded in the last 24 h and not delisted. */
+  hasRecentData?: boolean;
+  /** From the API: trades in the last 24 h. */
+  trades24h?: number;
 }
 
+/** Has data here: the API's hasRecentData when it answered; else a trade in the last 7 days or 24 h volume. */
 export function hasData(a: MarketActivity | undefined, now: number): boolean {
   if (!a || a.delisted) return false;
+  if (a.hasRecentData !== undefined) return a.hasRecentData;
   return (a.lastTradeAt !== null && now - a.lastTradeAt < NO_DATA_AFTER_MS) || a.dayVolumeUsd > 0;
 }
 
@@ -131,7 +137,10 @@ export function rankMarkets(activity: Readonly<Record<string, MarketActivity>>, 
     const dx = hasData(activity[x.coin], now);
     const dy = hasData(activity[y.coin], now);
     if (dx !== dy) return dx ? -1 : 1;
-    // Most activity in the last 24 hours first (traded value); then the latest trade; then the fixed order.
+    // apps/api/CONTRACT.md: with data first, then most trades in 24 h, then most 24 h volume; then the latest trade.
+    const nx = activity[x.coin]?.trades24h ?? 0;
+    const ny = activity[y.coin]?.trades24h ?? 0;
+    if (dx && nx !== ny) return ny - nx;
     const vx = activity[x.coin]?.dayVolumeUsd ?? 0;
     const vy = activity[y.coin]?.dayVolumeUsd ?? 0;
     if (dx && vx !== vy) return vy - vx;
@@ -150,5 +159,7 @@ export function defaultMarket(activity: Readonly<Record<string, MarketActivity>>
   const lastM = last ? marketByTicker(last) : undefined;
   if (!activity) return lastM ?? marketByTicker(FALLBACK_ORDER[network][0]!)!;
   if (lastM && hasData(activity[lastM.coin], now)) return lastM;
-  return rankMarkets(activity, network, now)[0]!;
+  // apps/api/CONTRACT.md: the first market in the fixed order that has recent data.
+  const first = FALLBACK_ORDER[network].map((t) => marketByTicker(t)!).find((m) => hasData(activity[m.coin], now));
+  return first ?? marketByTicker(FALLBACK_ORDER[network][0]!)!;
 }

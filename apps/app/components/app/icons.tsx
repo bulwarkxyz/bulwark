@@ -60,6 +60,12 @@ export const Icon = {
       <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
     </svg>
   ),
+  bell: (s = 18) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  ),
   search: (s = 18) => (
     <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
       <circle cx="11" cy="11" r="7" />

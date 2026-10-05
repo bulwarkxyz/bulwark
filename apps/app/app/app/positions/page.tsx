@@ -7,7 +7,7 @@ import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
 import { PositionCards, PositionsTable, poolState } from '@/components/app/positions-table';
 import { useSignedIn } from '@/lib/api';
-import { useCommand } from '@/lib/commands';
+import { describeResult, useCommand, waitForCommand } from '@/lib/commands';
 import { STATE_STALE_MS, describeAction, nextWindowOpen, TOGETHER_NOTE, orderLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView, useFills } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
@@ -62,8 +62,10 @@ export default function PositionsPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await command('unwind', minutesN);
-      setMsg({ ok: true, text: `Unwind sent. The guard will close every position in slices over ${minutesN} minutes.` });
+      const res = await command('unwind', minutesN);
+      setMsg({ ok: true, text: `Unwind sent. Waiting for the guard to start it…` });
+      const rec = res.id !== null ? await waitForCommand(res.id) : null;
+      setMsg({ ok: true, text: rec ? `Unwind started over ${minutesN} minutes. ${describeResult('unwind', rec.result)}` : `Unwind sent. The guard hasn’t reported back yet; the audit log will show each order.` });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {

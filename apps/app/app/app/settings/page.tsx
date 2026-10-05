@@ -5,7 +5,7 @@ import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount, useChainId, useSignTypedData } from 'wagmi';
 import { DisconnectButton } from '@/components/app/connect';
 import { Icon } from '@/components/app/icons';
@@ -17,6 +17,8 @@ import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type SignTypedData } from '@/lib/signing';
 import { useTimes } from '@/lib/time';
+import { useAlertActions, useAlertFeed, useAlertSettings, useUnseenAlerts } from '@/lib/alerts';
+import { Toggle } from '@/components/app/toggle';
 
 /** Keys: one compact row each, with the full controls one click away. */
 function KeysPanel() {
@@ -90,33 +92,76 @@ function KeysPanel() {
 
 function AlertsPanel() {
   const me = useMe();
+  const review = useReview();
+  const settings = useAlertSettings();
+  const actions = useAlertActions();
+  const { markSeen } = useUnseenAlerts();
+  const inApp = settings.data?.inApp ?? true;
+  const linked = settings.data?.telegram.linked ?? Boolean(me.data?.user?.telegramChatId);
+  const feed = useAlertFeed(Boolean(me.data?.user) && inApp);
+  const times = useTimes();
   const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const linked = Boolean(me.data?.user?.telegramChatId);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
+  // Opening Settings counts as seeing the alerts listed here.
+  useEffect(() => {
+    if (feed.data) markSeen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed.data]);
+  const run = async (f: () => Promise<unknown>) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await f();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // Changes need a real session; review builds show the panel read-only.
+  const ready = Boolean(me.data?.user) && !review.on;
+  const shown = Boolean(me.data?.user);
   return (
-    <section className="panel" aria-labelledby="alerts-h">
+    <section className="panel" id="alerts" aria-labelledby="alerts-h">
       <div className="ph">
         <h2 id="alerts-h">Alerts</h2>
       </div>
       <div className="pb col" style={{ gap: 0 }}>
         <div className="kv line krow">
+          <label className="small" htmlFor="al-inapp">
+            In the app
+          </label>
+          <Toggle id="al-inapp" label="Show alerts in the app" checked={inApp} disabled={!ready || busy || settings.isLoading} onChange={(v) => run(() => actions.setInApp(v))} />
+        </div>
+        <div className="kv line krow">
           <span className="small">Telegram</span>
           <span className="row nw" style={{ gap: 8 }}>
             <span className="small t2">{linked ? 'linked' : 'not linked'}</span>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={!me.data?.user}
-              onClick={() =>
-                api<{ code: string }>('/v1/telegram/code', { method: 'POST', body: {} })
-                  .then((r) => setCode(r.code))
-                  .catch((e: Error) => setErr(e.message))
-              }
-            >
-              {linked ? 'Link another chat' : 'Get a link code'}
-            </button>
+            {linked ? (
+              confirmUnlink ? (
+                <>
+                  <button type="button" className="btn btn-sm btn-crit" disabled={busy} onClick={() => run(async () => (await actions.unlinkTelegram(), setConfirmUnlink(false), setCode(null)))}>
+                    Unlink
+                  </button>
+                  <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => setConfirmUnlink(false)}>
+                    Keep
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="btn btn-sm" disabled={!ready || busy} onClick={() => setConfirmUnlink(true)}>
+                  Unlink…
+                </button>
+              )
+            ) : (
+              <button type="button" className="btn btn-sm" disabled={!ready || busy} onClick={() => run(async () => setCode((await api<{ code: string }>('/v1/telegram/code', { method: 'POST', body: {} })).code))}>
+                Get a link code
+              </button>
+            )}
           </span>
         </div>
+        {confirmUnlink ? <span className="tiny t2" style={{ marginTop: 6 }}>Unlinking stops every Telegram message and forgets this chat. Alerts keep going to the app if it is on.</span> : null}
         {code ? (
           <div className="code" style={{ margin: '10px 0' }}>
             Send <b>/link {code}</b> to the Bulwark bot <span className="t3">· valid 15 minutes</span>
@@ -124,8 +169,36 @@ function AlertsPanel() {
         ) : null}
         {err ? <span className="small ct">{err}</span> : null}
         <span className="tiny t3" style={{ marginTop: 10 }}>
-          Alerts fire on your alert rules and on every guard action.
+          Alerts fire on your alert rules, when the guard acts, and when it holds off on stale data. Telegram gets every one while linked; the switch only decides what the app shows.
         </span>
+        <div style={{ marginTop: 14 }}>
+          <b className="small">Recent alerts</b>
+          {review.on ? <span className="tag" style={{ marginLeft: 8 }}>example</span> : null}
+          {!shown ? (
+            <p className="small t2" style={{ margin: '6px 0 0' }}>Finish setup to see your alerts.</p>
+          ) : !inApp ? (
+            <p className="small t2" style={{ margin: '6px 0 0' }}>In-app alerts are off.</p>
+          ) : feed.isLoading ? (
+            <span className="sk" style={{ width: '70%', marginTop: 8 }} />
+          ) : feed.error ? (
+            <p className="small ct" style={{ margin: '6px 0 0' }}>Can’t load alerts: {(feed.error as Error).message}</p>
+          ) : feed.data?.length ? (
+            <ul className="alist-feed">
+              {feed.data.map((e) => (
+                <li key={e.seq}>
+                  <span className="row nw" style={{ gap: 8 }}>
+                    <span className={`chip chip-sm ${e.kind === 'degraded' ? 'chip-risk' : 'chip-acting'}`}>{e.kind === 'degraded' ? 'Held off' : 'Alert'}</span>
+                    <span className="tiny t3 num">{times.fmt(e.at, 'short')}</span>
+                  </span>
+                  <span className="small">{e.what}</span>
+                  {e.why ? <span className="tiny t2">{e.why}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="small t2" style={{ margin: '6px 0 0' }}>No alerts yet.</p>
+          )}
+        </div>
       </div>
     </section>
   );

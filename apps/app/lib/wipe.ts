@@ -28,6 +28,8 @@ export interface WipeDeps {
   send: () => Promise<{ id: number | null; command: string }>;
   me: () => Promise<{ keyStatus: string } | null>;
   audit: () => Promise<AuditEntry[]>;
+  /** The command's own result (GET /v1/commands/:id), when the API has it. */
+  result?: (id: number) => Promise<{ doneAt: number | null; result: Record<string, unknown> | null } | null>;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -73,8 +75,20 @@ export async function wipeGuardKey(deps: WipeDeps, onStep: (s: WipeStep) => void
   const until = deps.now() + timeoutMs;
   while (deps.now() < until) {
     await deps.sleep(everyMs);
-    const [me, entries] = await Promise.all([deps.me().catch(() => null), deps.audit().catch(() => [] as AuditEntry[])]);
+    const [me, entries, rec] = await Promise.all([
+      deps.me().catch(() => null),
+      deps.audit().catch(() => [] as AuditEntry[]),
+      res.id !== null && deps.result ? deps.result(res.id).catch(() => null) : Promise.resolve(null),
+    ]);
     const seen = wipeEntries(entries, since);
+    // The command's own result, once the worker has carried it out, is the first source; the audit entries
+    // (same facts, same words) remain the fallback and carry the later AWS step.
+    if (rec?.doneAt && rec.result) {
+      const c = (rec.result.cancelled ?? {}) as { cancelled?: number; error?: string | null };
+      const keys = Number(rec.result.wiped ?? 0);
+      seen.cancelled ??= c.error ? `Cancelled ${c.cancelled ?? 0} guard order(s): ${c.error}` : c.cancelled ? `Cancelled ${c.cancelled} guard order(s)` : null;
+      seen.wiped ??= keys ? `Guard key wiped (${keys} key${keys > 1 ? 's' : ''})` : 'No stored guard key to wipe';
+    }
     if (seen.cancelled && !out.cancelled) onStep({ step: 'cancelled', text: seen.cancelled });
     if (seen.wiped && !out.wiped) onStep({ step: 'wiped', text: seen.wiped });
     if (seen.retired && !out.retired) onStep({ step: 'retired', text: seen.retired });

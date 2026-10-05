@@ -8,6 +8,7 @@ import { fmtUsd } from '@/components/app/format';
 import { Icon } from '@/components/app/icons';
 import { BuilderCard, GuardKeyCard, KEY_STORAGE, TradingKeyCard, shownCustody } from '@/components/app/keys';
 import { ActiveRules, HowGuardTrades, RuleBuilder, usePolicyDraft } from '@/components/app/rules-editor';
+import { Translator } from '@/components/app/translator';
 import { shortAddr } from '@/components/app/format';
 import { api, ApiError, useSignedIn } from '@/lib/api';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
@@ -110,6 +111,8 @@ export default function OnboardingPage() {
     me.data?.policy ? `Version ${me.data.policy.version} signed` : null,
   ];
   const draft = usePolicyDraft();
+  const translatorOn = me.data?.translator?.enabled !== false;
+  const [byHand, setByHand] = useState(false);
   const held = (view.data?.risk.pools ?? []).flatMap((p) => p.positions.map((r) => r.position.coin));
   const firstOpen = done.findIndex((d) => !d);
   const current = step ?? (firstOpen === -1 ? STEPS.length - 1 : firstOpen);
@@ -254,9 +257,17 @@ export default function OnboardingPage() {
           </span>
         ) : (
           <>
-            <span className="small t2">
-              What should the guard do, and when? Build your first rule with your own numbers, set how far from the mark the guard may trade, then sign. The AI translator, for rules in your own words, opens once this first version is signed.
-            </span>
+            {/* The board's order: your own sentence first, building by hand one click away. */}
+            {translatorOn ? <Translator forced={review.state === 'error' ? 'error' : null} s={draft} bare /> : null}
+            {translatorOn && !byHand ? (
+              <button type="button" className="linkbtn small" style={{ alignSelf: 'flex-start' }} onClick={() => setByHand(true)}>
+                Or build a rule by hand
+              </button>
+            ) : null}
+          </>
+        )}
+        {!me.data?.policy && (byHand || !translatorOn) ? (
+          <>
             <RuleBuilder s={draft} held={held} disabled={!connected} bare />
             <HowGuardTrades s={draft} bare />
             <ActiveRules s={draft} status={() => ({ text: 'Not active until you sign', cls: 'wt' })} loading={false} bare title="Your first rules" />
@@ -266,7 +277,7 @@ export default function OnboardingPage() {
               </button>
             ) : null}
           </>
-        )}
+        ) : null}
       </div>
     );
   }
