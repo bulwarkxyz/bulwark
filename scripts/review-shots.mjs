@@ -2,9 +2,9 @@
 // Design-review screenshots against a review-mode build (NEXT_PUBLIC_REVIEW_MODE=1): every screen at
 // desktop 1440 and phone 390, dark and light, in each state.
 // Usage: node scripts/review-shots.mjs <baseUrl> <outDir> --routes /app/trade/CL,/app/positions
-//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full] [--tab 'Guard actions'] [--no-example-rules]
+//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full] [--tab 'Guard actions'] [--no-example-rules] [--missing]
 // "live" uses ?watch=&rules=example (a public account read-only with example rules, labelled on screen).
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 
@@ -25,6 +25,7 @@ const states = (flag('--states') ?? 'live').split(',');
 const full = has('--full');
 const tab = flag('--tab'); // open this tab (by its label) before the shot
 const noExample = has('--no-example-rules'); // the watched account with no rules (first-rules screens)
+const onlyMissing = has('--missing'); // skip shots already on disk
 const base = args[0] ?? 'http://localhost:3227';
 const out = args[1] ?? 'review-shots';
 const sizes = [
@@ -38,16 +39,22 @@ for (const theme of ['dark', 'light']) {
   for (const size of sizes) {
     const ctx = await browser.newContext({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: 2, isMobile: size.mobile, hasTouch: size.mobile, colorScheme: theme });
     await ctx.addInitScript((t) => localStorage.setItem('theme', t), theme);
-    const page = await ctx.newPage();
     const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
-    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     for (const route of routes) {
       for (const state of states) {
+        // A fresh tab per shot: one long-lived dev-mode tab runs out of memory after a few dozen pages.
+        const page = await ctx.newPage();
+        page.on('pageerror', (e) => errors.push(e.message));
+        page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
         const q = new URLSearchParams();
         if (watch && state !== 'empty') q.set('watch', watch);
         if (watch && state !== 'empty' && !noExample) q.set('rules', 'example');
         if (state !== 'live') q.set('state', state);
+        const would = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replaceAll('=', '').replaceAll('&', '_').replaceAll(':', '-')}${tab ? `-tab-${tab.toLowerCase().replaceAll(' ', '-')}` : ''}-${state}-${size.name}-${theme}.png`;
+        if (onlyMissing && existsSync(join(out, would))) {
+          await page.close();
+          continue;
+        }
         try {
           // Not networkidle: the order book and trades stream over a WebSocket that never goes idle.
           await page.goto(`${base}${route}${route.includes('?') ? '&' : '?'}${q}`, { waitUntil: 'load', timeout: 90_000 });
@@ -58,6 +65,7 @@ for (const theme of ['dark', 'light']) {
           }
         } catch (e) {
           console.log(`FAILED ${route} ${state} ${size.name} ${theme}: ${e.message.split('\n')[0]}`);
+          await page.close().catch(() => {});
           continue;
         }
         const name = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replaceAll('=', '').replaceAll('&', '_').replaceAll(':', '-')}${tab ? `-tab-${tab.toLowerCase().replaceAll(' ', '-')}` : ''}-${state}-${size.name}-${theme}.png`;
@@ -68,10 +76,12 @@ for (const theme of ['dark', 'light']) {
         } catch (e) {
           console.log(`FAILED ${name}: ${e.message.split('\n')[0]}`);
           errors.length = 0;
+          await page.close().catch(() => {});
           continue;
         }
         console.log(name, errors.length ? `errors: ${[...new Set(errors)].join(' | ').slice(0, 300)}` : '');
         errors.length = 0;
+        await page.close().catch(() => {});
       }
     }
     await ctx.close();

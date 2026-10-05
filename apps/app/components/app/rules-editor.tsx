@@ -368,7 +368,7 @@ export function ActiveRules({ s, status, loading, bare, title = 'Active rules' }
           <div className="ico">{Icon.shield(18)}</div>
           <b>No rules yet, so the guard is not armed.</b>
           <span className="small" style={{ maxWidth: 460 }}>
-            Write your first rule above, or build one by hand. There are no default lines: every number comes from you.
+            {bare ? 'Add your first rule above. It shows here until you sign.' : 'Write your first rule above, or build one by hand.'} There are no default lines: every number comes from you.
           </span>
         </div>
       )}

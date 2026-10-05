@@ -45,7 +45,7 @@ html.light .bw{
 .bw .num{font-family:var(--font-geist-mono),ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .bw .t2{color:var(--text-2)} .bw .t3{color:var(--text-3)}
 .bw .up,.bw .long{color:var(--long)} .bw .down,.bw .short{color:var(--short)}
-.bw .gt{color:var(--guard-text)} .bw .wt{color:var(--warn)} .bw .ct{color:var(--crit)} .bw .nt{color:var(--net)}
+.bw .wt{color:var(--warn)} .bw .ct{color:var(--crit)} .bw .nt{color:var(--net)}
 .bw .b{font-weight:600} .bw .r{text-align:right}
 .bw .row{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
 .bw .row.nw{flex-wrap:nowrap}
@@ -301,3 +301,6 @@ html.light .bw{
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:760px){.unwind-row{flex-direction:column;align-items:stretch !important}.unwind-row .btn{width:100%}}
 @media (max-width:1599px){.wide-only{display:none !important}}
+/* Phones: the page title lives in the top bar, so the in-page heading is not repeated */
+.ptl{font-size:17px;font-weight:620;letter-spacing:-.01em}
+@media (max-width:760px){.ptitle .h1{display:none}}

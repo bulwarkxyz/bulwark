@@ -41,15 +41,28 @@ export function NetBand() {
   );
 }
 
+function phoneTitle(path: string): string {
+  if (path.startsWith('/app/trade')) return 'Trade';
+  if (path.startsWith('/app/positions')) return 'Positions';
+  if (path.startsWith('/app/rules')) return 'Guard rules';
+  if (path.startsWith('/app/simulator')) return 'Simulator';
+  if (path.startsWith('/app/audit')) return 'Audit log';
+  if (path.startsWith('/app/account')) return 'Account';
+  if (path.startsWith('/app/settings')) return 'More';
+  return 'Markets';
+}
+
 function TopNav({ focused }: { focused: boolean }) {
   const path = usePathname();
   return (
     <header className="topnav">
       {/* The site root is the landing page (a separate zone). */}
-      <a className="brand" href="/">
+      <a className={`brand ${focused ? '' : 'hide-sm'}`} href="/">
         <BrandMark />
         Bulwark
       </a>
+      {/* Phones: a compact title bar, the page's name where the brand would be. */}
+      {focused ? null : <b className="mobile-only ptl">{phoneTitle(path)}</b>}
       {focused ? (
         <span className="small t2 hide-sm">Set up</span>
       ) : (
