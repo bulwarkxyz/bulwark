@@ -19,7 +19,7 @@ html.dark .bw{
   --warn:#FFC24A; --on-warn:#1C0B00; --warn-soft:rgba(255,194,74,.12); --warn-zone:rgba(255,194,74,.22);
   --crit:#FF5A5F; --on-crit:#1A0204; --crit-soft:rgba(255,90,95,.12); --crit-zone:rgba(255,90,95,.26);
   --net:#B9A4FF; --on-net:#120A2E; --net-soft:rgba(185,164,255,.14);
-  --focus:#8CC8FF; --sk:#1C2530; --scrim:rgba(4,6,8,.72);
+  --focus:#A9B4C0; --field-focus:#8692A0; --selection:rgba(169,180,192,.30); --sk:#1C2530; --scrim:rgba(4,6,8,.72);
   color-scheme:dark;
 }
 html.light .bw{
@@ -33,7 +33,7 @@ html.light .bw{
   --warn:#8A5A00; --on-warn:#FFFFFF; --warn-soft:rgba(255,194,74,.16); --warn-zone:rgba(201,138,0,.24);
   --crit:#B3242A; --on-crit:#FFFFFF; --crit-soft:rgba(179,36,42,.10); --crit-zone:rgba(179,36,42,.22);
   --net:#5B3FD0; --on-net:#FFFFFF; --net-soft:rgba(91,63,208,.10);
-  --focus:#1E64C8; --sk:#E9ECE5; --scrim:rgba(13,17,22,.45);
+  --focus:#434D58; --field-focus:#56616C; --selection:rgba(67,77,88,.20); --sk:#E9ECE5; --scrim:rgba(13,17,22,.45);
   color-scheme:light;
 }
 
@@ -41,7 +41,17 @@ html.light .bw{
 .bw *,.bw *::before,.bw *::after{box-sizing:border-box}
 .bw a{color:inherit;text-decoration:none}
 .bw button,.bw input,.bw select,.bw textarea{font:inherit;color:inherit}
+/* Focus. No browser default ring and no blue anywhere. A mouse or touch press shows nothing; keyboard
+   focus (:focus-visible) shows a 2px ring in the neutral --focus token (3:1, in the contrast check).
+   Text fields never get a ring: their own 1px border steps up to --field-focus while focused. */
+.bw :focus{outline:none}
 .bw :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.bw input:focus-visible,.bw textarea:focus-visible{outline:none}
+.bw ::selection{background:var(--selection);color:inherit}
+/* Stacking scale: sticky bars < phone sheets < menus and lists < tooltips. Everything floating lives in
+   the top layer (components/app/layer.tsx), outside every panel. */
+.bw{--z-sticky:5;--z-sheet:30;--z-popover:40;--z-tooltip:50}
+.bw.layer{background:none;min-height:0;position:static}
 .bw .num{font-family:var(--font-geist-mono),ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .bw .t2{color:var(--text-2)} .bw .t3{color:var(--text-3)}
 .bw .up,.bw .long{color:var(--long)} .bw .down,.bw .short{color:var(--short)}
@@ -129,6 +139,8 @@ html.light .bw{
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .field label,.field .lbl{font-size:12px;color:var(--text-2);font-weight:550}
 .input{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border-radius:8px;border:1px solid var(--field);background:var(--s2);min-width:0}
+.input:focus-within{border-color:var(--field-focus)}
+.area:focus{border-color:var(--field-focus)}
 .input input,.input select{flex:1;min-width:0;background:transparent;border:0;outline:none;font-family:var(--font-geist-mono),monospace;font-size:13px;color:var(--text)}
 .input input::placeholder{color:var(--text-3);font-family:var(--font-geist),sans-serif}
 .input select{font-family:var(--font-geist),sans-serif;cursor:pointer}
@@ -194,9 +206,6 @@ html.light .bw{
 .tbook{grid-column:2;grid-row:2;display:flex;flex-direction:column}
 .tticket{grid-column:3;grid-row:1/4;display:flex;flex-direction:column;overflow:auto}
 .tbottom{grid-column:1/3;grid-row:3;display:flex;flex-direction:column}
-.mkmenu{position:absolute;z-index:20;margin-top:6px;width:340px;max-height:420px;overflow:auto;background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:6px}
-.mkmenu a{display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px}
-.mkmenu a:hover,.mkmenu a.on{background:var(--s2)}
 
 .ob{font-family:var(--font-geist-mono),monospace;font-variant-numeric:tabular-nums;font-size:12px;flex:1}
 .ob .hd{display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 10px;color:var(--text-3);font-family:var(--font-geist),sans-serif;font-size:11px}
@@ -313,3 +322,65 @@ html.light .bw{
 @media (max-width:760px){
   .obody .btn-ink{position:sticky;bottom:12px;z-index:5;width:100%;min-height:46px;box-shadow:0 0 0 6px var(--bg)}
 }
+
+/* ---------- The app's select (components/app/select.tsx), menus and tooltips in the top layer ---------- */
+.xsel{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:40px;padding:0 10px;border-radius:8px;border:1px solid var(--field);background:var(--s2);color:var(--text);text-align:left;cursor:pointer;font-size:13px}
+.xsel .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xsel svg{flex:none;color:var(--text-2)}
+.xsel[aria-expanded="true"]{border-color:var(--field-focus)}
+.xsel-compact{width:auto;min-height:28px;padding:0 8px;border-color:var(--line);background:transparent;font-family:var(--font-geist-mono),monospace;font-size:12px;color:var(--text-2)}
+.sel-list{position:fixed;z-index:var(--z-popover);margin:0;padding:4px;list-style:none;overflow:auto;background:var(--surface);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 12px 32px -12px rgba(0,0,0,.45)}
+.sel-list:focus,.sel-list:focus-visible{outline:none}
+.sel-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text)}
+.sel-list li .lab{font-size:13px}
+.sel-list li .desc{font-size:11.5px;color:var(--text-2);line-height:1.35}
+.sel-list li.act{background:var(--s2)}
+.sel-list.kb li.act{box-shadow:inset 0 0 0 2px var(--focus)}
+.sel-list li.chosen .lab{font-weight:620}
+.sel-list li .mark{flex:none;width:16px;color:var(--ink)}
+.sel-list li.dis{opacity:.45;cursor:default}
+.sel-scrim{position:fixed;inset:0;z-index:var(--z-sheet);background:var(--scrim)}
+.sel-sheet{position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-popover) + 1);display:flex;flex-direction:column;max-height:72vh;padding:8px 10px calc(14px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--line-2);border-radius:14px 14px 0 0}
+.sel-sheet .sel-list{position:static;max-height:none;overflow:auto;border:0;box-shadow:none;padding:0}
+.sel-sheet .sel-list li{min-height:48px}
+.sel-sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:0 auto 10px}
+.sel-scrim{z-index:var(--z-popover)}
+.pop{position:fixed;z-index:var(--z-popover);background:var(--surface);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 12px 32px -12px rgba(0,0,0,.45);overflow:auto;padding:6px}
+.tip{position:fixed;z-index:var(--z-tooltip);max-width:260px;padding:6px 8px;border-radius:6px;background:var(--ink);color:var(--on-ink);font-size:12px;line-height:1.35;pointer-events:none}
+
+/* ---------- Browser defaults, restyled in the design's tokens ---------- */
+/* Checkboxes and radios: drawn by us, not the OS (no blue fill). */
+.bw input[type="checkbox"],.bw input[type="radio"]{appearance:none;-webkit-appearance:none;flex:none;width:16px;height:16px;margin:0;border:1px solid var(--field);background:var(--s2);display:inline-grid;place-content:center;cursor:pointer}
+.bw input[type="checkbox"]{border-radius:4px}
+.bw input[type="radio"]{border-radius:50%}
+.bw input[type="checkbox"]:checked{background:var(--ink);border-color:var(--ink)}
+.bw input[type="checkbox"]:checked::before{content:"";width:9px;height:5px;border-left:2px solid var(--on-ink);border-bottom:2px solid var(--on-ink);transform:translateY(-1px) rotate(-45deg)}
+.bw input[type="radio"]:checked{border-color:var(--ink)}
+.bw input[type="radio"]:checked::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.bw input[type="checkbox"]:disabled,.bw input[type="radio"]:disabled{opacity:.5;cursor:default}
+.bw input[type="checkbox"]:focus-visible,.bw input[type="radio"]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* Search fields: no OS clear button or rounded inset. */
+.bw input[type="search"]{-webkit-appearance:none;appearance:none}
+.bw input[type="search"]::-webkit-search-decoration,.bw input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+/* Number fields (none today): no spinners if one is ever added. */
+.bw input[type="number"]{-moz-appearance:textfield;appearance:textfield}
+.bw input::-webkit-outer-spin-button,.bw input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+/* Autofill: keep the field's own colours instead of the browser's yellow or blue. */
+.bw input:-webkit-autofill,.bw input:-webkit-autofill:hover,.bw input:-webkit-autofill:focus{-webkit-text-fill-color:var(--text);-webkit-box-shadow:0 0 0 1000px var(--s2) inset;caret-color:var(--text)}
+/* Scrollbars: thin, in the line tokens. */
+.bw,.bw *{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.bw ::-webkit-scrollbar{width:10px;height:10px}
+.bw ::-webkit-scrollbar-track{background:transparent}
+.bw ::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+.bw ::-webkit-scrollbar-corner{background:transparent}
+.bw ::placeholder{color:var(--text-3);opacity:1}
+/* Market selector list (top layer) */
+.mk-list{padding:6px}
+.mk-opt{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 8px;border-radius:6px;cursor:pointer}
+.mk-opt.act{background:var(--s2)}
+.sel-list.kb .mk-opt.act{box-shadow:inset 0 0 0 2px var(--focus)}
+.mk-opt .lab{font-weight:600}
+.mk-opt.chosen .lab{font-weight:700}
+.mk-opt .desc{font-size:11.5px;color:var(--text-2)}
+.mk-opt .mark{flex:none;width:16px;color:var(--ink)}
+.mk-all{display:block;padding:8px;border-top:1px solid var(--line);margin-top:4px}

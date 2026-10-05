@@ -210,15 +210,16 @@ export default function AuditPage() {
                         const a = attemptOf(e);
                         if (!a) return <span className="t3">—</span>;
                         return (
-                          <span title={a.limitPx ? `Limit ${fmtPx(a.limitPx)}` : undefined} className={a.n > 1 ? 'wt' : undefined}>
+                          <span className={a.n > 1 ? 'wt' : undefined}>
                             {a.n}
                             {a.filled !== null ? <span className="t3"> · filled {a.filled}</span> : null}
+                            {a.limitPx ? <span className="t3"> · limit {fmtPx(a.limitPx)}</span> : null}
                           </span>
                         );
                       })()}</td>
                       <td className="t2">{BY[e.kind] ?? 'system'}</td>
                       <td>
-                        <button type="button" className="linkbtn num tiny t3" aria-expanded={open === e.seq} title="Show the hash, the one before it, and the exchange evidence" onClick={() => setOpen(open === e.seq ? null : e.seq)}>
+                        <button type="button" className="linkbtn num tiny t3" aria-expanded={open === e.seq} aria-label={`Entry ${e.seq}: show the hash, the one before it, and the exchange evidence`} onClick={() => setOpen(open === e.seq ? null : e.seq)}>
                           {shortHash(e.hash)}
                         </button>
                       </td>

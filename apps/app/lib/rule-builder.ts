@@ -85,20 +85,20 @@ export function repeatChip(r: Pick<Rule, 'repeat'>): string | null {
   return r.repeat.limit ? `${base} · ≤ ${r.repeat.limit.times} in ${r.repeat.limit.perHours} h` : base;
 }
 
-export const WHEN_OPTIONS: Array<{ kind: WhenKind; label: string }> = [
-  { kind: 'buffer', label: 'Buffer falls below' },
-  { kind: 'drawdown', label: 'Account value falls by' },
-  { kind: 'priceMove', label: 'A market’s price moves' },
-  { kind: 'leverageAbove', label: 'Leverage on a market goes above' },
+export const WHEN_OPTIONS: Array<{ kind: WhenKind; label: string; description: string }> = [
+  { kind: 'buffer', label: 'Buffer falls below', description: 'A margin pool’s equity ÷ maintenance; Hyperliquid liquidates at 1×' },
+  { kind: 'drawdown', label: 'Account value falls by', description: 'A percentage fall since you signed, or since a window opened' },
+  { kind: 'priceMove', label: 'A market’s price moves', description: 'Up or down by a percentage, on one market' },
+  { kind: 'leverageAbove', label: 'Leverage on a market goes above', description: 'The position’s leverage, as Hyperliquid computes it' },
 ];
-export const THEN_OPTIONS: Array<{ kind: ThenKind; label: string }> = [
-  { kind: 'reduce', label: 'Reduce a position by a share' },
-  { kind: 'close', label: 'Close a position' },
-  { kind: 'reduceToBuffer', label: 'Trim until the buffer is back at' },
-  { kind: 'reduceToLeverage', label: 'Cut leverage on a market to' },
-  { kind: 'topUp', label: 'Top up from idle USDC' },
-  { kind: 'cancelOpeningOrders', label: 'Cancel orders that would add to a position' },
-  { kind: 'alert', label: 'Alert me' },
+export const THEN_OPTIONS: Array<{ kind: ThenKind; label: string; description: string }> = [
+  { kind: 'reduce', label: 'Reduce a position by a share', description: 'Reduce-only, within your slippage' },
+  { kind: 'close', label: 'Close a position', description: 'Reduce-only, the whole position' },
+  { kind: 'reduceToBuffer', label: 'Trim until the buffer is back at', description: 'Sells only as much as it takes to reach your number' },
+  { kind: 'reduceToLeverage', label: 'Cut leverage on a market to', description: 'Reduce-only, down to your leverage' },
+  { kind: 'topUp', label: 'Top up from idle USDC', description: 'Moves your own idle USDC into the pool, up to your amount' },
+  { kind: 'cancelOpeningOrders', label: 'Cancel orders that would add to a position', description: 'Only orders that open or grow a position' },
+  { kind: 'alert', label: 'Alert me', description: 'In the app, and on Telegram if you linked it; no order' },
 ];
 export const TARGET_OPTIONS: Array<{ kind: TargetKind; label: string }> = [
   { kind: 'first_position', label: 'Using the most margin' },

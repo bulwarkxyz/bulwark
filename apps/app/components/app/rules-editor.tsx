@@ -34,6 +34,7 @@ import {
 import { saveDraft } from '@/lib/draft-store';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
 import { Icon } from './icons';
+import { Select } from './select';
 
 /**
  * The user's rules as they edit them: the signed version plus local changes (rules added by hand,
@@ -148,19 +149,11 @@ function Num({ id, label, unit, value, onChange }: { id: string; label: string; 
     </div>
   );
 }
-function Pick<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void }) {
+function Pick<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: Array<{ value: T; label: string; description?: string }>; onChange: (v: T) => void }) {
   return (
     <div className="field" style={{ flex: 1, minWidth: 0 }}>
       <label htmlFor={id}>{label}</label>
-      <div className="input">
-        <select id={id} value={value} onChange={(e) => onChange(e.target.value as T)}>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <Select id={id} label={label} value={value} options={options} onChange={onChange} />
     </div>
   );
 }
@@ -222,7 +215,7 @@ export function RuleBuilder({ s, held = [], disabled, bare }: { s: PolicyDraftSt
       }
     >
       <div className={bare ? 'col' : 'pb col'} style={{ gap: 10 }}>
-        <Pick id="rb-when" label="When" value={f.when} options={WHEN_OPTIONS.map((o) => ({ value: o.kind, label: o.label }))} onChange={(when) => set({ when })} />
+        <Pick id="rb-when" label="When" value={f.when} options={WHEN_OPTIONS.map((o) => ({ value: o.kind, label: o.label, description: o.description }))} onChange={(when) => set({ when })} />
         {f.when === 'buffer' ? (
           <>
             <Num id="rb-line" label="Line" unit="×" value={f.line} onChange={(line) => set({ line })} />
@@ -248,7 +241,7 @@ export function RuleBuilder({ s, held = [], disabled, bare }: { s: PolicyDraftSt
         {f.when === 'drawdown' || f.when === 'priceMove' ? (
           <span className="tiny t3">{f.window ? 'Measured from the start of each window.' : 'Measured from the moment you sign.'}</span>
         ) : null}
-        <Pick id="rb-then" label="Then" value={f.then} options={THEN_OPTIONS.map((o) => ({ value: o.kind, label: o.label }))} onChange={(then) => set({ then })} />
+        <Pick id="rb-then" label="Then" value={f.then} options={THEN_OPTIONS.map((o) => ({ value: o.kind, label: o.label, description: o.description }))} onChange={(then) => set({ then })} />
         {needsTarget(f.then) ? (
           <div className="row nw">
             <Pick id="rb-which" label="Which position" value={f.target} options={TARGET_OPTIONS.map((o) => ({ value: o.kind, label: o.label }))} onChange={(target) => set({ target })} />
@@ -266,7 +259,7 @@ export function RuleBuilder({ s, held = [], disabled, bare }: { s: PolicyDraftSt
         {f.then === 'topUp' ? <Num id="rb-usdc" label="Amount" unit="USDC" value={f.usdc} onChange={(usdc) => set({ usdc })} /> : null}
         <RepeatChoice f={f} set={set} />
         {built.ok ? <span className="small t2">{describeRule(built.rule)}</span> : tried ? <span className="small ct">{built.problem}</span> : null}
-        <button type="button" className="btn btn-block" disabled={disabled || !f.repeat} title={f.repeat ? undefined : REPEAT_UNSET} onClick={add}>
+        <button type="button" className="btn btn-block" disabled={disabled || !f.repeat} aria-describedby="rp-help" onClick={add}>
           {s.editing.id ? 'Update rule' : 'Add to rules'}
         </button>
         <span className="tiny t3">Nothing runs until you sign the new version{bare ? ' below' : ' under Active rules'}.</span>

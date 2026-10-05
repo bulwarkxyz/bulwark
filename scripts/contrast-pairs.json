@@ -168,12 +168,6 @@
   "use": "input border (graphic)"
  },
  {
-  "fg": "focus",
-  "bg": "surface",
-  "min": 3.0,
-  "use": "focus ring (graphic)"
- },
- {
   "fg": "guard-edge",
   "bg": "surface",
   "min": 3.0,
@@ -214,5 +208,29 @@
   "bg": "warn-soft@s2",
   "min": 4.5,
   "use": "acting banner body text"
+ },
+ {
+  "fg": "focus",
+  "bg": "surface",
+  "min": 3.0,
+  "use": "keyboard focus ring on panels (graphic)"
+ },
+ {
+  "fg": "focus",
+  "bg": "bg",
+  "min": 3.0,
+  "use": "keyboard focus ring on the page (graphic)"
+ },
+ {
+  "fg": "focus",
+  "bg": "s2",
+  "min": 3.0,
+  "use": "keyboard focus ring on fields and segmented controls (graphic)"
+ },
+ {
+  "fg": "field-focus",
+  "bg": "s2",
+  "min": 3.0,
+  "use": "focused text field border (graphic)"
  }
 ]

@@ -5,6 +5,7 @@ import { NETWORK } from '@/lib/env';
 import { useBook, useTrades, type BookLevel } from '@/lib/hl';
 import { fmtPx } from './format';
 import { useTimes } from '@/lib/time';
+import { Select } from './select';
 import { groupLevels, tickOptions } from '@/lib/book-group';
 
 const fmtSz = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
@@ -64,16 +65,9 @@ export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale, only }
         )}
         <span className="sp" />
         {tab === 'book' && ticks.length ? (
-          <label className="tick" title="Group prices">
-            <span className="sr">Group prices by</span>
-            <select value={group} onChange={(e) => setGroup(Number(e.target.value))}>
-              {ticks.map((t, i) => (
-                <option key={t} value={i}>
-                  {i === 0 ? 'As sent' : t}
-                </option>
-              ))}
-            </select>
-          </label>
+          <span className="tick">
+            <Select compact label="Group prices by" value={String(group)} options={ticks.map((t, i) => ({ value: String(i), label: i === 0 ? 'As sent' : String(t), description: i === 0 ? 'Each price level as Hyperliquid sends it' : `Levels grouped to ${t}` }))} onChange={(v) => setGroup(Number(v))} />
+          </span>
         ) : null}
       </div>
       {loading ? (

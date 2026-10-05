@@ -8,8 +8,9 @@ import { Icon } from '@/components/app/icons';
 import { poolState } from '@/components/app/positions-table';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { useGuardView, useNow } from '@/lib/guard';
-import { realisedFeeBps, useAccountView, useFills, useXyzMarkets, type MarketCtx } from '@/lib/hl';
-import { MARKETS, homeOpen, sessionLabel, type Category, type Market, MARKETS_SOURCE } from '@/lib/markets';
+import { realisedFeeBps, useAccountView, useFills, useMarketActivity, useXyzMarkets, type MarketCtx } from '@/lib/hl';
+import { readLastMarket } from '@/lib/last-market';
+import { MARKETS, homeOpen, sessionLabel, type Category, type Market, MARKETS_SOURCE, defaultMarket, hasData } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 
@@ -112,6 +113,13 @@ export default function MarketsPage() {
     if (review.state === 'empty') setQ('copper');
   }, [review.state]);
   const [sel, setSel] = useState(MARKETS[0]!.coin);
+  const activity = useMarketActivity();
+  const [picked, setPicked] = useState(false);
+  // Until the visitor picks one, the detail shows the market the trade screen would open (one with data).
+  useEffect(() => {
+    if (!picked && activity.data) setSel(defaultMarket(activity.data, NETWORK, Date.now(), readLastMarket()).coin);
+  }, [activity.data, picked]);
+  const quiet = (coin: string, c: MarketCtx | undefined) => Boolean(activity.data && c && !c.delisted && !hasData(activity.data[coin], Date.now()));
   const loading = review.state === 'loading' || (!markets.data && !markets.isError);
   const stale = review.state === 'error' || markets.isError;
   const rows = useMemo(() => MARKETS.filter((m) => (cat === 'All' || m.category === cat) && `${m.ticker} ${m.name} ${(m.aliases ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase())), [cat, q]);
@@ -213,13 +221,13 @@ export default function MarketsPage() {
                       const c = markets.data?.get(m.coin);
                       const open = homeOpen(m.session, now);
                       return (
-                        <tr key={m.coin} className={sel === m.coin ? 'sel' : ''} onClick={() => setSel(m.coin)} style={{ cursor: 'pointer' }}>
+                        <tr key={m.coin} className={sel === m.coin ? 'sel' : ''} onClick={() => (setSel(m.coin), setPicked(true))} style={{ cursor: 'pointer' }}>
                           <td>
                             <Link className="sym" href={`/app/trade/${m.ticker}`} onClick={(e) => e.stopPropagation()}>
                               <span className="glyph">{m.ticker.slice(0, 2)}</span>
                               <span className="col" style={{ gap: 0 }}>
                                 <b>{m.ticker}</b>
-                                <span className="tiny t3">{c?.delisted ? `${m.name} · delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : m.name}</span>
+                                <span className="tiny t3">{c?.delisted ? `${m.name} · delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : quiet(m.coin, c) ? `${m.name} · no recent trades on ${NETWORK}` : m.name}</span>
                               </span>
                             </Link>
                           </td>
@@ -249,7 +257,7 @@ export default function MarketsPage() {
                         <b>
                           {m.ticker} · <span className="t2" style={{ fontWeight: 400 }}>{m.name}</span>
                         </b>
-                        <span className="tiny t3">{c?.delisted ? `Delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : sessionLabel(m.session, now, utc)}</span>
+                        <span className="tiny t3">{c?.delisted ? `Delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : quiet(m.coin, c) ? `No recent trades on ${NETWORK}` : sessionLabel(m.session, now, utc)}</span>
                       </span>
                       {youCell(m.coin)}
                       <span className="col" style={{ gap: 1, alignItems: 'flex-end' }}>

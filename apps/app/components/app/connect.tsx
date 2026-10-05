@@ -46,7 +46,7 @@ export function ConnectButton() {
 
   if (review.on && review.watch && viewer.connected) {
     return (
-      <Link className="wallet" href="/app/account" title="Review build: a public account shown read-only">
+      <Link className="wallet" href="/app/account" aria-label="Account (review build: a public account shown read-only)">
         <span className="num small">{shortAddr(review.watch)}</span>
         <span className="tag">Watching</span>
       </Link>
@@ -74,7 +74,7 @@ export function ConnectButton() {
           Sign in
         </button>
       ) : null}
-      <Link className="wallet" href="/app/account" title="Account">
+      <Link className="wallet" href="/app/account" aria-label="Account">
         <span className="num small">{shortAddr(address as string)}</span>
       </Link>
       {err ? <span className="err hide-sm" style={{ fontSize: 12 }}>{err}</span> : null}

@@ -5,6 +5,7 @@ import { InfoClient, type Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { NETWORK } from './env';
+import { MARKETS, type MarketActivity } from './markets';
 import { stream } from './ws';
 
 export const info = new InfoClient(NETWORK);
@@ -246,4 +247,34 @@ export function realisedFeeBps(fills: readonly Fill[] | undefined, coin: string)
   if (!notional) return null;
   const fees = rows.reduce((s, f) => s + Number(f.fee), 0);
   return (fees / notional) * 1e4;
+}
+
+/**
+ * Live activity for every curated market on this network: the time of its latest trade (recentTrades)
+ * and its 24h volume and listing (metaAndAssetCtxs). Drives the default market and the "no data here"
+ * marks in the market selector.
+ */
+export function useMarketActivity() {
+  const markets = useXyzMarkets();
+  const trades = useQuery({
+    queryKey: ['market-activity', NETWORK],
+    queryFn: async () => {
+      const rows = await Promise.all(
+        MARKETS.map(async (m) => {
+          const t = await info.request<Array<{ time: number }>>({ type: 'recentTrades', coin: m.coin }).catch(() => []);
+          return [m.coin, t.length ? Math.max(...t.map((x) => x.time)) : null] as const;
+        }),
+      );
+      return Object.fromEntries(rows) as Record<string, number | null>;
+    },
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+  if (!trades.data || !markets.data) return { data: null as Record<string, MarketActivity> | null, isLoading: trades.isLoading || markets.isLoading };
+  const data: Record<string, MarketActivity> = {};
+  for (const m of MARKETS) {
+    const c = markets.data.get(m.coin);
+    data[m.coin] = { lastTradeAt: trades.data[m.coin] ?? null, dayVolumeUsd: c?.dayVolumeUsd ?? 0, delisted: c ? c.delisted : true };
+  }
+  return { data, isLoading: false };
 }
