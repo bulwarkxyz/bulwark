@@ -133,6 +133,16 @@ export class GuardEngine {
     return this.schedule(account);
   }
 
+  /** Hyperliquid liquidated (part of) a position: log it and tell the user. */
+  async onLiquidation(account: string, fill: Record<string, unknown>): Promise<void> {
+    const user = await this.deps.store.user(account);
+    if (!user) return;
+    const at = this.deps.now();
+    const what = `Hyperliquid liquidated ${fill.sz ?? 'part of your'} ${fill.coin ?? ''} position${fill.px ? ` at ${fill.px}` : ''}`.replace(/\s+/g, ' ');
+    await this.audit({ account: account as Hex, at, kind: 'alert', why: 'Liquidation reported by the exchange', what, proof: { fill } });
+    if (user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, `Bulwark: ${what}.`).catch(() => undefined);
+  }
+
   /** Re-runs every known account, so the status stays current while nothing moves. */
   heartbeat(): Promise<void[]> {
     return Promise.all([...this.cache.keys()].map((k) => this.schedule(k)));

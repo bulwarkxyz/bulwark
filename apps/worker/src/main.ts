@@ -24,6 +24,8 @@ import { KeyService, SEALED_PREFIX } from './keys.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
 import { PgStore, migrate } from '@bulwarkxyz/store';
 import { HyperliquidStream, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
+import { BuilderStream, HYDRO_POLL_MS, HydromancerFeed, NATIVE_FALLBACK_EVERY_MS, NativeFallbackPoller, StateArbiter } from './statefeed.js';
+import { BUILDER_ADDRESS } from '@bulwarkxyz/config';
 import { TelegramBot } from './telegram-bot.js';
 
 const network = (process.env.NETWORK ?? 'testnet') as Network;
@@ -139,30 +141,86 @@ async function main() {
   });
   markStream.subscribeMarks();
   markStream.start();
+  // Account state: Hydromancer first, Hyperliquid's own feeds as the fallback (statefeed.ts).
+  const arbiter = new StateArbiter((u, states, at) => void engine.onUserState(u, states, at));
+  const HYDRO_KEY = process.env.HYDROMANCER_API_KEY ?? '';
+  delete process.env.HYDROMANCER_API_KEY;
+  const HYDRO_URL = process.env.HYDROMANCER_URL ?? (network === 'mainnet' ? 'https://api.hydromancer.xyz' : 'https://api-testnet.hydromancer.xyz');
+  const HYDRO_DEXES = ['', 'xyz'];
+  const hydro = HYDRO_KEY
+    ? new HydromancerFeed({
+        url: HYDRO_URL,
+        apiKey: HYDRO_KEY,
+        dexes: HYDRO_DEXES,
+        // Keep well inside the key's tier (Starter: 5,000 points a minute), leaving room for other calls.
+        pointsPerMinute: Number(process.env.HYDROMANCER_POINTS_PER_MIN ?? 4_000),
+        onState: (u, dex, state, at) => arbiter.hydromancer(u, dex, state, at),
+        log: (m) => console.log(JSON.stringify(m)),
+      })
+    : null;
+  const fallback = new NativeFallbackPoller(arbiter, (u, dex) => info.clearinghouseState(u as Hex, dex) as never, HYDRO_DEXES);
   const userStreams: HyperliquidStream[] = [];
   const tracked = new Set<string>();
+  const nativeWs = new Set<string>();
   const handlers = {
-    onUserState: (u: string, states: Parameters<GuardEngine['onUserState']>[1], at: number) => void engine.onUserState(u, states, at),
+    onUserState: (u: string, states: Parameters<GuardEngine['onUserState']>[1], at: number) => arbiter.native(u, states, at),
     onSpotState: (u: string, spot: Parameters<GuardEngine['onSpotState']>[1], at: number) => void engine.onSpotState(u, spot, at),
   };
   async function syncUsers() {
     for (const u of await store.users()) {
       const k = u.account.toLowerCase();
       if (tracked.has(k)) continue;
-      let s = userStreams.find((x) => x.userCount < MAX_USERS_PER_CONNECTION);
+      tracked.add(k);
+      // Hyperliquid allows 10 users per IP across user subscriptions; beyond that, Hydromancer and REST.
+      if (nativeWs.size >= MAX_USERS_PER_CONNECTION) continue;
+      let s = userStreams[0];
       if (!s) {
         s = new HyperliquidStream(WS_URL, handlers);
         s.start();
         userStreams.push(s);
       }
       s.subscribeUser(k);
-      tracked.add(k);
+      nativeWs.add(k);
     }
+    hydro?.setUsers(tracked);
     status.users = tracked.size;
     status.streams = userStreams.length + 1;
   }
   await syncUsers();
   setInterval(() => void syncUsers().catch((e) => console.error('syncUsers', e)), 30_000);
+  if (hydro) {
+    void hydro.poll();
+    setInterval(() => void hydro.poll(), HYDRO_POLL_MS);
+  }
+  setInterval(() => {
+    arbiter.republish(); // a Hydromancer state that went stale hands over to the native one by itself
+    void fallback.poll(tracked).catch((e) => console.error('fallback', e));
+  }, NATIVE_FALLBACK_EVERY_MS);
+  // builderApproved streams: refresh a user's state the moment they trade, are funded, move money or are liquidated.
+  const builderStream =
+    hydro && network === 'mainnet'
+      ? new BuilderStream(`${HYDRO_URL.replace(/^http/, 'ws')}/ws?token=${HYDRO_KEY}`, BUILDER_ADDRESS, {
+          onActivity: (users) => hydro.refresh(users),
+          onLiquidation: (u, fill) => void (tracked.has(u) ? engine.onLiquidation(u, fill) : undefined),
+        })
+      : null;
+  builderStream?.start();
+  // Token use, from Hydromancer's own count, so we know our limits.
+  const hydroUsage = { at: 0, tokensToday: {} as Record<string, number>, tokensPerUserPerDay: null as number | null };
+  async function readUsage() {
+    if (!hydro || hydro.disabled) return;
+    const res = await fetch(`${HYDRO_URL}/info`, { method: 'POST', headers: { authorization: `Bearer ${HYDRO_KEY}`, 'content-type': 'application/json', 'user-agent': 'bulwark-worker/1.0' }, body: JSON.stringify({ type: 'apiUsage' }) });
+    if (!res.ok) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = ((await res.json()) as Array<{ day: string; request_type: string; tokens_consumed: number }>).filter((r) => r.day === today);
+    hydroUsage.at = Date.now();
+    hydroUsage.tokensToday = Object.fromEntries(rows.map((r) => [r.request_type, r.tokens_consumed]));
+    const live = rows.filter((r) => !/HistoryByTime$/.test(r.request_type)).reduce((n, r) => n + r.tokens_consumed, 0);
+    const dayShare = (Date.now() - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
+    hydroUsage.tokensPerUserPerDay = tracked.size && dayShare > 0 ? +(live / tracked.size / dayShare).toFixed(2) : null;
+    console.log(JSON.stringify({ msg: 'hydromancer usage', ...hydroUsage, feed: hydro.stats, pointsLastMinute: hydro.budget.used() }));
+  }
+  setInterval(() => void readUsage().catch(() => undefined), 15 * 60_000);
   // Keeps every account's guard status current while prices and positions are still.
   setInterval(() => void engine.heartbeat().catch((e) => console.error('heartbeat', e)), STATUS_WRITE_EVERY_MS);
   setInterval(() => void loadAssets().then((m) => (meta = m)).catch((e) => console.error('loadAssets', e)), 10 * 60_000);
@@ -214,7 +272,7 @@ async function main() {
       const markAgeMs = status.lastMarkAt ? Date.now() - status.lastMarkAt : null;
       res.statusCode = markAgeMs !== null && markAgeMs < 15_000 ? 200 : 503;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ...status, markAgeMs }));
+      res.end(JSON.stringify({ ...status, markAgeMs, state: { hydromancer: hydro ? { url: HYDRO_URL, disabled: hydro.disabled, ...hydro.stats, pointsLastMinute: hydro.budget.used(), usage: hydroUsage } : 'off', nativeWsUsers: nativeWs.size, restFallback: fallback.stats, builderStream: builderStream ? { lastMessageAt: builderStream.lastMessageAt, events: builderStream.events } : 'off' } }));
     })
     .listen(Number(process.env.PORT ?? 8080));
   console.log(JSON.stringify({ msg: 'worker started', network }));
