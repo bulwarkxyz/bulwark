@@ -46,15 +46,15 @@ pnpm typecheck
 
 Node 22+, pnpm 9.
 
-## Reproduce the crash-day replays
+## Reproduce the replays
 
 ```sh
-HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer   # mark prices from Hydromancer (the published results)
-pnpm --filter @bulwarkxyz/ops backtest -- --mark-dir DIR   # your own mark prices: DIR/<case>.csv with block_minute,mark_price
-pnpm --filter @bulwarkxyz/ops backtest                     # hourly trade prices stored in data/backtests/ (coarse)
+pnpm --filter @bulwarkxyz/ops find-ordinary-days                               # the rule that picks the ordinary bad days
+HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops replays                    # crash and ordinary days, settings sweep, server late, resting orders
+HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer  # the first published version (no backstop)
 ```
 
-The mark-price history comes from [Hydromancer](https://hydromancer.xyz) (courtesy of Hydromancer; fetched with your own key and cached locally, not committed). Margin tiers and market limits come from Hyperliquid directly. Results, method and limits: the docs' crash-day replays page ([source](apps/docs/content/docs/backtests.mdx)); latest run: [`evidence/backtest-mark-2026-10-05.md`](evidence/backtest-mark-2026-10-05.md).
+The mark-price history comes from [Hydromancer](https://hydromancer.xyz) (courtesy of Hydromancer; fetched with your own key and cached locally, not committed). Margin tiers and market limits come from Hyperliquid directly. Results, method and limits: the docs' replays page ([source](apps/docs/content/docs/backtests.mdx)); latest run: [`evidence/replays-2026-10-05.md`](evidence/replays-2026-10-05.md).
 
 ## Licence
 

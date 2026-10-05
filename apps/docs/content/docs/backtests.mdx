@@ -1,48 +1,61 @@
 ---
-title: Crash-day replays
-description: What the guard would have done on three real crash days, on mark prices, including the results where it did badly, how the replays are run, and what they do not prove.
+title: Replays
+description: What the guard did, and did not do, on three crash days and six ordinary bad days, on mark prices, with the settings changed and our server late. Method, data sources and limits.
 ---
 
-We replayed three recent crash days through the guard's own code, on **mark prices**, the prices Hyperliquid uses for margin, liquidations and stops. Every result is below, good and bad.
+We replay real price paths through **the guard's own code**: the margin model, the rule evaluation, the seven checks, the server's orders and the orders it leaves resting on Hyperliquid. Every result is below, including the ones where it did badly.
+
+<Callout type="warn" title="Correction, 5 October 2026">
+  The first version of this page left out the guard's **resting backstop**: a reduce-only stop that the guard keeps on Hyperliquid at your lowest line, which fires on the exchange's own mark price without waiting for our server. Without it, the replays showed the guard failing when our server was 1 or 5 minutes late. With it, as the guard actually runs, it avoided every liquidation in those cases. The earlier "server alone" results are kept below for comparison.
+</Callout>
+
+## What the guard did and did not do
+
+- **With the example settings, it avoided every liquidation on the three crash days, at every leverage we tried, with our server on time, 1 minute late or 5 minutes late.** When our server was late, the resting backstop did the work.
+- **It often kept little.** Of $10,000, the accounts it kept from liquidation ended with between $0.19 and $2,480. On silver, with our server on time, it kept under $4 at 5×, 10× and 20×: each trim was followed by a further fall, and it sold in steps all the way down.
+- **The outcome depends heavily on the settings.** With the same days and other example settings, oil at 20× kept anything from 1.5% to 32.8% with our server on time. None of these settings led to liquidation with our server on time; one did with our server 5 minutes late (SK hynix, 10×).
+- **On ordinary bad days it mostly did nothing**, and when it acted it could cost money. At 3× and 5× it did nothing on all six days, and at 10× nothing on silver and oil. At 20× it avoided three liquidations and cost 8.8 points of equity on the fourth day. At SK hynix's 10× maximum it cost 16.5 points on one day, because it trimmed at the start and the price then rose.
+- **It does not protect in every crash.** These are nine days, one market path each, with assumptions listed below. A different path, a thinner order book or an exchange outage can give a different result.
 
 <Callout title="Where the numbers come from">
-  - **From [Hydromancer](https://hydromancer.xyz):** every price path on this page. Oil and SK hynix use the accepted mark price of each oracle round (`perpPriceHistoryByTime`, about one round every 3 seconds). Silver uses the mark price the market's deployer submitted (`oraclePriceHistoryByTime`), because accepted mark rounds for HIP-3 markets are recorded only from 24 February 2026. The comparison of submitted and accepted marks below is computed from Hydromancer data too.
-  - **From Hyperliquid directly:** each market's maintenance-margin tiers, maximum leverage and lot sizes (`perpDexs` and `allPerpMetas`), read when the replay runs.
-  - **Ours:** the margin model, the rule evaluation, the seven checks and the guard's actions: the same code the guard runs, open source.
+  - **From [Hydromancer](https://hydromancer.xyz):** every price path on this page. Oil, SK hynix and all six ordinary days use the accepted mark price of each oracle round (`perpPriceHistoryByTime`, about one round every 3 seconds). Silver's crash uses the mark price the market's deployer submitted (`oraclePriceHistoryByTime`), because accepted mark rounds for HIP-3 markets are recorded only from 24 February 2026.
+  - **From Hyperliquid directly:** each market's margin tiers, maximum leverage and lot sizes (`perpDexs`, `allPerpMetas`); and the hourly trade candles (`candleSnapshot`) used only to *choose* the ordinary days.
+  - **Ours:** the guard code, open source, and the simulator around it.
 
   Mark-price history courtesy of Hydromancer.
 </Callout>
 
 ## The days
 
-| Day | Market | Mark data | Largest fall within an hour | Lowest point vs the window's first price |
+**Crash days.** Each window runs three days, from 00:00 UTC the day before to 00:00 UTC the day after.
+
+| Day | Market | Mark data | Largest fall within an hour | Lowest point vs the first price |
 |---|---|---|---|---|
-| 30 January 2026 | `xyz:SILVER` | Submitted mark, 85,513 rounds | −17.7% (17:26 → 18:22 UTC) | −37.2% |
-| 23 March 2026 | `xyz:CL` (oil) | Accepted mark, 85,311 rounds | −15.4% (10:28 → 11:09 UTC) | −14.1% |
-| 27 July 2026 | `xyz:SKHX` (SK hynix) | Accepted mark, 86,386 rounds | −19.4% (22:01 → 23:01 UTC) | −25.0% |
+| 30 January 2026 | Silver (`xyz:SILVER`) | Submitted mark, 85,513 rounds | −17.7% | −37.2% |
+| 23 March 2026 | Oil (`xyz:CL`) | Accepted mark, 85,311 rounds | −15.4% | −14.1% |
+| 27 July 2026 | SK hynix (`xyz:SKHX`) | Accepted mark, 86,386 rounds | −19.4% | −25.0% |
 
-Each window runs three days, from 00:00 UTC on the day before to 00:00 UTC on the day after.
+- **Silver's crash** uses the weaker input, the deployer's *submitted* mark. Where we have both, it was close to the accepted mark on oil (median 0.05%, at most 1.4%) and much further on SK hynix (median 0.17%, up to 15% in the wick). It has one 106-second gap, after the crash.
+- **SK hynix:** the bad print reached the accepted mark price too: −18.7% in about a minute, then back within two minutes. Liquidations run on mark, so they would have happened.
 
-**Data quality.**
-- **Oil and SK hynix** have no gap longer than 8 seconds.
-- **Silver** has one gap of 106 seconds, at 08:03 UTC on 31 January, after the crash.
-- **Silver is the weaker input.** It is the deployer's *submitted* mark, not the mark Hyperliquid accepted. On the two days where we have both, the submitted mark was close on oil: median 0.05% from the accepted mark, 0.5% at the 99th percentile, 1.4% at most. On SK hynix it was much further: median 0.17%, 2.2% at the 99th percentile and up to 15% during the wick. Read the silver results with that in mind.
+**Ordinary bad days.** Chosen by a fixed rule, not by us: for each market, the two most recent UTC days (before 5 October 2026) whose largest fall from an hourly high to a later hourly low was between 3% and 8% over at least two hours, excluding the crash days. In these markets such days are common: 68 qualified for silver, 86 for oil and 81 for SK hynix since mid-March. Each is replayed over the whole UTC day on accepted mark prices.
 
-**SK hynix: the wick was in the mark price too.** We had marked this day inconclusive while we had only trade prices, because the drop was a bad print in trades. On mark prices it is conclusive. The accepted mark fell from about 1,128 to 917 (−18.7%) between 23:00 and 23:01 UTC and was back above 1,150 by 23:03. Liquidations run on mark, so they would have happened.
+| Day | Fall used to choose it (hourly trade prices) |
+|---|---|
+| Silver, 2 October 2026 | 3.8%, 13:00–16:00 |
+| Silver, 28 September 2026 | 5.5%, 00:00–08:00 |
+| Oil, 2 October 2026 | 5.3%, 00:00–14:00 |
+| Oil, 29 September 2026 | 6.5%, 05:00–23:00 |
+| SK hynix, 1 October 2026 | 3.3%, 06:00–15:00 |
+| SK hynix, 30 September 2026 | 3.6%, 00:00–22:00 |
 
 ## How each replay is run
 
-The replay feeds the recorded prices through **the same code the guard runs**, one price round at a time: the margin model, the rule evaluation, the seven checks and the guard's own actions.
+**The account.** A cross long on the xyz dex, opened at the first price of the window, with 10,000 USDC of equity and nothing else in the account.
 
-**The account.** A cross long on the xyz dex, opened at the first price of each window, with 10,000 USDC of equity and nothing else in the account.
+**Leverage.** 3×, 5×, 10× and 20×, up to each market's maximum (silver 25×, oil 20×, SK hynix 10×). At a market's maximum leverage an account starts with a buffer of exactly 2×, the first example line, so the guard trims straight away.
 
-**Leverage.** 3×, 5×, 10× and 20×, up to each market's maximum: 25× for silver, 20× for oil, 10× for SK hynix.
-
-<Callout type="warn">
-  At a market's maximum leverage, an account starts with a buffer of exactly 2×, the first example line below, so the guard trims straight away. That applies to oil at 20× and SK hynix at 10×.
-</Callout>
-
-**Stage settings: example settings chosen for the test.** They are not product defaults; in the app, every number is one you set.
+**Example settings, chosen for the test.** They are not product defaults; in the app, every number is one you set.
 
 | Stage | When | Then |
 |---|---|---|
@@ -50,89 +63,157 @@ The replay feeds the recorded prices through **the same code the guard runs**, o
 | 2 | Buffer below 1.5× | Trim until the buffer is back at 2.5× |
 | 3 | Buffer below 1.2× | Close the position |
 
-**The same account with no guard**, on the same prices, is shown next to every result.
+**The guard, as it runs.**
+- **Server orders:** reduce-only IOC orders at the worst price a 1% slippage limit allows, 4.5 bps fee per fill (assumed). An order that does not fill is [retried](/how-the-guard-works#when-an-order-does-not-fill).
+- **The resting backstop:** a reduce-only stop on Hyperliquid at the lowest line (1.2× here), with a limit at the same 1% slippage. Once the mark crosses it, it rests as a limit order and fills at that limit only when the mark is within it, so a price that gaps past it can leave it unfilled. Our server places it before the window starts and re-places it after each change.
 
-**Fees and slippage.** Guard orders fill at the worst price a 1% slippage limit allows, and pay a fee of 4.5 bps per fill (assumed).
+**Our server late.** Every scenario is run with our server's orders, and its re-placing of the backstop, reaching the exchange immediately, 1 minute late and 5 minutes late. A late IOC fills only if the price is still within its limit. Orders already resting on the exchange fire on the mark regardless. Live, we measured about 94 ms from a price tick to the exchange's answer.
 
-**On time and late.** "On time" means the guard acts on the same price round it sees, about every 3 seconds. Live, we measured about 94 ms from a price tick to the exchange’s answer, from our server in Singapore. Each scenario is also run with every guard order reaching the exchange **1 minute** and **5 minutes** late. A late order is an IOC with the limit it had when it was decided: if the price has already moved past that limit, it does not fill. As in the live guard, no new decision is made for the account while an order is still on its way.
-
-**Retries.** An order that did not fill, or filled only partly, is sent again once its result is known, while its stage still holds. Each retry is re-priced from the mark at that moment and stays within the same 1% slippage. The guard's 20-actions-a-minute cap applies. Each late scenario is run with and without retries ([how retries work](/how-the-guard-works#when-an-order-does-not-fill)).
+**The same account with no guard**, on the same prices, is shown next to every result; so is the guard **without the backstop** (our server alone), which is what the first version of this page showed.
 
 **Margin.** Current xyz maintenance tiers; the tiers on those days may have differed.
 
-## What the results show
+## Crash days
 
-- **On time, the guard avoided every liquidation, but often kept little.** The unguarded account was liquidated in 8 of the 11 scenarios. With the guard acting on time, none of those 8 was. What they kept at the end of the window ranged from **$0.19 to $2,480** of $10,000.
-- **On silver it avoided liquidation but kept almost nothing.** At 5×, 10× and 20× it ended with $3.83, $0.19 and $0.30. With these example lines, the guard held the account near its lines all the way down. Avoiding liquidation is not the same as keeping your money.
-- **Late, it mostly failed.** With orders 1 minute late, only silver at 3× avoided liquidation. With orders 5 minutes late, none did. On oil, the mark fell more than 8% in under three minutes (98.6 at 11:05 to 90.4 at 11:07:37 UTC), faster than a late order could arrive.
-- **Retries changed no result on these days.** In all 16 late runs where a stage fired, the result with retries matched the result without. The late runs ended in liquidation because the account got from its first line to liquidation faster than the delay, not because orders kept missing. Retries help when the price pauses or bounces between attempts; these three paths did not do that at the moments that counted.
-- **Where no line was crossed, the guard did nothing.** Oil at 3× and 5×, and SK hynix at 3×, end exactly as the unguarded account.
-
-## Results
-
-Each cell shows the equity at the end of the window and the share of the 10,000 USDC kept, or the time the account was liquidated (UTC). "Missed" counts late orders that arrived after the price had moved past their limit.
+Each cell shows the equity at the end of the window and the share of the 10,000 USDC kept, or "liquidated".
 
 ### Silver, 30 January 2026 (submitted mark)
 
-| Leverage | No guard | Guard, on time | Guard, 1 min late | Guard, 5 min late | Guard orders (on time) | Fees (on time) |
+| Leverage | No guard | Guard, on time | Server 1 min late | Server 5 min late | Without the backstop, 1 min late | Without the backstop, 5 min late |
 |---|---|---|---|---|---|---|
-| 3× | liquidated 30 Jan 18:16 | $202.53 (2.0%) | $202.53 (2.0%) | liquidated 30 Jan 18:18 | 5 | $8.58 |
-| 5× | liquidated 30 Jan 09:45 | $3.83 (0.04%) | liquidated 30 Jan 18:10 (2 missed) | liquidated 30 Jan 09:45 | 13 | $18.00 |
-| 10× | liquidated 29 Jan 15:27 | $0.19 (under 0.01%) | liquidated 29 Jan 15:27 (1 missed) | liquidated 29 Jan 15:27 | 16 | $40.52 |
-| 20× | liquidated 29 Jan 15:16 | $0.30 (under 0.01%) | liquidated 29 Jan 15:17 (1 missed) | liquidated 29 Jan 15:17 | 18 | $85.54 |
+| 3× | liquidated | $202.53 (2%) | $202.53 (2%) | $150.90 (1.5%) | $202.53 (2%) | liquidated |
+| 5× | liquidated | $3.83 (under 0.1%) | $7.52 (0.1%) | $555.70 (5.6%) | liquidated | liquidated |
+| 10× | liquidated | $0.19 (under 0.1%) | $1,256.26 (12.6%) | $1,256.26 (12.6%) | liquidated | liquidated |
+| 20× | liquidated | $0.30 (under 0.1%) | $1,549.19 (15.5%) | $1,549.19 (15.5%) | liquidated | liquidated |
 
-At 10× and 20× the unguarded account was already liquidated on 29 January, a day before the crash.
+At 10× and 20× the unguarded account was liquidated on 29 January, a day before the crash. With our server on time the guard trimmed in steps all the way down and kept almost nothing; late, the backstop closed the position in one go and kept more.
 
 ### Oil, 23 March 2026
 
-| Leverage | No guard | Guard, on time | Guard, 1 min late | Guard, 5 min late | Guard orders (on time) | Fees (on time) |
+| Leverage | No guard | Guard, on time | Server 1 min late | Server 5 min late | Without the backstop, 1 min late | Without the backstop, 5 min late |
 |---|---|---|---|---|---|---|
-| 3× | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) | 0 | $0 |
-| 5× | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) | 0 | $0 |
-| 10× | liquidated 23 Mar 11:07 | $1,134.61 (11.3%) | liquidated 23 Mar 11:07 | liquidated 23 Mar 11:07 | 4 | $36.70 |
-| 20× | liquidated 23 Mar 11:05 | $837.83 (8.4%) | liquidated 23 Mar 11:06 (1 missed) | liquidated 23 Mar 11:06 | 6 | $82.72 |
+| 3× | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) | $7,224.83 (72.2%) |
+| 5× | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) | $5,374.70 (53.7%) |
+| 10× | liquidated | $1,134.61 (11.3%) | $1,814.71 (18.1%) | $1,814.71 (18.1%) | liquidated | liquidated |
+| 20× | liquidated | $837.83 (8.4%) | $2,202.43 (22%) | $2,202.43 (22%) | liquidated | liquidated |
+
+The mark fell more than 8% in under three minutes (98.6 at 11:05 to 90.4 at 11:07:37 UTC). At 3× and 5× no line was crossed.
 
 ### SK hynix, 27 July 2026
 
-| Leverage | No guard | Guard, on time | Guard, 1 min late | Guard, 5 min late | Guard orders (on time) | Fees (on time) |
+| Leverage | No guard | Guard, on time | Server 1 min late | Server 5 min late | Without the backstop, 1 min late | Without the backstop, 5 min late |
 |---|---|---|---|---|---|---|
-| 3× | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) | 0 | $0 |
-| 5× | liquidated 27 Jul 23:00 | $2,480.33 (24.8%) | liquidated 27 Jul 23:00 | liquidated 27 Jul 23:00 | 3 | $14.38 |
-| 10× | liquidated 27 Jul 14:21 | $1,964.64 (19.6%) | liquidated 27 Jul 23:00 | liquidated 27 Jul 23:00 (1 missed) | 5 | $37.64 |
+| 3× | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) | $6,213.63 (62.1%) |
+| 5× | liquidated | $2,480.33 (24.8%) | $2,112.07 (21.1%) | $2,112.07 (21.1%) | liquidated | liquidated |
+| 10× | liquidated | $1,964.64 (19.6%) | $1,752.76 (17.5%) | $1,761.33 (17.6%) | liquidated | liquidated |
 
-SK hynix allows at most 10×. At 10× the unguarded account was liquidated by ordinary moves at 14:21, hours before the wick. The guard trimmed at entry, because the account started on the 2× line.
+At 10× (this market's maximum) the account started on the 2× line, so the guard trimmed at entry; the unguarded account was liquidated by ordinary moves at 14:21, hours before the wick.
 
-### Late orders, with and without retries
+## How much the settings matter
 
-| Day | Late runs that ended differently | Retry orders sent | "Cannot fill" alerts |
+The same crash days with every combination of three line sets and three trim sizes. **Each is an example chosen for the test**, not a recommendation.
+
+| Lines | Stage 1, 2, 3 at | Trim | Trims back to |
 |---|---|---|---|
-| Silver | 0 of 8 | 0 | 0 |
-| Oil | 0 of 4 | 0 | 0 |
-| SK hynix | 0 of 4 | 1 (10×, 5 min late) | 0 |
+| Earlier | 3×, 2×, 1.5× | Light | 1.25 × the line |
+| Example | 2×, 1.5×, 1.2× | Medium | 1.5 × the line |
+| Later | 1.5×, 1.25×, 1.1× | Heavy | 2 × the line |
 
-Runs where no stage fired (oil 3× and 5×, SK hynix 3×) are left out of the count. The full before-and-after table is in the run's evidence file.
+The last stage always closes the position. Cells: share kept with our server **on time / 5 minutes late**; "L" is liquidated. (The example settings above trim stage 2 back to 2.5×, slightly more than "medium".)
+
+### Silver, 30 January 2026
+
+| Lines | Trim | 3× | 5× | 10× | 20× |
+|---|---|---|---|---|---|
+| earlier | light | 4.8% / 4% | 0.4% / 6% | 0.1% / 13.7% | 0.1% / 12.6% |
+| earlier | medium | 5.3% / 4% | 0.7% / 0.2% | 0.2% / 2.3% | 0.2% / 10.7% |
+| earlier | heavy | 8% / 4% | 1.2% / 1.2% | 0.5% / 3.2% | 0.7% / 13% |
+| example | light | 1.5% / 1.9% | 0% / 5.6% | 0% / 12.6% | 0% / 19.6% |
+| example | medium | 2% / 1.5% | 0% / 5.6% | 0% / 12.6% | 0% / 15.5% |
+| example | heavy | 2.7% / 1.1% | 0.1% / 5.6% | 0% / 12.6% | 0% / 1.8% |
+| later | light | 0.5% / 2.4% | 0% / 4.7% | 0% / 10.7% | 0% / 22.6% |
+| later | medium | 0.6% / 2.4% | 0% / 4.7% | 0% / 10.7% | 0% / 22.6% |
+| later | heavy | 1.4% / 2.4% | 0% / 4.7% | 0% / 10.7% | 0% / 22.6% |
+
+### Oil, 23 March 2026
+
+| Lines | Trim | 3× | 5× | 10× | 20× |
+|---|---|---|---|---|---|
+| earlier | light | 72.2% / 72.2% | 46% / 46% | 22.4% / 25.3% | 19% / 66.9% |
+| earlier | medium | 72.2% / 72.2% | 42.4% / 42.4% | 26.8% / 25.3% | 23.4% / 69.1% |
+| earlier | heavy | 72.2% / 72.2% | 37.9% / 37.9% | 29.7% / 25.3% | 32.8% / 71.8% |
+| example | light | 72.2% / 72.2% | 53.7% / 53.7% | 9.7% / 18.1% | 6.4% / 27.6% |
+| example | medium | 72.2% / 72.2% | 53.7% / 53.7% | 11.3% / 18.1% | 8.4% / 22% |
+| example | heavy | 72.2% / 72.2% | 53.7% / 53.7% | 16.2% / 18.1% | 14.2% / 15.5% |
+| later | light | 72.2% / 72.2% | 53.7% / 53.7% | 4.1% / 15.8% | 1.5% / 23.6% |
+| later | medium | 72.2% / 72.2% | 53.7% / 53.7% | 6.6% / 15.8% | 2.2% / 18.7% |
+| later | heavy | 72.2% / 72.2% | 53.7% / 53.7% | 9.5% / 15.8% | 5% / 13% |
+
+### SK hynix, 27 July 2026
+
+| Lines | Trim | 3× | 5× | 10× |
+|---|---|---|---|---|
+| earlier | light | 55.2% / 55.2% | 33.8% / 21.2% | 28.9% / 16.3% |
+| earlier | medium | 51.1% / 51.1% | 35.1% / 16.7% | 38.2% / 22.7% |
+| earlier | heavy | 46.1% / 46.1% | 38% / 36% | 42.8% / 15.2% |
+| example | light | 62.1% / 62.1% | 20.6% / 21.1% | 14.6% / 15.9% |
+| example | medium | 62.1% / 62.1% | 24.8% / 21.1% | 19.6% / 17.6% |
+| example | heavy | 62.1% / 62.1% | 25.8% / 21.1% | 24.3% / 20% |
+| later | light | 62.1% / 62.1% | 11.4% / 18.9% | 5.6% / L |
+| later | medium | 62.1% / 62.1% | 17.1% / 18.9% | 8.9% / 15.6% |
+| later | heavy | 62.1% / 62.1% | 18.5% / 18.9% | 14.6% / 18.1% |
+
+Earlier lines and heavier trims generally kept more on these crash days, but not always, and they also trim more on ordinary days (below).
+
+## Ordinary bad days
+
+Example settings. Cells: share of the 10,000 USDC kept at the end of the day, **without the guard → with the guard**. With a fall spread over hours, 1 or 5 minutes of server delay changed nothing on these days.
+
+| Day | Market fall | 3× | 5× | 10× | 20× |
+|---|---|---|---|---|---|
+| Silver, 2026-10-02 | 3.8% (13:00–16:00) | 97% → 97% | 95% → 95% | 89.9% → 89.9% | 79.9% → 71.1% |
+| Silver, 2026-09-28 | 5.5% (00:00–08:00) | 86.2% → 86.2% | 77% → 77% | 53.9% → 53.9% | liquidated → 30.6% |
+| Oil, 2026-10-02 | 5.3% (00:00–14:00) | 94.3% → 94.3% | 90.6% → 90.6% | 81.2% → 81.2% | liquidated → 58.1% |
+| Oil, 2026-09-29 | 6.5% (05:00–23:00) | 86.9% → 86.9% | 78.2% → 78.2% | 56.4% → 56.4% | liquidated → 41.8% |
+| SK hynix, 2026-10-01 | 3.3% (06:00–15:00) | 110.7% → 110.7% | 117.8% → 117.8% | 135.7% → 119.2% | — |
+| SK hynix, 2026-09-30 | 3.6% (00:00–22:00) | 95.8% → 95.8% | 93% → 93% | 86.1% → 87.3% | — |
+
+At the highest leverage of each day, with each sweep setting (our server on time):
+
+| Lines | Trim | Silver, 2026-10-02 (20×) | Silver, 2026-09-28 (20×) | Oil, 2026-10-02 (20×) | Oil, 2026-09-29 (20×) | SK hynix, 2026-10-01 (10×) | SK hynix, 2026-09-30 (10×) |
+|---|---|---|---|---|---|---|---|
+| earlier | light | 75.1% | 40.2% | 63.5% | 49.3% | 113% | 87.8% |
+| earlier | medium | 79.5% | 45.1% | 63.6% | 51.5% | 108.9% | 88.1% |
+| earlier | heavy | 79.4% | 53.2% | 74.3% | 60.2% | 103.9% | 88.5% |
+| example | light | 66.5% | 26.5% | 51% | 37% | 125.6% | 86.8% |
+| example | medium | 71.1% | 30.6% | 58.1% | 41.8% | 119.2% | 87.3% |
+| example | heavy | 67.4% | 36.8% | 71.4% | 49.6% | 111.4% | 87.8% |
+| later | light | 68.4% | 17.9% | 40.5% | 25.5% | 135.7% | 86.1% |
+| later | medium | 61.9% | 20.9% | 35.5% | 30% | 135.7% | 86.1% |
+| later | heavy | 54.8% | 25.9% | 57.1% | 36.2% | 135.7% | 86.1% |
+| no guard | | 79.9% | liquidated | liquidated | liquidated | 135.7% | 86.1% |
 
 ## What this does not prove
 
-- **A replay is not a live cascade.** In a real cascade, liquidity disappears, order books thin out, and other traders and liquidations move the price in response to each other. A replay moves along recorded prices that our orders do not affect.
-- **Congestion is modelled only as a delay.** The 1- and 5-minute cases delay the guard's orders. They do not model a slow or unavailable Hyperliquid API, rate limits from other traffic, queue position or partial fills.
-- **Fills are assumed, not observed.** Orders fill at the slippage limit if the price allows; depth is not checked.
-- **Silver runs on the submitted mark,** which can differ from the mark Hyperliquid accepted (see Data quality above).
-- **Funding is not included,** and today's margin tiers are used for past days.
-- **The settings are examples.** Different lines and actions give different results, better or worse. They are not advice and not product defaults.
-- **Surviving is not the same as keeping your money.** The guard can avoid the liquidation and still end with almost nothing, and a trim can lock in a loss before a recovery.
-- **Three days are three days.** They were chosen because they were sharp, recent HIP-3 crashes, not to show the guard at its best or worst.
+- **A replay is not a live cascade.** In a real cascade liquidity disappears and other traders and liquidations move the price in response to each other. A replay moves along recorded prices that our orders do not affect.
+- **Fills are assumed, not observed.** Server orders fill at their slippage limit if the price allows; the backstop fills at its limit once the price is back within it. Order-book depth is not checked.
+- **Our server being late is modelled only as a delay.** An unavailable Hyperliquid API, rate limits, queue position and partial fills are not modelled; neither are Hyperliquid's own outages, which would also stop resting orders from firing.
+- **Silver's crash runs on the submitted mark**, which can differ from the mark Hyperliquid accepted.
+- **Funding is not included**, and today's margin tiers are used for past days.
+- **The settings are examples.** Other lines and actions give other results, better or worse. They are not advice and not product defaults.
+- **Surviving is not the same as keeping your money.** The guard can avoid liquidation and still end with almost nothing, and a trim can lock in a loss before a recovery.
+- **Nine days are nine days.** The crash days were chosen because they were sharp, recent HIP-3 crashes; the ordinary days by the rule above.
 
 ## Reproduce
 
-The script and these settings are in the public repository. The Hydromancer price data is not redistributed: the script fetches it with your own [Hydromancer API key](https://hydromancer.xyz) and caches it locally.
+The scripts and settings are in the public repository. The Hydromancer data is not redistributed: the scripts fetch it with your own [Hydromancer API key](https://hydromancer.xyz) and cache it locally.
 
 ```bash
 pnpm install
 pnpm build
-HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer   # the results on this page
-pnpm --filter @bulwarkxyz/ops backtest -- --mark-dir DIR   # your own mark prices: DIR/<case>.csv with block_minute,mark_price
-pnpm --filter @bulwarkxyz/ops backtest                     # hourly trade prices stored in data/backtests/ (coarse)
+pnpm --filter @bulwarkxyz/ops find-ordinary-days                               # the ordinary-day rule
+HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops replays                    # everything on this page
+HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer  # the first version (no backstop)
 ```
 
-Each run writes its results and every assumption to `evidence/backtest-<source>-<date>.{json,md}`. The results above are `evidence/backtest-mark-2026-10-05`.
+The results on this page are `evidence/replays-2026-10-05.json` and `.md`, with every assumption written next to the numbers.
