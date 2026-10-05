@@ -1,11 +1,12 @@
-// Runs the translator eval against the live Claude API and writes the results to evidence/.
-// Needs ANTHROPIC_API_KEY. Cost: about 60 requests at $4 / $20 per MTok (Opus 5.5) — roughly $2 per run.
-// Usage: pnpm --filter @bulwarkxyz/compiler eval [--only adversarial] [--concurrency 4]
+// Runs the translator eval against the live provider and writes the results to evidence/.
+// OpenAI (default): needs OPENAI_API_KEY. Anthropic: --provider anthropic with ANTHROPIC_API_KEY.
+// Usage: pnpm --filter @bulwarkxyz/compiler eval [--provider openai|anthropic] [--only adversarial] [--concurrency 4]
+// Exits non-zero unless every adversarial case passes: the translator stays off until it does.
 import Anthropic from '@anthropic-ai/sdk';
 import type { Policy } from '@bulwarkxyz/guard-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { compileRule, describeRule, MODEL, type CompileResult, type MessagesClient } from '../src/index.js';
+import { anthropicProvider, compileRule, describeRule, openAIProvider, type CompileResult, type MessagesClient, type TranslatorProvider } from '../src/index.js';
 import { CASES, type Case, type Group } from './cases.js';
 
 const args = process.argv.slice(2);
@@ -15,8 +16,12 @@ const opt = (n: string) => {
 };
 const only = opt('--only') as Group | undefined;
 const concurrency = Number(opt('--concurrency') ?? 4);
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.error('ANTHROPIC_API_KEY is not set');
+const providerName = opt('--provider') ?? 'openai';
+/** USD per million tokens: input, cached input, output (published price lists, checked 5 Oct 2026). */
+const PRICES: Record<string, [number, number, number]> = { openai: [2, 0.1, 10], anthropic: [4, 0.4, 20] };
+const keyVar = providerName === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+if (!process.env[keyVar]) {
+  console.error(`${keyVar} is not set`);
   process.exit(2);
 }
 
@@ -40,7 +45,7 @@ const markets = [
   ['SKHX', 'SK hynix'],
 ].map(([t, name]) => ({ coin: `xyz:${t}`, name: name! }));
 
-const client = new Anthropic() as unknown as MessagesClient;
+const client: TranslatorProvider = providerName === 'openai' ? openAIProvider({ apiKey: process.env.OPENAI_API_KEY! }) : anthropicProvider(new Anthropic() as unknown as MessagesClient);
 
 function grade(c: Case, r: CompileResult): { pass: boolean; note: string } {
   const accepted = r.kind === 'draft' && r.check.ok;
@@ -84,12 +89,14 @@ const summary = Object.fromEntries(groups.map((g) => {
   return [g, { pass: rs.filter((r) => r.pass).length, total: rs.length, acceptedByMistake: rs.filter((r) => r.outcome === 'rule' && !r.pass && g !== 'normal').length }];
 }));
 const tokens = results.reduce((s, r) => {
-  const u = r.usage as { inputTokens: number; outputTokens: number } | undefined;
-  return { in: s.in + (u?.inputTokens ?? 0), out: s.out + (u?.outputTokens ?? 0) };
-}, { in: 0, out: 0 });
-const costUsd = (tokens.in * 4 + tokens.out * 20) / 1e6;
+  const u = r.usage as { inputTokens: number; outputTokens: number; cachedInputTokens?: number } | undefined;
+  return { in: s.in + (u?.inputTokens ?? 0), cached: s.cached + (u?.cachedInputTokens ?? 0), out: s.out + (u?.outputTokens ?? 0) };
+}, { in: 0, cached: 0, out: 0 });
+const [pIn, pCached, pOut] = PRICES[providerName]!;
+const costUsd = ((tokens.in - tokens.cached) * pIn + tokens.cached * pCached + tokens.out * pOut) / 1e6;
+const perTranslation = results.length ? costUsd / results.length : 0;
 const ms = results.map((r) => r.ms).sort((a, b) => a - b);
-const report = { model: MODEL, ranAt: new Date().toISOString(), summary, tokens, costUsd: +costUsd.toFixed(4), latencyMs: { p50: ms[Math.floor(ms.length / 2)], p90: ms[Math.floor(ms.length * 0.9)] }, results };
+const report = { provider: client.id, label: client.label, perTranslationUsd: +perTranslation.toFixed(5), ranAt: new Date().toISOString(), summary, tokens, costUsd: +costUsd.toFixed(4), latencyMs: { p50: ms[Math.floor(ms.length / 2)], p90: ms[Math.floor(ms.length * 0.9)] }, results };
 console.log('\n', JSON.stringify({ summary, tokens, costUsd: report.costUsd, latencyMs: report.latencyMs }, null, 1));
 const dir = join(import.meta.dirname, '../../../evidence');
 mkdirSync(dir, { recursive: true });

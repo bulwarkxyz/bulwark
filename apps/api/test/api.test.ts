@@ -3,6 +3,7 @@ import { MemoryStore } from '@bulwarkxyz/store';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { anthropicProvider } from '@bulwarkxyz/compiler';
 import { STATUS_MAX_AGE_MS, createApp, retireKmsKeys } from '../src/app.js';
 
 const user = privateKeyToAccount(`0x${'77'.repeat(32)}`);
@@ -172,7 +173,7 @@ describe('telegram', () => {
 describe('AI translator', () => {
   const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
   const reply = (out: unknown) => ({ messages: { create: async () => ({ content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }) } });
-  const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: reply(out) });
+  const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: anthropicProvider(reply(out)) });
   const draft = (a: ReturnType<typeof createApp>, token: string, text: string, extra: Record<string, unknown> = {}) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text, ...extra }) });
   const confirm = () => store.confirmPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x', signatureVerified: true, confirmedAt: now });
 
@@ -391,6 +392,13 @@ describe('command results and alerts', () => {
     expect(await (await app.request(`/v1/commands/${id}`, { headers: authed(token) })).json()).toMatchObject({ doneAt: now + 2000, result: { cancelled: 1 } });
     const other = await signIn(stranger);
     expect((await app.request(`/v1/commands/${id}`, { headers: authed(other) })).status).toBe(404);
+  });
+
+  it('unlinking Telegram removes the chat id', async () => {
+    const token = await signIn();
+    store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: '0x0000000000000000000000000000000000000001', region: 'allowed', telegramChatId: '42', killSwitch: false, builderApproved: false });
+    expect(await (await app.request('/v1/telegram', { method: 'DELETE', headers: authed(token) })).json()).toEqual({ linked: false });
+    expect((await store.user(ACCOUNT))?.telegramChatId).toBeNull();
   });
 
   it('in-app alerts: a setting next to Telegram, and a feed of what the guard told the user', async () => {

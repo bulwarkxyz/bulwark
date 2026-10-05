@@ -1,0 +1,45 @@
+---
+title: Privacy
+description: What Bulwark keeps, what it sends to other services, and what it never has.
+---
+
+## What Bulwark keeps
+
+On Bulwark's servers (Railway, Singapore):
+
+- **Your account address** and the time you signed in.
+- **Your region answers:** the country you live in and your citizenship, as you stated them at sign-up, and the verdict for your region. The country from your connection is used for that check and not stored.
+- **Your rules:** every policy version you signed, with your signature.
+- **Your guard key's record:** its address, its AWS KMS key id and its status. The private key itself is in AWS KMS and never leaves it.
+- **What the guard did:** the audit log of its actions, its checks, your commands and key events, and its current status.
+- **Your Telegram chat id**, if you link Telegram for alerts, and your in-app alerts setting.
+
+There are no analytics or advertising trackers on the site, the app or these docs.
+
+## What is sent to other services
+
+| Service | What it receives | Why |
+|---|---|---|
+| **Hyperliquid** | Your guard's signed orders and cancels. Hyperliquid is a public chain: your account, positions and orders are public there anyway | To trade for you within your rules |
+| **AWS KMS** (Singapore) | The hash of each action to sign | To sign with your guard key, which never leaves KMS |
+| **OpenAI** (only when you use the AI translator) | The sentence you wrote, the list of markets, and your current rules, as JSON | To draft one rule. Sent with storage off, so OpenAI doesn't keep the request for later retrieval. No keys, no other account data |
+| **Hydromancer** (mainnet only) | Your account address | To read your account's margin state |
+| **Telegram** (only if you link it) | Alerts about your account | To tell you what the guard did or needs |
+| **Vercel** (hosting) | Standard web requests (IP address, pages loaded) | To serve the site |
+
+Nothing is sold, and nothing is shared for advertising.
+
+## In your browser
+
+- Your wallet connection.
+- Your time-zone preference.
+- An unsigned rule you are editing, for the current tab only.
+- The optional trading key for your own orders, which never leaves your browser ([Key storage](/key-storage)).
+
+## Removing your data
+
+- **Your guard key:** wipe it with a signed command ([Key storage](/key-storage#rotation-and-removal)).
+- **Your Telegram link:** unlinking removes your chat id (the app's button for it is on its way).
+- **Everything else** is tied to your account address.
+
+The audit log is append-only by design, so its entries can't be edited or deleted in place. A way to ask for the rest of your data to be removed is being set up and will be listed here.

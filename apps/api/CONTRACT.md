@@ -94,6 +94,8 @@ A replace (`/v1/guard-key/rotate`) isn't a command. Its progress shows in `/v1/m
   - Telegram gets the same messages when linked;
   - the setting only controls whether the app shows them.
 
+**`DELETE /v1/telegram`** → `{ linked: false }`: unlinks Telegram and removes the chat id. Answers `409` before onboarding.
+
 ## Translator: `POST /v1/rules/draft`
 
 - **Body:** `{ text, maxSlippagePct? }`.
@@ -106,6 +108,7 @@ A replace (`/v1/guard-key/rotate`) isn't a command. Its progress shows in `/v1/m
   - `{ kind: 'rejected', violations }`;
   - `503` when the translator is off; `429` past 30 a hour.
 - **Nothing is saved until the user signs the returned `policy`** with `POST /v1/policy`.
+- **Provider:** `GET /v1/me` → `translator: { enabled, provider }`, for example `{ enabled: true, provider: 'OpenAI (GPT-6.1 Sol)' }`. Show the provider next to the translator, with what is sent: the sentence, the market list and the user's current rules.
 
 ## The user's own take-profit and stop-loss orders
 

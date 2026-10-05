@@ -29,10 +29,6 @@ Your rules set lines on the buffer and what happens at each. Typical actions:
 - **Close** a position or everything.
 - **Cancel** your orders that would add to a position.
 
-<Callout type="info" title="Rolling out">
-  This choice reaches the app with its next update. Until then, every stage acts every time its line is crossed, as before.
-</Callout>
-
 What a stage does after it has acted is **your choice, for each stage**. There is no default, and a stage can't be saved without one:
 
 - **Once per fall:** it acts once when its line is crossed, then leaves the rest of the fall to the backstop. It acts again only after the market recovers to where it was when the stage acted, or the positions it acted on are gone. Its own trim lifting your buffer back above the line does not count as a recovery.

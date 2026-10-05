@@ -2,12 +2,12 @@
  * Bulwark API (Railway). Env: DATABASE_URL, JWT_SECRET, PROXY_SECRET, SIWE_DOMAIN, NETWORK, PORT.
  * KMS key provisioning turns on when AWS credentials for the bulwark-provisioner IAM user are set
  * (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION=ap-southeast-1). The AI translator turns on with
- * ANTHROPIC_API_KEY.
+ * TRANSLATOR_ENABLED=1 and OPENAI_API_KEY (TRANSLATOR_PROVIDER=anthropic with ANTHROPIC_API_KEY to switch back).
  */
 import { serve } from '@hono/node-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { KMSClient } from '@aws-sdk/client-kms';
-import type { MessagesClient } from '@bulwarkxyz/compiler';
+import { anthropicProvider, openAIProvider, type MessagesClient } from '@bulwarkxyz/compiler';
 import { InfoClient, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { ProvisionerKms, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
 import { PgStore, migrate } from '@bulwarkxyz/store';
@@ -34,13 +34,24 @@ async function main() {
   }
   const kms = process.env.AWS_ACCESS_KEY_ID ? new ProvisionerKms(new KMSClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' })) : null;
   const store = new PgStore(sql);
+  // The translator runs only when switched on (after the eval's adversarial set passed) and keyed.
+  const translator =
+    process.env.TRANSLATOR_ENABLED !== '1'
+      ? null
+      : (process.env.TRANSLATOR_PROVIDER ?? 'openai') === 'openai'
+        ? process.env.OPENAI_API_KEY
+          ? openAIProvider({ apiKey: process.env.OPENAI_API_KEY })
+          : null
+        : process.env.ANTHROPIC_API_KEY
+          ? anthropicProvider(new Anthropic({ maxRetries: 2, timeout: 60_000 }) as unknown as MessagesClient)
+          : null;
   const app = createApp({
     store,
     info: new InfoClient(network),
     jwtSecret: new TextEncoder().encode(need('JWT_SECRET')),
     proxySecret: need('PROXY_SECRET'),
     siweDomain: process.env.SIWE_DOMAIN ?? 'bulwark.0xo.in',
-    ...(process.env.ANTHROPIC_API_KEY ? { translator: new Anthropic({ maxRetries: 2, timeout: 60_000 }) as unknown as MessagesClient } : {}),
+    ...(translator ? { translator } : {}),
     keyCustody: process.env.KEY_CUSTODY === 'kms' ? 'kms' : 'sealed',
     repeatChoiceRequired: process.env.REPEAT_CHOICE_REQUIRED === '1',
     network,
@@ -53,7 +64,7 @@ async function main() {
     setInterval(() => void retireKmsKeys(retire).catch((e) => console.error('retireKmsKeys', e)), 15_000);
   }
   serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) });
-  console.log(JSON.stringify({ msg: 'api started', network, kms: Boolean(kms), translator: Boolean(process.env.ANTHROPIC_API_KEY) }));
+  console.log(JSON.stringify({ msg: 'api started', network, kms: Boolean(kms), translator: translator?.id ?? null }));
 }
 
 main().catch((e) => {

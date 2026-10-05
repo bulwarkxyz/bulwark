@@ -33,6 +33,7 @@ function Translator({ enabled, forced, s }: { enabled: boolean; forced: 'loading
   const [busy, setBusy] = useState<'translate' | 'sign' | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const provider = useMe().data?.translator?.provider ?? null;
 
   async function translate() {
     setBusy('translate');
@@ -70,7 +71,7 @@ function Translator({ enabled, forced, s }: { enabled: boolean; forced: 'loading
     <section className="panel" aria-labelledby="ai-h">
       <div className="ph">
         <h2 id="ai-h">Write a rule in your own words</h2>
-        <span className="tag">AI translator</span>
+        <span className="tag">{provider ? `AI translator · ${provider}` : 'AI translator'}</span>
         <span className="sp" />
         <span className="tiny t3">30 translations an hour</span>
       </div>
@@ -78,6 +79,7 @@ function Translator({ enabled, forced, s }: { enabled: boolean; forced: 'loading
         <label className="small t2" htmlFor="rule-text">
           What should the guard do, and when? Use your own numbers.
         </label>
+        <span className="tiny t3">{`Your sentence, the market list and your current rules are sent to ${provider ?? 'the AI provider'} to draft the rule; nothing else. You check and sign the exact rule.`}</span>
         <textarea id="rule-text" className="area" placeholder="Say what the guard should do, and at what buffer, price move or time." maxLength={500} value={text} onChange={(e) => setText(e.target.value)} disabled={!enabled} />
         <div className="row">
           <button type="button" className="btn btn-ink" disabled={!text.trim() || busy !== null || !enabled} onClick={translate}>

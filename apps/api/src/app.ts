@@ -16,7 +16,7 @@ import {
   type RawPerpDexs,
   type RawPerpMeta,
 } from '@bulwarkxyz/guard-core';
-import { compileRule, describeRule, type MarketRef, type MessagesClient } from '@bulwarkxyz/compiler';
+import { compileRule, describeRule, type MarketRef, type TranslatorProvider } from '@bulwarkxyz/compiler';
 import type { Hex, InfoClient } from '@bulwarkxyz/hyperliquid';
 import type { ApiStore, GuardState, PausedReason } from '@bulwarkxyz/store';
 import { Hono, type Context } from 'hono';
@@ -47,8 +47,11 @@ export interface ApiDeps {
    * while off, a rule without it runs as "every time", exactly as before the choice existed.
    */
   repeatChoiceRequired?: boolean;
-  /** Claude client for the plain-language translator; absent without ANTHROPIC_API_KEY. */
-  translator?: MessagesClient;
+  /**
+   * The plain-language translator's model provider (OpenAI by default); absent while the translator is
+   * off. It is switched on only after the eval's adversarial set passes in full.
+   */
+  translator?: TranslatorProvider;
   now: () => number;
 }
 
@@ -137,6 +140,8 @@ export function createApp(deps: ApiDeps) {
       // Where this user's key actually lives (new keys use the service's mode), so the app describes it truthfully.
       keyCustody: user?.agentKeyRef.startsWith('kms:') ? 'kms' : user?.agentKeyRef.startsWith('sealed:') ? 'sealed' : deps.keyCustody,
       newKeyCustody: deps.keyCustody,
+      // Which model provider the AI translator uses, so the app can name it next to the translator.
+      translator: deps.translator ? { enabled: true, provider: deps.translator.label } : { enabled: false, provider: null },
       keyStatus: user?.agentKeyRef === 'wiped' ? 'wiped' : user?.agentAddress ? 'ready' : keyMeta.length || user?.agentKeyRef === 'requested' ? 'creating' : 'none',
       pendingAgent: pending ? { address: pending.address } : null,
       builder: { address: BUILDER_ADDRESS, feeTenthsBps: BUILDER_FEE_TENTHS_BPS, approvedMaxTenthsBps: maxFee },
@@ -369,6 +374,16 @@ export function createApp(deps: ApiDeps) {
   });
 
   // -------------------------------------------------------------- telegram linking
+  // Unlink: the chat id is removed; alerts then show in the app only.
+  app.delete('/v1/telegram', async (c) => {
+    const account = c.get('account');
+    const user = await deps.store.user(account);
+    if (!user) return c.json({ error: 'complete onboarding first' }, 409);
+    await deps.store.upsertUser({ ...user, telegramChatId: null }, deps.now());
+    await deps.store.audit.append({ account, at: deps.now(), kind: 'command', why: 'You unlinked Telegram', what: 'Telegram alerts off; your chat id was removed' });
+    return c.json({ linked: false });
+  });
+
   app.post('/v1/telegram/code', async (c) => {
     const account = c.get('account');
     if (!(await deps.store.user(account))) return c.json({ error: 'complete onboarding first' }, 409);

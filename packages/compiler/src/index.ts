@@ -1,5 +1,6 @@
 import { checkDraft, FIXED_WINDOWS, numbersInText, Rule, type CompileCheck, type Policy } from '@bulwarkxyz/guard-core';
 import { z } from 'zod';
+import { jsonSchemaOf, type TranslatorProvider, type Usage } from './providers.js';
 
 /**
  * The plain-language rule translator. It turns one sentence into one guard rule, or asks a question,
@@ -7,8 +8,8 @@ import { z } from 'zod';
  * through `checkDraft` (invariant I5) before the user sees it. The user then signs the policy.
  */
 
-export const COMPILER_ID = 'claude-opus-5-5/v1';
-export const MODEL = 'claude-opus-5-5';
+/** Version of the prompt and checks; the provider's id is recorded next to it on every drafted rule. */
+export const COMPILER_VERSION = 'v2';
 
 const RuleBody = Rule.omit({ id: true, source: true });
 
@@ -80,47 +81,7 @@ export type CompileResult =
   | { kind: 'clarify'; question: string; usage: Usage }
   | { kind: 'refuse'; reason: string; usage: Usage };
 
-export interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-}
-
-/** The slice of the Anthropic client the compiler uses (lets tests pass a stub). */
-export interface MessagesClient {
-  messages: {
-    create(params: Record<string, unknown>): Promise<{
-      content: Array<{ type: string; text?: string }>;
-      stop_reason: string | null;
-      usage: { input_tokens: number; output_tokens: number };
-    }>;
-  };
-}
-
-const DROP = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems', '$schema']);
-
-/**
- * JSON Schema for structured outputs: `const` becomes a one-value `enum` (so discriminators stay
- * enforced), bounds the API does not support are dropped (checkDraft re-checks every bound), and
- * every object is closed with additionalProperties: false.
- */
-export function toOutputSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(toOutputSchema);
-  if (!schema || typeof schema !== 'object') return schema;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
-    if (DROP.has(k)) continue;
-    if (k === 'const') out.enum = [v];
-    else if (k === 'oneOf') out.anyOf = toOutputSchema(v);
-    else if (k === 'properties' || k === '$defs' || k === 'definitions') out[k] = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([pk, pv]) => [pk, toOutputSchema(pv)]));
-    else out[k] = toOutputSchema(v);
-  }
-  if (out.type === 'object') out.additionalProperties = false;
-  if ('enum' in out && !('type' in out)) out.type = typeof (out.enum as unknown[])[0] === 'number' ? 'number' : 'string';
-  return out;
-}
-
-export const OUTPUT_SCHEMA = toOutputSchema(z.toJSONSchema(DraftOutput, { io: 'input' }));
-const format = { type: 'json_schema', schema: OUTPUT_SCHEMA };
+export const OUTPUT_SCHEMA = jsonSchemaOf(DraftOutput);
 
 export function userMessage(input: CompileInput): string {
   const markets = input.markets.map((m) => `${m.coin} (${m.name})`).join(', ');
@@ -152,26 +113,19 @@ export function nextRuleId(policy: Policy): string {
   return `ai-${n}`;
 }
 
-export async function compileRule(client: MessagesClient, input: CompileInput): Promise<CompileResult> {
+export async function compileRule(provider: TranslatorProvider, input: CompileInput): Promise<CompileResult> {
   const text = input.text.trim();
   if (!text) return { kind: 'clarify', question: 'What should the guard do?', usage: { inputTokens: 0, outputTokens: 0 } };
   if (text.length > 500) return { kind: 'refuse', reason: 'Please keep one rule to one sentence (500 characters at most).', usage: { inputTokens: 0, outputTokens: 0 } };
 
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage({ ...input, text }) }],
-    output_config: { effort: 'medium', format },
-  });
-  const usage = { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
-  if (res.stop_reason === 'refusal') return { kind: 'refuse', reason: 'This cannot be a guard rule.', usage };
-  if (res.stop_reason === 'max_tokens') throw new Error('translator ran out of tokens');
+  const res = await provider.complete({ system: SYSTEM_PROMPT, user: userMessage({ ...input, text }), schema: OUTPUT_SCHEMA, schemaName: 'bulwark_rule_draft' });
+  const usage = res.usage;
+  if (res.stop === 'refusal') return { kind: 'refuse', reason: 'This cannot be a guard rule.', usage };
+  if (res.stop === 'length') throw new Error('translator ran out of tokens');
 
-  const raw = res.content.find((b) => b.type === 'text')?.text ?? '';
   let json: unknown;
   try {
-    json = JSON.parse(raw);
+    json = JSON.parse(res.text);
   } catch {
     throw new Error('translator returned no JSON');
   }
@@ -184,7 +138,7 @@ export async function compileRule(client: MessagesClient, input: CompileInput): 
   if (out.outcome !== 'rule' || !out.rule) throw new Error('translator returned no rule');
 
   const body = out.rule;
-  const draft = { ...body, id: nextRuleId(input.policy), source: { text, compiler: COMPILER_ID } };
+  const draft = { ...body, id: nextRuleId(input.policy), source: { text, compiler: `${provider.id}/${COMPILER_VERSION}` } };
   const check = checkDraft(text, input.policy, draft);
   // The repeat choice must come from the user's own words, whatever the model returned: if the sentence
   // does not say, or says something else, ask. (Other violations are shown as they are.)
@@ -194,3 +148,4 @@ export async function compileRule(client: MessagesClient, input: CompileInput): 
 }
 
 export * from './describe.js';
+export * from './providers.js';

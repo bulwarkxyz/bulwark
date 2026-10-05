@@ -1,6 +1,6 @@
 import type { Policy } from '@bulwarkxyz/guard-core';
 import { describe, expect, it } from 'vitest';
-import { compileRule, describeRule, MODEL, nextRuleId, OUTPUT_SCHEMA, REPEAT_QUESTION, repeatInText, type MessagesClient } from '../src/index.js';
+import { ANTHROPIC_MODEL, anthropicProvider, compileRule, describeRule, nextRuleId, OUTPUT_SCHEMA, REPEAT_QUESTION, repeatInText, type MessagesClient } from '../src/index.js';
 
 const policy: Policy = {
   version: 3,
@@ -29,9 +29,9 @@ function stub(output: unknown, stop = 'end_turn'): MessagesClient & { calls: Arr
 describe('compileRule', () => {
   it('sends one tool-free structured-output request to the pinned model', async () => {
     const c = stub({ outcome: 'clarify', rule: null, message: 'Which market?' });
-    await compileRule(c, { text: 'cut it when it drops', policy, markets });
+    await compileRule(anthropicProvider(c), { text: 'cut it when it drops', policy, markets });
     const p = c.calls[0]!;
-    expect(p.model).toBe(MODEL);
+    expect(p.model).toBe(ANTHROPIC_MODEL);
     expect(p.tools).toBeUndefined();
     expect((p.output_config as { format: { type: string } }).format.type).toBe('json_schema');
     expect(String((p.messages as Array<{ content: string }>)[0]!.content)).toContain('<sentence>cut it when it drops</sentence>');
@@ -44,20 +44,20 @@ describe('compileRule', () => {
       rule: { window: 'weekend', when: { kind: 'priceMove', market: 'xyz:CL', direction: 'down', movePct: 8, from: 'window_start' }, then: [{ kind: 'reduce', target: { kind: 'market', market: 'xyz:CL' }, fraction: 0.5 }], repeat: { mode: 'oncePerBreach' } },
       message: '',
     });
-    const r = await compileRule(c, { text, policy, markets });
+    const r = await compileRule(anthropicProvider(c), { text, policy, markets });
     expect(r.kind).toBe('draft');
     if (r.kind !== 'draft') return;
     expect(r.check.ok).toBe(true);
     expect(r.check.policy?.version).toBe(4);
     expect(r.check.policy?.rules).toHaveLength(2);
     expect(r.check.rule?.id).toBe('ai-2');
-    expect(r.check.rule?.source).toEqual({ text, compiler: 'claude-opus-5-5/v1' });
+    expect(r.check.rule?.source).toEqual({ text, compiler: 'anthropic:claude-opus-5-5/v2' });
     expect(describeRule(r.check.rule!)).toBe('Fri US close → Mon US open: when CL moves down 8% or more since the window opened, cut the CL position by 50%. Acts once per fall, then leaves the rest to the backstop.');
   });
 
   it('the repeat choice comes only from the user’s words: if the sentence does not say, it asks, whatever the model returned', async () => {
     const rule = { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'close', target: { kind: 'all' } }] };
-    const ask = (text: string, repeat?: unknown) => compileRule(stub({ outcome: 'rule', rule: { ...rule, ...(repeat ? { repeat } : {}) }, message: '' }), { text, policy, markets });
+    const ask = (text: string, repeat?: unknown) => compileRule(anthropicProvider(stub({ outcome: 'rule', rule: { ...rule, ...(repeat ? { repeat } : {}) }, message: '' })), { text, policy, markets });
     // Not said: asks, even when the model picked one.
     expect(await ask('below 2x close everything')).toMatchObject({ kind: 'clarify', question: REPEAT_QUESTION });
     expect(await ask('below 2x close everything', { mode: 'everyCrossing' })).toMatchObject({ kind: 'clarify', question: REPEAT_QUESTION });
@@ -85,35 +85,35 @@ describe('compileRule', () => {
 
   it('rejects a draft containing a number the user did not type (I5)', async () => {
     const c = stub({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 1.5 }, then: [{ kind: 'close', target: { kind: 'all' } }] }, message: '' });
-    const r = await compileRule(c, { text: 'close everything if things get bad', policy, markets });
+    const r = await compileRule(anthropicProvider(c), { text: 'close everything if things get bad', policy, markets });
     expect(r.kind === 'draft' && r.check.ok).toBe(false);
     expect(r.kind === 'draft' && r.check.violations.join()).toContain('1.5');
   });
 
   it('reports an out-of-range value as a violation instead of throwing', async () => {
     const c = stub({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'reduce', target: { kind: 'all' }, fraction: 150 }] }, message: '' });
-    const r = await compileRule(c, { text: 'below 2x cut 150%', policy, markets });
+    const r = await compileRule(anthropicProvider(c), { text: 'below 2x cut 150%', policy, markets });
     expect(r.kind === 'draft' && r.check.ok).toBe(false);
   });
 
   it('passes through a refusal and a question when they carry no invented numbers', async () => {
-    expect(await compileRule(stub({ outcome: 'refuse', rule: null, message: 'The guard cannot raise leverage.' }), { text: 'raise my leverage', policy, markets })).toMatchObject({ kind: 'refuse', reason: 'The guard cannot raise leverage.' });
-    expect(await compileRule(stub({ outcome: 'clarify', rule: null, message: 'Which market?' }), { text: 'cut when down 5%', policy, markets })).toMatchObject({ kind: 'clarify', question: 'Which market?' });
+    expect(await compileRule(anthropicProvider(stub({ outcome: 'refuse', rule: null, message: 'The guard cannot raise leverage.' })), { text: 'raise my leverage', policy, markets })).toMatchObject({ kind: 'refuse', reason: 'The guard cannot raise leverage.' });
+    expect(await compileRule(anthropicProvider(stub({ outcome: 'clarify', rule: null, message: 'Which market?' })), { text: 'cut when down 5%', policy, markets })).toMatchObject({ kind: 'clarify', question: 'Which market?' });
   });
 
   it('replaces a question that suggests a number', async () => {
-    const r = await compileRule(stub({ outcome: 'clarify', rule: null, message: 'Did you mean a 20% drop?' }), { text: 'cut CL if it drops a lot', policy, markets });
+    const r = await compileRule(anthropicProvider(stub({ outcome: 'clarify', rule: null, message: 'Did you mean a 20% drop?' })), { text: 'cut CL if it drops a lot', policy, markets });
     expect(r.kind === 'clarify' && r.question).not.toContain('20');
   });
 
   it('treats a model refusal stop as a refusal', async () => {
-    expect((await compileRule(stub({}, 'refusal'), { text: 'x', policy, markets })).kind).toBe('refuse');
+    expect((await compileRule(anthropicProvider(stub({}, 'refusal')), { text: 'x', policy, markets })).kind).toBe('refuse');
   });
 
   it('does not call the model for empty or overlong input', async () => {
     const c = stub({});
-    expect((await compileRule(c, { text: '  ', policy, markets })).kind).toBe('clarify');
-    expect((await compileRule(c, { text: 'a'.repeat(501), policy, markets })).kind).toBe('refuse');
+    expect((await compileRule(anthropicProvider(c), { text: '  ', policy, markets })).kind).toBe('clarify');
+    expect((await compileRule(anthropicProvider(c), { text: 'a'.repeat(501), policy, markets })).kind).toBe('refuse');
     expect(c.calls).toHaveLength(0);
   });
 });

@@ -25,6 +25,8 @@ export interface Me {
   newKeyCustody: 'sealed' | 'kms';
   keyStatus: 'none' | 'creating' | 'ready' | 'wiped';
   pendingAgent: null | { address: Hex };
+  /** The AI translator's model provider, named next to the translator (absent on older API builds). */
+  translator?: { enabled: boolean; provider: string | null };
   /** `needsRepeatChoice`: rule ids still without the once / every-time choice (empty when none). */
   policy: null | { version: number; hash: string; confirmedAt: number; policy: Policy; needsRepeatChoice?: string[] };
 }

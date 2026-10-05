@@ -19,10 +19,6 @@ Windows are a fixed table, not numbers: **weekend** (Friday US close to Monday U
 
 ## Once per fall, or every time
 
-<Callout type="info" title="Rolling out">
-  This choice reaches the app with its next update. Until then, every stage acts every time its line is crossed, as before.
-</Callout>
-
 Every rule carries one more setting, which you choose and the app never pre-selects:
 
 - **Once per fall:** act once when the trigger is met, then leave the rest of the fall to the backstop. It acts again only after the market recovers to where it was when it acted.
@@ -38,9 +34,9 @@ The app never pre-fills a number and never suggests one. Every line, share and a
 
 ## The AI translator
 
-You can write a rule in a sentence, for example *"close gold if it falls [your number]% overnight"*. An AI model (Claude, by Anthropic) turns it into one exact rule. The app labels it as an AI translator.
+You can write a rule in a sentence, for example *"close gold if it falls [your number]% overnight"*. An OpenAI model (GPT-6.1 Sol, through OpenAI's API) turns it into one exact rule. The app labels it as the AI translator and names the provider next to it.
 
-- **What it sees:** your sentence, the market list and your current rules. No keys, and no access to the exchange.
+- **What it sees:** your sentence, the market list and your current rules, sent to OpenAI for this one request and not stored there for later retrieval (the request is made with storage off). No keys, no account data beyond those rules, no tools, and no access to the exchange. See [Privacy](/privacy).
 - **Numbers:** every number in a draft must be one you typed; otherwise the draft is refused before you see it.
 - **Only adds protection:** a draft can add a rule. It cannot change, loosen or remove an existing rule or your slippage limit. Loosening is a manual edit with its own signature.
 - **Once or every time, only from your words:** the translator sets this only if your sentence says it ("only once", "every time"). If it doesn't, you get a question back, whatever the model would have picked. A plain "once the buffer drops…" or "whenever…" doesn't count, because those usually mean "when". A limit's numbers must be ones you typed.
@@ -49,7 +45,7 @@ You can write a rule in a sentence, for example *"close gold if it falls [your n
 - **You sign it:** nothing applies until you sign the new policy version in your wallet.
 
 <Callout type="info" title="Status">
-  The translator is built and tested with a stand-in model; it switches on in the testnet preview when its API key is configured. Until then, use the stage editor.
+  The translator is switched off. It switches on in the testnet preview only after it passes our full test set (including every adversarial sentence) with the live model. Until then, use the stage editor.
 </Callout>
 
 ## Signing a policy
