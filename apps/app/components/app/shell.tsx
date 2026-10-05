@@ -10,6 +10,7 @@ import { BufferMeter, GuardChip } from './guard-ui';
 import { ConnectButton } from './connect';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { BrandMark, Icon } from './icons';
+import { useTimes } from '@/lib/time';
 
 const NAV = [
   { href: '/app/trade/CL', label: 'Trade', match: '/app/trade' },
@@ -248,6 +249,7 @@ function MobileGuard() {
 
 /** Testnet label, part 3 of 3, plus how fresh every data source is. */
 function StatusBar() {
+  const times = useTimes();
   const markets = useXyzMarkets();
   const live = useStreamStatus();
   const g = useGuardView();
@@ -283,7 +285,7 @@ function StatusBar() {
         </span>
       ) : null}
       <span className="sp" />
-      <span className="hide-sm">Times in UTC</span>
+      <span className="hide-sm">{times.utc ? 'Times in UTC' : 'Times in your local time'}</span>
     </footer>
   );
 }

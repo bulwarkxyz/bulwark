@@ -11,6 +11,7 @@ import { useGuardView, useNow } from '@/lib/guard';
 import { realisedFeeBps, useAccountView, useFills, useXyzMarkets, type MarketCtx } from '@/lib/hl';
 import { MARKETS, homeOpen, sessionLabel, type Category, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
+import { useTimes } from '@/lib/time';
 
 const CATS: Array<'All' | Category> = ['All', 'Commodities', 'Indices', 'Stocks'];
 const SPEC = 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md';
@@ -24,6 +25,7 @@ function noData(c: MarketCtx | undefined) {
 }
 
 function Detail({ m, ctx, now, position }: { m: Market; ctx: MarketCtx | undefined; now: number; position: React.ReactNode }) {
+  const { utc } = useTimes();
   const { address } = useViewer();
   const fills = useFills(address);
   const paid = realisedFeeBps(fills.data, m.coin);
@@ -53,7 +55,7 @@ function Detail({ m, ctx, now, position }: { m: Market; ctx: MarketCtx | undefin
         <div className="row">
           <span className="chip chip-sm">
             {open ? null : Icon.moon(12)}
-            {sessionLabel(m.session, now)}
+            {sessionLabel(m.session, now, utc)}
           </span>
           <span className="chip chip-sm">{open ? 'Oracle: external price' : 'Oracle: trade.xyz off-hours price'}</span>
         </div>
@@ -102,6 +104,7 @@ export default function MarketsPage() {
   const view = useAccountView(address);
   const g = useGuardView();
   const now = useNow();
+  const { utc } = useTimes();
   const [cat, setCat] = useState<(typeof CATS)[number]>('All');
   const [q, setQ] = useState(review.state === 'empty' ? 'copper' : '');
   const [sel, setSel] = useState(MARKETS[0]!.coin);
@@ -223,7 +226,7 @@ export default function MarketsPage() {
                           <td className="r num">{noData(c) ? '—' : `${c!.fundingHourlyPct.toFixed(4)}%`}</td>
                           <td className="r num">{c ? `${c.maxLeverage}×` : '—'}</td>
                           <td>
-                            <span className={`small ${open ? '' : 't2'}`}>{sessionLabel(m.session, now)}</span>
+                            <span className={`small ${open ? '' : 't2'}`}>{sessionLabel(m.session, now, utc)}</span>
                           </td>
                           <td>{youCell(m.coin)}</td>
                         </tr>
@@ -242,7 +245,7 @@ export default function MarketsPage() {
                         <b>
                           {m.ticker} · <span className="t2" style={{ fontWeight: 400 }}>{m.name}</span>
                         </b>
-                        <span className="tiny t3">{c?.delisted ? `Delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : sessionLabel(m.session, now)}</span>
+                        <span className="tiny t3">{c?.delisted ? `Delisted${NETWORK === 'testnet' ? ' on testnet' : ''}` : sessionLabel(m.session, now, utc)}</span>
                       </span>
                       {youCell(m.coin)}
                       <span className="col" style={{ gap: 1, alignItems: 'flex-end' }}>

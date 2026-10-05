@@ -5,9 +5,11 @@ import { DisconnectButton } from '@/components/app/connect';
 import { fmtBuffer, fmtSignedUsd, fmtUsd, shortAddr, upDown } from '@/components/app/format';
 import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
-import { KEY_STORAGE, KEY_TEXT, shownCustody } from '@/components/app/keys';
+import { KEY_STORAGE, guardKeyStatus, shownCustody } from '@/components/app/keys';
 import { poolState } from '@/components/app/positions-table';
-import { NETWORK } from '@/lib/env';
+import { BUILDER_FEE_TENTHS_BPS } from '@bulwarkxyz/config';
+import { BUILDER_ON, NETWORK } from '@/lib/env';
+import { tradingKey } from '@/lib/signing';
 import { tickerOf, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView, useFills } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
@@ -36,8 +38,14 @@ export default function AccountPage() {
   const error = review.state === 'error' || view.isError;
   const upnl = risk ? risk.pools.reduce((s, p) => s + p.positions.reduce((t, r) => t + r.unrealizedPnl, 0), 0) : 0;
   const available = risk ? risk.idle.reduce((s, i) => s + i.available, 0) : 0;
-  const notional = (fills.data ?? []).reduce((s, f) => s + Number(f.px) * Number(f.sz), 0);
-  const feeAll = notional ? ((fills.data ?? []).reduce((s, f) => s + Number(f.fee), 0) / notional) * 100 : null;
+  // Fee rate over the last 30 days of fills (what Hyperliquid actually charged, builder fee included).
+  const recent = (fills.data ?? []).filter((f) => f.time >= Date.now() - 30 * 86_400_000);
+  const notional = recent.reduce((s, f) => s + Number(f.px) * Number(f.sz), 0);
+  const feeAll = notional ? (recent.reduce((s, f) => s + Number(f.fee), 0) / notional) * 100 : null;
+  const marginUsed = risk ? risk.pools.reduce((s, p) => s + p.positions.reduce((t, r) => t + r.position.api.marginUsed, 0), 0) : 0;
+  const custody = shownCustody(me.data);
+  const tk = address && !review.on ? tradingKey(address) : null;
+  const approvedMax = me.data?.builder.approvedMaxTenthsBps ?? 0;
   const closed = (risk?.pools ?? []).flatMap((p) => p.positions).some((r) => {
     const m = marketByCoin(r.position.coin);
     return m ? !homeOpen(m.session, now) : false;
@@ -90,7 +98,7 @@ export default function AccountPage() {
       ) : loading ? (
         <>
           <div className="grid4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            {['Account value', 'Unrealised PnL', 'Available', 'Lowest buffer', 'Your fee rate'].map((l) => (
+            {['Account value', 'Unrealised PnL', 'Margin used', 'Idle USDC', 'Lowest buffer', 'Your fee rate, 30 days'].map((l) => (
               <div key={l} className="tile">
                 <span className="lbl">{l}</span>
                 <span className="sk" style={{ width: '70%', height: 18 }} />
@@ -114,7 +122,11 @@ export default function AccountPage() {
               <span className={`num ${upDown(upnl)}`}>{fmtSignedUsd(upnl)}</span>
             </div>
             <div className="tile">
-              <span className="lbl">Available (idle)</span>
+              <span className="lbl">Margin used</span>
+              <span className="num">{fmtUsd(marginUsed)}</span>
+            </div>
+            <div className="tile">
+              <span className="lbl">Idle USDC</span>
               <span className="num">{fmtUsd(available)}</span>
             </div>
             <div className="tile">
@@ -124,8 +136,8 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="tile">
-              <span className="lbl">Your fee rate (fills)</span>
-              <span className="num">{feeAll === null ? 'no fills yet' : `${feeAll.toFixed(4)}%`}</span>
+              <span className="lbl">Your fee rate, 30 days</span>
+              <span className="num">{feeAll === null ? 'no fills' : `${feeAll.toFixed(3)}%`}</span>
             </div>
           </div>
 
@@ -137,7 +149,34 @@ export default function AccountPage() {
               {g.exampleRules ? <span className="tag">Example rules</span> : null}
             </div>
             {risk.pools.length ? (
-              <div className="tblw">
+              <>
+              <ul className="mobile-only plist" aria-label="Margin pools">
+                {[...risk.pools]
+                  .sort((a, b) => a.buffer - b.buffer)
+                  .map((p) => (
+                    <li key={p.pool.id}>
+                      <div className="row nw" style={{ justifyContent: 'space-between' }}>
+                        <b>{poolLabel(p.pool.kind, p.pool.dex, p.pool.token, p.positions[0]?.position.coin)}</b>
+                        <GuardChip state={poolState(g, p)} sm />
+                      </div>
+                      <span className="small">
+                        {p.positions.map((r) => (
+                          <span key={r.position.key} style={{ marginRight: 8 }}>
+                            <span className={r.position.size > 0 ? 'long' : 'short'}>{r.position.size > 0 ? 'Long' : 'Short'}</span> <span className="num">{Math.abs(r.position.size)}</span> {tickerOf(r.position.coin)}
+                          </span>
+                        ))}
+                      </span>
+                      <div className="row nw" style={{ gap: 10 }}>
+                        <span className="num small" style={{ width: 52 }}>{fmtBuffer(p.buffer)}</span>
+                        <BufferMeter size="row" buffer={p.buffer} lines={g.lines} state={poolState(g, p)} />
+                      </div>
+                      <span className="tiny t2 num">
+                        equity {fmtUsd(p.equity)} · maintenance {fmtUsd(p.maintenance)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+              <div className="tblw hide-sm">
                 <table className="tbl" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
@@ -179,62 +218,99 @@ export default function AccountPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             ) : (
               <div className="pb small t2">No open positions, so no margin pools.</div>
             )}
           </section>
 
           <div className="grid2 even">
-            <section className="panel" aria-label="Idle balances">
+            <section className="panel" aria-labelledby="acct-keys-h">
               <div className="ph">
-                <h2>Idle balances</h2>
-                <span className="tiny t3">what a top-up rule can move in, up to the amount you typed</span>
-              </div>
-              {risk.idle.length ? (
-                <div className="pb col" style={{ gap: 0 }}>
-                  {risk.idle.map((s) => (
-                    <div key={s.id} className="kv line">
-                      <span className="small">{s.kind === 'spot' ? 'Spot USDC' : s.kind === 'dex' ? `${s.dex === '' ? 'Main dex' : s.dex} withdrawable` : `Token ${s.token} free balance`}</span>
-                      <span className="num small">{fmtUsd(s.available)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="pb small t2">No idle balances.</div>
-              )}
-            </section>
-            <section className="panel" aria-label="Keys and addresses">
-              <div className="ph">
-                <h2>Keys and addresses</h2>
+                <h2 id="acct-keys-h">Keys</h2>
+                <span className="sp" />
+                <Link className="tiny" href="/app/settings" style={{ textDecoration: 'underline' }}>
+                  Manage in Settings
+                </Link>
               </div>
               <div className="pb col" style={{ gap: 0 }}>
                 <div className="kv line">
-                  <span className="small">Your account</span>
-                  <span className="num small">{address ? shortAddr(address) : '—'}</span>
-                </div>
-                <div className="kv line">
                   <span className="small">Guard key</span>
-                  <span className="small">{me.data?.agent ? `${me.data.agent.approved ? 'approved' : 'not approved'}` : 'not created'}</span>
+                  <span className="small">{me.data?.agent ? `${custody ? `${KEY_STORAGE[custody]} · ` : ''}${me.data.agent.approved ? 'approved as your agent' : 'not approved yet'}` : guardKeyStatus(me.data).toLowerCase()}</span>
                 </div>
                 <div className="kv line">
-                  <span className="small">Key storage</span>
-                  <span className="small">{shownCustody(me.data) ? KEY_STORAGE[shownCustody(me.data)!] : '—'}</span>
+                  <span className="small">It can</span>
+                  <span className="small" style={{ textAlign: 'right' }}>reduce-only orders, your top-ups, cancel its own orders</span>
+                </div>
+                <div className="kv line">
+                  <span className="small">It cannot</span>
+                  <span className="small" style={{ textAlign: 'right' }}>withdraw, open or add to positions</span>
+                </div>
+                <div className="kv line">
+                  <span className="small">Trading key</span>
+                  <span className="small">{review.on ? 'this browser · signs your own orders (example)' : tk ? 'this browser · signs your own orders' : 'none in this browser'}</span>
                 </div>
                 <div className="kv">
-                  <span className="small">Explorer</span>
-                  <a className="small" href={`https://app.hyperliquid${NETWORK === 'testnet' ? '-testnet' : ''}.xyz/explorer/address/${address}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
-                    View on Hyperliquid
+                  <span className="small">Your account</span>
+                  <a className="small num" href={`https://app.hyperliquid${NETWORK === 'testnet' ? '-testnet' : ''}.xyz/explorer/address/${address}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
+                    {address ? shortAddr(address) : '—'} on Hyperliquid
                   </a>
                 </div>
-                <span className="small t2" style={{ marginTop: 10 }}>
-                  {shownCustody(me.data) ? KEY_TEXT[shownCustody(me.data)!] : 'Sign in to see where your guard key is stored.'}
-                </span>
                 <div className="disclose" style={{ marginTop: 10 }}>
                   {Icon.shield(14)}
                   <span>
-                    <b>Reduce-only is enforced by our engine, not by Hyperliquid.</b> The guard key cannot withdraw.
+                    Hyperliquid lets an agent key sign any order. <b>Reduce-only is enforced by our engine, not by Hyperliquid.</b> The guard key cannot withdraw.
                   </span>
                 </div>
+              </div>
+            </section>
+            <section className="panel" aria-labelledby="acct-bal-h">
+              <div className="ph">
+                <h2 id="acct-bal-h">Balances and fees</h2>
+              </div>
+              <div className="pb col" style={{ gap: 0 }}>
+                <div className="kv line">
+                  <span className="small">USDC, idle</span>
+                  <span className="num small">{fmtUsd(available)}</span>
+                </div>
+                {risk.idle.length > 1
+                  ? risk.idle.map((x) => (
+                      <div key={x.id} className="kv line">
+                        <span className="small t2">{x.kind === 'spot' ? 'Spot USDC' : x.kind === 'dex' ? `${x.dex === '' ? 'Main dex' : x.dex} withdrawable` : `Token ${x.token} free balance`}</span>
+                        <span className="num small t2">{fmtUsd(x.available)}</span>
+                      </div>
+                    ))
+                  : null}
+                <div className="kv line">
+                  <span className="small">Top-ups may use</span>
+                  <span className="small">only the amount you typed in a rule</span>
+                </div>
+                <div className="kv line">
+                  <span className="small">Hyperliquid fee, your rate</span>
+                  <span className="num small">{feeAll === null ? 'no fills in 30 days' : `${feeAll.toFixed(3)}%`}</span>
+                </div>
+                {BUILDER_ON ? (
+                  <>
+                    <div className="kv line">
+                      <span className="small">Bulwark fee</span>
+                      <span className="num small">
+                        {(BUILDER_FEE_TENTHS_BPS / 1000).toFixed(2)}% · {BUILDER_FEE_TENTHS_BPS / 10} bps
+                      </span>
+                    </div>
+                    <div className="kv">
+                      <span className="small">Fee approval</span>
+                      <span className="small">
+                        {approvedMax ? `up to ${(approvedMax / 1000).toFixed(2)}%` : 'not approved'}
+                        {NETWORK === 'testnet' ? <span className="nt"> · testnet path</span> : null}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="kv">
+                    <span className="small">Bulwark fee</span>
+                    <span className="small">none on {NETWORK}</span>
+                  </div>
+                )}
               </div>
             </section>
           </div>

@@ -14,9 +14,9 @@ import { useReview } from '@/lib/review';
 import { fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { Icon } from './icons';
 import { PositionsTable } from './positions-table';
+import { useTimes } from '@/lib/time';
 
 type Tab = 'positions' | 'orders' | 'guard' | 'fills' | 'funding' | 'history';
-const ts = (t: number) => new Date(t).toISOString().slice(5, 16).replace('T', ' ');
 
 function useOpenOrders(user: Hex | undefined) {
   return useQuery({
@@ -56,6 +56,8 @@ function Empty({ children }: { children: React.ReactNode }) {
 export function BottomPanel({ g, risk, address, connected, now, coin, loading }: { g: GuardView; risk: AccountRisk | undefined; address: Hex | undefined; connected: boolean; now: number; coin: string; loading: boolean }) {
   const [tab, setTab] = useState<Tab>('positions');
   const review = useReview();
+  const times = useTimes();
+  const ts = (t: number) => times.fmt(t, 'short');
   const signedIn = useSignedIn() || review.on;
   const orders = useOpenOrders(address);
   const fills = useFills(address);
@@ -100,7 +102,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       <div className="tblw">
         <table className="tbl">
           <thead>
-            <tr><th>Time (UTC)</th><th>Market</th><th>Type</th><th>Side</th><th className="r">Price</th><th className="r">Size</th><th>Reduce only</th></tr>
+            <tr><th>Time ({times.label})</th><th>Market</th><th>Type</th><th>Side</th><th className="r">Price</th><th className="r">Size</th><th>Reduce only</th></tr>
           </thead>
           <tbody>
             {orders.data.map((o) => (
@@ -133,7 +135,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
           <div className="tblw">
             <table className="tbl">
               <thead>
-                <tr><th>Market</th><th>Order</th><th className="r">Trigger</th><th className="r">Size</th><th className="r">Placed (UTC)</th></tr>
+                <tr><th>Market</th><th>Order</th><th className="r">Trigger</th><th className="r">Size</th><th className="r">Placed ({times.label})</th></tr>
               </thead>
               <tbody>
                 {guardOrders.orders.map((o) => (
@@ -161,7 +163,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
           <div className="tblw">
             <table className="tbl">
               <thead>
-                <tr><th>Time (UTC)</th><th>What happened</th><th className="r">Attempt</th><th className="r">Filled</th><th className="hide-sm">Why</th></tr>
+                <tr><th>Time ({times.label})</th><th>What happened</th><th className="r">Attempt</th><th className="r">Filled</th><th className="hide-sm">Why</th></tr>
               </thead>
               <tbody>
                 {acted.map((e) => {
@@ -189,7 +191,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       <div className="tblw">
         <table className="tbl">
           <thead>
-            <tr><th>Time (UTC)</th><th>Market</th><th>Direction</th><th className="r">Price</th><th className="r">Size</th><th className="r">Fee</th><th className="r">Closed PnL</th></tr>
+            <tr><th>Time ({times.label})</th><th>Market</th><th>Direction</th><th className="r">Price</th><th className="r">Size</th><th className="r">Fee</th><th className="r">Closed PnL</th></tr>
           </thead>
           <tbody>
             {fills.data.slice(0, 50).map((f, i) => (
@@ -214,7 +216,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       <div className="tblw">
         <table className="tbl">
           <thead>
-            <tr><th>Time (UTC)</th><th>Market</th><th className="r">Rate / 1h</th><th className="r">Paid or received</th></tr>
+            <tr><th>Time ({times.label})</th><th>Market</th><th className="r">Rate / 1h</th><th className="r">Paid or received</th></tr>
           </thead>
           <tbody>
             {[...funding.data].reverse().slice(0, 50).map((f, i) => (
@@ -236,7 +238,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       <div className="tblw">
         <table className="tbl">
           <thead>
-            <tr><th>Time (UTC)</th><th>Market</th><th>Type</th><th>Side</th><th className="r">Price</th><th className="r">Size</th><th>Status</th></tr>
+            <tr><th>Time ({times.label})</th><th>Market</th><th>Type</th><th>Side</th><th className="r">Price</th><th className="r">Size</th><th>Status</th></tr>
           </thead>
           <tbody>
             {history.data.slice(0, 50).map((h) => (

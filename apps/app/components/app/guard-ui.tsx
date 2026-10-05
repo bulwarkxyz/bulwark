@@ -31,23 +31,24 @@ export function GuardChip({ state, sm, label }: { state: GuardState; sm?: boolea
  * (red below the lowest, amber between, lime above the highest), ticks at each line, a pin at the buffer.
  * With no lines there are no zones: nothing is drawn that the user did not set.
  */
-export function BufferMeter({ buffer, lines, state, size = 'full', labels = false, does }: { buffer: number | null; lines: readonly number[]; state: GuardState; size?: 'mini' | 'row' | 'full'; labels?: boolean; does?: (line: number) => string }) {
-  const top = meterTop(lines);
+export function BufferMeter({ buffer, lines, draft = [], state, size = 'full', labels = false, does }: { buffer: number | null; lines: readonly number[]; draft?: readonly number[]; state: GuardState; size?: 'mini' | 'row' | 'full'; labels?: boolean; does?: (line: number) => string }) {
+  // `draft`: lines in rules the user hasn't signed yet; drawn in amber, no zones.
+  const top = meterTop([...lines, ...draft]);
   const lo = lines.length ? meterPos(Math.min(...lines), top) : 0;
   const hi = lines.length ? meterPos(Math.max(...lines), top) : 0;
   const pin = buffer === null ? null : Number.isFinite(buffer) ? meterPos(buffer, top) : 100;
   const pinCls = state === 'acting' ? 'acting' : state === 'risk' ? 'risk' : state === 'protected' ? '' : 'off';
   const h = size === 'mini' ? 8 : size === 'row' ? 6 : 12;
   // Labels that sit close together (or close to the liquidation label) alternate onto a second row.
-  const sorted = [...lines].sort((a, b) => a - b);
+  const sorted = [...lines.map((l) => ({ l, draft: false })), ...draft.map((l) => ({ l, draft: true }))].sort((a, b) => a.l - b.l);
   let prev = 0;
   let prevRow = 0;
-  const placed = sorted.map((l) => {
+  const placed = sorted.map(({ l, draft: d }) => {
     const pos = meterPos(l, top);
     const row = pos - prev < 16 ? 1 - prevRow : 0;
     prev = pos;
     prevRow = row;
-    return { l, pos, row };
+    return { l, pos, row, d };
   });
   const staggered = placed.some((p) => p.row === 1);
   const label = buffer === null ? 'No buffer yet' : `Buffer ${Number.isFinite(buffer) ? buffer.toFixed(2) : 'no positions'}×${lines.length ? `, lines at ${lines.map((l) => `${l}×`).join(', ')}` : ', no lines set'}`;
@@ -65,6 +66,9 @@ export function BufferMeter({ buffer, lines, state, size = 'full', labels = fals
         {lines.map((l) => (
           <div key={l} className="ln" style={{ left: `${meterPos(l, top)}%` }} />
         ))}
+        {draft.map((l) => (
+          <div key={`d${l}`} className="ln draft" style={{ left: `${meterPos(l, top)}%` }} />
+        ))}
         {pin !== null ? <div className={`pin ${pinCls}`} style={{ left: `${pin}%` }} /> : null}
       </div>
       {labels ? (
@@ -74,11 +78,11 @@ export function BufferMeter({ buffer, lines, state, size = 'full', labels = fals
             <br />
             liquidation
           </span>
-          {placed.map(({ l, pos, row }) => (
-            <span key={l} style={{ left: `${pos}%`, top: row ? 30 : 0 }}>
+          {placed.map(({ l, pos, row, d }) => (
+            <span key={`${d ? 'd' : ''}${l}`} className={d ? 'wt' : undefined} style={{ left: `${pos}%`, top: row ? 30 : 0 }}>
               <span className="num">{l}×</span>
               <br />
-              {does?.(l) ?? ''}
+              {d ? 'draft' : (does?.(l) ?? '')}
             </span>
           ))}
         </div>

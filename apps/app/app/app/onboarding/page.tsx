@@ -6,8 +6,9 @@ import { useEffect, useState } from 'react';
 import { ConnectButton, useSignIn } from '@/components/app/connect';
 import { fmtUsd } from '@/components/app/format';
 import { Icon } from '@/components/app/icons';
-import { BuilderCard, GuardKeyCard, TradingKeyCard } from '@/components/app/keys';
-import { StageForm } from '@/components/app/stage-form';
+import { BuilderCard, GuardKeyCard, KEY_STORAGE, TradingKeyCard, shownCustody } from '@/components/app/keys';
+import { ActiveRules, HowGuardTrades, RuleBuilder, usePolicyDraft } from '@/components/app/rules-editor';
+import { shortAddr } from '@/components/app/format';
 import { api, ApiError, useSignedIn } from '@/lib/api';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { useNow } from '@/lib/guard';
@@ -97,6 +98,19 @@ export default function OnboardingPage() {
     ...(BUILDER_ON ? [(me.data?.builder.approvedMaxTenthsBps ?? 0) >= (me.data?.builder.feeTenthsBps ?? 1)] : []),
     Boolean(me.data?.policy),
   ];
+  const custody = shownCustody(me.data);
+  // What each finished step settled, in the list (the board's second line).
+  const settled = [
+    address ? `${shortAddr(address)} · signed in` : null,
+    me.data?.user ? (me.data.user.region === 'allowed' ? 'Allowed: trading and the guard' : 'Trading and alerts only in your region') : null,
+    funded && view.data ? `${fmtUsd(view.data.risk.accountValue)} USDC${review.on ? ' (example account)' : ''}` : null,
+    me.data?.agent?.approved && custody ? `An agent key in ${KEY_STORAGE[custody].replace(', hardware-backed', '')} that can only reduce` : null,
+    null,
+    ...(BUILDER_ON ? [done[5] ? 'Approved' : null] : []),
+    me.data?.policy ? `Version ${me.data.policy.version} signed` : null,
+  ];
+  const draft = usePolicyDraft();
+  const held = (view.data?.risk.pools ?? []).flatMap((p) => p.positions.map((r) => r.position.coin));
   const firstOpen = done.findIndex((d) => !d);
   const current = step ?? (firstOpen === -1 ? STEPS.length - 1 : firstOpen);
   const name = STEPS[current]!.name;
@@ -172,6 +186,9 @@ export default function OnboardingPage() {
   } else if (name === 'Approve the guard key') {
     body = (
       <div className="pb col" style={{ gap: 12 }}>
+        <span className="small t2">
+          Bulwark’s guard key is created for you{custody === 'kms' ? ' in AWS KMS' : custody === 'sealed' ? ' on Bulwark’s signing service' : ''} and approved on Hyperliquid as your agent. It is the key that acts when your rules say so.
+        </span>
         <div className="grid2 even" style={{ gap: 12 }}>
           <div className="panel pb" style={{ background: 'var(--s2)' }}>
             <b className="small">It can</b>
@@ -198,34 +215,53 @@ export default function OnboardingPage() {
             </span>
           </div>
         ) : null}
-        <GuardKeyCard />
+        <div className="disclose">
+          {Icon.shield(14)}
+          <span>
+            Hyperliquid lets an agent key sign any order. <b>Reduce-only is enforced by our engine, not by Hyperliquid. The guard key cannot withdraw</b>: Hyperliquid agent keys can’t move funds out.
+          </span>
+        </div>
+        <GuardKeyCard variant="bare" setup />
       </div>
     );
   } else if (name === 'Create your trading key') {
     body = (
-      <div className="pb">
-        <TradingKeyCard />
+      <div className="pb col" style={{ gap: 12 }}>
+        <TradingKeyCard variant="bare" />
+        <button type="button" className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setStep(current + 1)}>
+          Skip for now: I’ll sign each order in my wallet
+        </button>
       </div>
     );
   } else if (name === 'Approve the Bulwark fee') {
     body = (
       <div className="pb">
-        <BuilderCard />
+        <BuilderCard variant="bare" />
       </div>
     );
   } else {
     body = (
-      <div className="pb col" style={{ gap: 12 }}>
+      <div className="pb col" style={{ gap: 16 }}>
         {anyClosed ? (
           <div className="banner">
             {Icon.moon()}
-            <span>Some home markets are closed now. Rules you sign start watching at once, on trade.xyz’s off-hours prices.</span>
+            <span>Home markets are closed now. Rules you sign start watching at once, on trade.xyz’s off-hours prices.</span>
           </div>
         ) : null}
-        <span className="small t2">
-          Set the buffer lines where the guard steps in and what it does at each. You can add rules in your own words afterwards on <Link href="/app/rules" style={{ textDecoration: 'underline' }}>Guard rules</Link>.
-        </span>
-        <StageForm />
+        {me.data?.policy ? (
+          <span className="small">
+            Your rules are signed (version {me.data.policy.version}). Add more in your own words on <Link href="/app/rules" style={{ textDecoration: 'underline' }}>Guard rules</Link>, where the AI translator turns a sentence into a rule.
+          </span>
+        ) : (
+          <>
+            <span className="small t2">
+              What should the guard do, and when? Build your first rule with your own numbers, set how far from the mark the guard may trade, then sign. The AI translator, for rules in your own words, opens once this first version is signed.
+            </span>
+            <RuleBuilder s={draft} held={held} disabled={!connected} bare />
+            <HowGuardTrades s={draft} bare />
+            <ActiveRules s={draft} status={() => ({ text: 'Not active until you sign', cls: 'wt' })} loading={false} bare title="Your first rules" />
+          </>
+        )}
       </div>
     );
   }
@@ -234,7 +270,7 @@ export default function OnboardingPage() {
     <div className="pg" style={{ maxWidth: 1240 }}>
       <div className="grid2 lead400">
         <div className="mobile-only col" style={{ gap: 8 }}>
-          <h1 className="h1">Set up Bulwark</h1>
+          <h1 className="h1">{name}</h1>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STEPS.length}, minmax(0,1fr))`, gap: 4 }} aria-hidden="true">
             {STEPS.map((s, i) => (
               <span key={s.name} style={{ height: 4, borderRadius: 2, background: done[i] ? 'var(--ink)' : i === current ? 'var(--text-2)' : 'var(--s3)' }} />
@@ -249,7 +285,7 @@ export default function OnboardingPage() {
             Set up Bulwark
           </h1>
           <p className="small t2" style={{ margin: '0 0 8px' }}>
-            {STEPS.length} steps, each signed in your wallet. You can trade after the trading key; the guard arms after your first rules. Nothing here moves your funds.
+            {STEPS.length === 7 ? 'Seven' : 'Six'} steps. You can trade after step 5; the guard arms after step {STEPS.length}. Each is signed in your wallet, and nothing here moves your funds.
           </p>
           <ol className="steps">
             {STEPS.map((s, i) => (
@@ -258,7 +294,7 @@ export default function OnboardingPage() {
                   <span className={`n ${done[i] ? 'done' : i === current ? 'cur' : ''}`}>{done[i] ? Icon.check() : i + 1}</span>
                   <span className="col" style={{ gap: 2 }}>
                     <b className={done[i] || i === current ? '' : 't2'}>{s.name}</b>
-                    <span className="small t2">{s.sub}</span>
+                    <span className="small t2">{settled[i] ?? s.sub}</span>
                   </span>
                 </button>
               </li>
@@ -266,7 +302,7 @@ export default function OnboardingPage() {
           </ol>
         </section>
         <section className="panel" aria-label="Current step" style={{ marginTop: 8 }}>
-          <div className="ph">
+          <div className="ph hide-sm">
             <h2>
               Step {current + 1} · {name}
             </h2>
@@ -276,20 +312,29 @@ export default function OnboardingPage() {
             </span>
           </div>
           {body}
-          <div className="row" style={{ justifyContent: 'space-between', padding: '0 12px 12px' }}>
-            <button type="button" className="btn btn-sm btn-ghost" disabled={current === 0} onClick={() => setStep(Math.max(0, current - 1))}>
-              Back
-            </button>
-            {current < STEPS.length - 1 ? (
-              <button type="button" className="btn btn-sm" onClick={() => setStep(current + 1)}>
-                Next
-              </button>
-            ) : (
-              <Link className="btn btn-sm" href="/app/positions">
-                Go to positions
-              </Link>
+          {done[current] ? (
+            <div className="row" style={{ padding: '0 12px 12px' }}>
+              {current < STEPS.length - 1 ? (
+                <button type="button" className="btn btn-sm" onClick={() => setStep(firstOpen === -1 ? current + 1 : Math.max(firstOpen, current + 1))}>
+                  Continue to step {(firstOpen === -1 ? current + 1 : Math.max(firstOpen, current + 1)) + 1}
+                </button>
+              ) : (
+                <Link className="btn btn-sm btn-ink" href="/app/positions">
+                  Go to positions
+                </Link>
+              )}
+            </div>
+          ) : null}
+          <ul className="mobile-only checklist" aria-label="Done so far">
+            {STEPS.map((st, i) =>
+              done[i] && i !== current ? (
+                <li key={st.name}>
+                  <span className="n done">{Icon.check()}</span>
+                  {settled[i] ?? st.name}
+                </li>
+              ) : null,
             )}
-          </div>
+          </ul>
         </section>
       </div>
     </div>

@@ -1,6 +1,5 @@
 'use client';
 
-import { describeRule } from '@bulwarkxyz/compiler';
 import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -9,7 +8,7 @@ import { useChainId, useSignTypedData } from 'wagmi';
 import { fmtBuffer } from '@/components/app/format';
 import { BufferMeter } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
-import { StageForm } from '@/components/app/stage-form';
+import { ActiveRules, HowGuardTrades, RuleBuilder, usePolicyDraft, type PolicyDraftState } from '@/components/app/rules-editor';
 import { api, ApiError, useSignedIn } from '@/lib/api';
 import { describeAction, tickerOf, useGuardView, useNow, type GuardView } from '@/lib/guard';
 import { useAccountView } from '@/lib/hl';
@@ -17,6 +16,7 @@ import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
+import { useTimes } from '@/lib/time';
 
 type DraftReply =
   | { kind: 'draft'; rule: Rule; description: string; provenance: Array<{ path: string; value: number; typed: number }>; policy: Policy }
@@ -24,7 +24,7 @@ type DraftReply =
   | { kind: 'refuse'; reason: string }
   | { kind: 'rejected'; violations: string[] };
 
-function Translator({ enabled, forced }: { enabled: boolean; forced: 'loading' | 'error' | null }) {
+function Translator({ enabled, forced, s }: { enabled: boolean; forced: 'loading' | 'error' | null; s: PolicyDraftState }) {
   const qc = useQueryClient();
   const chainId = useChainId();
   const { signTypedDataAsync } = useSignTypedData();
@@ -83,7 +83,7 @@ function Translator({ enabled, forced }: { enabled: boolean; forced: 'loading' |
           <button type="button" className="btn btn-ink" disabled={!text.trim() || busy !== null || !enabled} onClick={translate}>
             {translating ? 'Translating…' : 'Translate'}
           </button>
-          <span className="small t3">{enabled ? 'The translator turns your sentence into a rule. It never adds a number.' : 'Sign your first buffer stages (right) first; the translator adds to them.'}</span>
+          <span className="small t3">{enabled ? 'The translator turns your sentence into a rule. It never adds a number.' : 'Sign your first rules (build one by hand) first; the translator adds to them.'}</span>
         </div>
 
         {translating ? (
@@ -121,13 +121,24 @@ function Translator({ enabled, forced }: { enabled: boolean; forced: 'loading' |
               </span>
             </div>
             <div className="row">
-              <button type="button" className="btn btn-sm btn-ink" disabled={busy !== null} onClick={sign}>
+              <button type="button" className="btn btn-sm btn-ink" disabled={busy !== null || s.changes.any} onClick={sign}>
                 {busy === 'sign' ? 'Waiting for signature…' : `Sign version ${reply.policy.version}`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  s.startFrom(reply.rule);
+                  setReply(null);
+                }}
+              >
+                Edit by hand
               </button>
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => setReply(null)}>
                 Discard
               </button>
             </div>
+            {s.changes.any ? <span className="tiny wt">You have changes below that aren’t signed. Sign or discard them first, or use Edit by hand to add this rule to them.</span> : null}
           </div>
         ) : reply?.kind === 'clarify' ? (
           <div className="banner">
@@ -184,6 +195,10 @@ export default function RulesPage() {
   const now = useNow();
   const view = useAccountView(address);
   const policy = me.data?.policy;
+  const draft = usePolicyDraft();
+  const times = useTimes();
+  const held = (view.data?.risk.pools ?? []).flatMap((p) => p.positions.map((r) => r.position.coin));
+  const draftLines = draft.draft.rules.flatMap((r) => (r.when.kind === 'buffer' && !g.lines.includes(r.when.below) ? [r.when.below] : []));
   const loading = review.state === 'loading' || (connected && signedIn && !me.isFetched);
   const closed = (view.data?.risk.pools ?? []).flatMap((p) => p.positions).some((r) => {
     const m = marketByCoin(r.position.coin);
@@ -198,7 +213,7 @@ export default function RulesPage() {
     <div className="pg">
       <div className="ptitle">
         <h1 className="h1">Guard rules</h1>
-        <span className="small t2">{policy ? `Version ${policy.version} · signed ${new Date(policy.confirmedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${policy.policy.rules.length} rule${policy.policy.rules.length === 1 ? '' : 's'}` : connected ? 'No signed rules yet' : ''}</span>
+        <span className="small t2">{policy ? `Version ${policy.version} · signed ${times.fmt(policy.confirmedAt)} ${times.label} · ${policy.policy.rules.length} rule${policy.policy.rules.length === 1 ? '' : 's'}` : connected ? 'No signed rules yet' : ''}</span>
         {g.exampleRules ? <span className="tag">Example rules</span> : null}
         <span className="sp" />
         <Link className="btn btn-sm" href="/app/simulator">
@@ -238,46 +253,8 @@ export default function RulesPage() {
 
       <div className="grid2 w400">
         <div className="col" style={{ gap: 16 }}>
-          <Translator enabled={Boolean(policy)} forced={review.state === 'loading' ? 'loading' : review.state === 'error' ? 'error' : null} />
-
-          <section className="panel" aria-labelledby="cur-h">
-            <div className="ph">
-              <h2 id="cur-h">Active rules</h2>
-              {policy ? <span className="tiny t3">version {policy.version} · the guard trades at most {policy.policy.execution.maxSlippagePct}% from the mark</span> : null}
-            </div>
-            {loading ? (
-              <div className="pb col" style={{ gap: 16 }}>
-                <span className="sk" style={{ width: '90%' }} />
-                <span className="sk" style={{ width: '80%' }} />
-                <span className="sk" style={{ width: '85%' }} />
-              </div>
-            ) : policy?.policy.rules.length ? (
-              <div className="pb" style={{ paddingTop: 0, paddingBottom: 0 }}>
-                {policy.policy.rules.map((r, i) => {
-                  const st = ruleStatus(r, g);
-                  return (
-                    <div key={r.id} className="rulerow">
-                      <span className="n">{i + 1}</span>
-                      <div className="col" style={{ gap: 3 }}>
-                        <span style={{ fontSize: 14 }}>{describeRule(r)}</span>
-                        {r.source ? <span className="small t3">You wrote: “{r.source.text}”</span> : null}
-                        <span className={`tiny ${st.cls}`}>{st.text}</span>
-                      </div>
-                      <span className="pill-k num">{r.id}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="empty" style={{ padding: '48px 16px' }}>
-                <div className="ico">{Icon.shield(18)}</div>
-                <b>No rules yet, so the guard is not armed.</b>
-                <span className="small" style={{ maxWidth: 460 }}>
-                  Start with your buffer stages on the right. There are no default lines: every number comes from you.
-                </span>
-              </div>
-            )}
-          </section>
+          <Translator enabled={Boolean(policy)} forced={review.state === 'loading' ? 'loading' : review.state === 'error' ? 'error' : null} s={draft} />
+          <ActiveRules s={draft} status={(r) => ruleStatus(r, g)} loading={loading} />
         </div>
 
         <div className="col" style={{ gap: 16 }}>
@@ -296,20 +273,15 @@ export default function RulesPage() {
                 <span className="sk" style={{ width: '100%', height: 12 }} />
               ) : (
                 <>
-                  <BufferMeter buffer={g.worst?.buffer ?? null} lines={g.lines} state={g.state} labels does={doesAt} />
-                  {!g.lines.length ? <span className="tiny t3">No lines yet. They appear here as you add stages.</span> : null}
+                  <BufferMeter buffer={g.worst?.buffer ?? null} lines={g.lines} draft={draftLines} state={g.state} labels does={doesAt} />
+                  {!g.lines.length ? <span className="tiny t3">No lines yet. Your lines appear here as you add rules.</span> : null}
                 </>
               )}
             </div>
           </section>
 
-          <section className="panel" aria-labelledby="stages-h">
-            <div className="ph">
-              <h2 id="stages-h">Buffer stages, by hand</h2>
-              <span className="tiny t3">you sign every change</span>
-            </div>
-            <div className="pb">{loading ? <div className="skb" style={{ height: 160 }} /> : <StageForm key={policy?.version ?? 0} />}</div>
-          </section>
+          {loading ? null : <RuleBuilder s={draft} held={held} disabled={!connected} />}
+          <HowGuardTrades s={draft} />
 
           <section className="panel" aria-labelledby="retry-h">
             <div className="ph">

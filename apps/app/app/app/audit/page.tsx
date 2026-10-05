@@ -8,6 +8,7 @@ import { Icon } from '@/components/app/icons';
 import { useSignedIn } from '@/lib/api';
 import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { useReview, useViewer } from '@/lib/review';
+import { useTimes } from '@/lib/time';
 
 const KIND_LABEL: Record<string, string> = {
   guard_action: 'Guard action',
@@ -38,6 +39,7 @@ export default function AuditPage() {
   const [open, setOpen] = useState<number | null>(null);
   const [filter, setFilter] = useState('all');
   const log = useAudit();
+  const times = useTimes();
   const all = [...(log.data ?? [])].sort((a, b) => b.seq - a.seq);
   const kinds = FILTERS.find((f) => f.id === filter)?.kinds ?? null;
   const entries = kinds ? all.filter((e) => kinds.includes(e.kind)) : all;
@@ -131,7 +133,7 @@ export default function AuditPage() {
                 <li key={e.seq}>
                   <div className="row nw" style={{ gap: 8 }}>
                     <span className={`num tiny ${broken !== null && e.seq >= broken ? 'ct' : 't3'}`}>#{e.seq}</span>
-                    <span className="num tiny t2">{new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')}</span>
+                    <span className="num tiny t2">{times.fmt(e.at, 'short')}</span>
                     <span className={`chip chip-sm ${KIND_CHIP[e.kind] ?? ''}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
                     <span className="sp" />
                     <button type="button" className="btn btn-sm btn-ghost" aria-expanded={open === e.seq} onClick={() => setOpen(open === e.seq ? null : e.seq)}>
@@ -157,7 +159,7 @@ export default function AuditPage() {
               <thead>
                 <tr>
                   <th className="r">#</th>
-                  <th>When (UTC)</th>
+                  <th>When ({times.label})</th>
                   <th>Kind</th>
                   <th>What happened</th>
                   <th className="r hide-sm">Attempt</th>
@@ -170,7 +172,7 @@ export default function AuditPage() {
                   <Fragment key={e.seq}>
                     <tr>
                       <td className={`r num ${broken !== null && e.seq >= broken ? 'ct' : 't3'}`}>{e.seq}</td>
-                      <td className="num">{new Date(e.at).toISOString().slice(0, 19).replace('T', ' ')}</td>
+                      <td className="num">{times.fmt(e.at, 'full')}</td>
                       <td>
                         <span className={`chip chip-sm ${KIND_CHIP[e.kind] ?? ''}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
                       </td>

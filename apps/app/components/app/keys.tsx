@@ -15,6 +15,8 @@ import type { AuditEntry } from '@bulwarkxyz/store/audit';
 import { WipeConfirm, WipeProgress } from './wipe-confirm';
 import { approveAgentFor, approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type SignTypedData } from '@/lib/signing';
 import { shortAddr } from './format';
+import { Icon } from './icons';
+import { useTimes } from '@/lib/time';
 
 type Msg = { ok: boolean; text: string } | null;
 
@@ -24,6 +26,33 @@ function Status({ msg }: { msg: Msg }) {
       {msg.text}
     </span>
   ) : null;
+}
+
+/**
+ * How a key or fee card is drawn: a panel of its own (Settings), or bare content inside a setup step,
+ * so a step never nests a panel in a panel.
+ */
+export type CardVariant = 'card' | 'bare';
+function Frame({ variant, id, title, chip, chipCls, children }: { variant: CardVariant; id: string; title: string; chip?: React.ReactNode; chipCls?: string; children: React.ReactNode }) {
+  if (variant === 'bare')
+    return (
+      <div className="col" style={{ gap: 10 }} aria-label={title}>
+        {chip ? <span className={`chip chip-sm ${chipCls ?? ''}`} style={{ alignSelf: 'flex-start' }}>{chip}</span> : null}
+        {children}
+      </div>
+    );
+  return (
+    <section className="panel" aria-labelledby={id}>
+      <div className="ph">
+        <h2 id={id}>{title}</h2>
+        <span className="sp" />
+        {chip ? <span className={`chip chip-sm ${chipCls ?? ''}`}>{chip}</span> : null}
+      </div>
+      <div className="pb col" style={{ gap: 10 }}>
+        {children}
+      </div>
+    </section>
+  );
 }
 
 /** Days typed by the user → validUntil in ms, or undefined for no expiry. */
@@ -57,7 +86,8 @@ export function shownCustody(me: Me | null | undefined): 'sealed' | 'kms' | null
   return me.agent || me.keyStatus === 'ready' ? me.keyCustody : (me.newKeyCustody ?? me.keyCustody);
 }
 
-export function GuardKeyCard() {
+export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: CardVariant; setup?: boolean } = {}) {
+  // `setup`: inside the setup step, which explains the key itself; replacing and wiping live in Settings.
   const me = useMe();
   const qc = useQueryClient();
   const { chainId, sign } = useWalletSigner();
@@ -66,6 +96,7 @@ export function GuardKeyCard() {
   const [msg, setMsg] = useState<Msg>(null);
   const agent = me.data?.agent;
   const pending = me.data?.pendingAgent ?? null;
+  const times = useTimes();
   const region = me.data?.user?.region;
   const [confirmReplace, setConfirmReplace] = useState(false);
   const command = useCommand();
@@ -188,14 +219,7 @@ export function GuardKeyCard() {
     </div>
   );
   return (
-    <section className="panel" aria-labelledby="gk-h">
-      <div className="ph">
-        <h2 id="gk-h">Guard key</h2>
-        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
-          {pending ? 'Replacement waiting for approval' : agent?.approved ? 'Approved' : agent ? 'Created, not approved' : me.data?.keyStatus === 'creating' ? 'Being created' : me.data?.keyStatus === 'wiped' ? 'Wiped' : 'Not created'}
-        </span>
-      </div>
-      <div className="pb col" style={{ gap: 10 }}>
+    <Frame variant={variant} id="gk-h" title="Guard key" chip={guardKeyStatus(me.data)}>
         {custody ? (
           <div className="kv line">
             <span className="small">{agent ? 'Key storage' : 'Your key will be stored in'}</span>
@@ -205,7 +229,7 @@ export function GuardKeyCard() {
           </div>
         ) : null}
         <span className="small t2">{custody ? KEY_TEXT[custody] : 'Sign in to see where your guard key is stored.'}</span>
-        <span className="small t2">Hyperliquid lets the key trade for you but never withdraw. Reduce-only is our engine’s limit, not Hyperliquid’s: every order is re-checked against your rules before it is signed.</span>
+        {setup ? null : <span className="small t2">Hyperliquid lets the key trade for you but never withdraw. Reduce-only is our engine’s limit, not Hyperliquid’s: every order is re-checked against your rules before it is signed.</span>}
         {region === 'guardOff' ? <div className="banner b-warn">In your region the guard is off: trading and alerts only.</div> : null}
         {me.data?.keyStatus === 'wiped' && !wipeSteps.length ? (
           <div className="banner">
@@ -223,7 +247,7 @@ export function GuardKeyCard() {
         {agent?.validUntil ? (
           <div className="kv">
             <span>Valid until</span>
-            <span className="num">{new Date(agent.validUntil).toISOString().slice(0, 10)}</span>
+            <span className="num">{times.fmt(agent.validUntil, 'date')}</span>
           </div>
         ) : null}
         {agent && me.data?.keyCustody === 'sealed' && me.data.newKeyCustody === 'kms' && !pending ? (
@@ -256,7 +280,7 @@ export function GuardKeyCard() {
               {busy ? 'Waiting for signature…' : 'Approve the new key'}
             </button>
           </>
-        ) : confirmReplace ? (
+        ) : setup ? null : confirmReplace ? (
           <div className="col" style={{ gap: 8 }}>
             <span className="small">
               A new key is made {me.data?.newKeyCustody === 'kms' ? 'in AWS KMS' : 'on Bulwark’s signing service'}. Your current key keeps working until you approve the new one.
@@ -276,7 +300,7 @@ export function GuardKeyCard() {
           </button>
         )}
         {wipeSteps.length ? <WipeProgress steps={wipeSteps} done={Boolean(wipeEnd?.done)} timedOut={Boolean(wipeEnd && !wipeEnd.done)} /> : null}
-        {agent && !wipeSteps.length ? (
+        {agent && !wipeSteps.length && !setup ? (
           wipeOpen && custody ? (
             <WipeConfirm custody={me.data?.keyCustody ?? custody} ack={wipeAck} onAck={setWipeAck} busy={busy} onConfirm={wipe} onCancel={() => { setWipeOpen(false); setWipeAck(false); }} />
           ) : (
@@ -286,13 +310,20 @@ export function GuardKeyCard() {
           )
         ) : null}
         <Status msg={msg} />
-      </div>
-    </section>
+    </Frame>
   );
 }
 
+export function guardKeyStatus(m: Me | null | undefined): string {
+  if (!m) return 'Not signed in';
+  if (m.pendingAgent) return 'Replacement waiting for approval';
+  if (m.agent?.approved) return 'Approved';
+  if (m.agent) return 'Created, not approved';
+  return m.keyStatus === 'creating' ? 'Being created' : m.keyStatus === 'wiped' ? 'Wiped' : 'Not created';
+}
+
 /** The browser trading key for the user's own manual orders. */
-export function TradingKeyCard() {
+export function TradingKeyCard({ variant = 'card' }: { variant?: CardVariant } = {}) {
   const { address } = useAccount();
   const { chainId, sign } = useWalletSigner();
   const [days, setDays] = useState('');
@@ -325,14 +356,7 @@ export function TradingKeyCard() {
   }
 
   return (
-    <section className="panel" aria-labelledby="tk-h">
-      <div className="ph">
-        <h2 id="tk-h">Trading key (this browser)</h2>
-        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
-          {approved ? 'Approved' : key ? 'Not approved' : 'None'}
-        </span>
-      </div>
-      <div className="pb col" style={{ gap: 10 }}>
+    <Frame variant={variant} id="tk-h" title="Trading key (this browser)" chip={approved ? 'Approved' : key ? 'Not approved' : 'None'}>
         <span className="small t2">
           A key made in this browser and kept here, so your own orders are signed without a wallet prompt each time. Like every Hyperliquid agent it cannot withdraw.
         </span>
@@ -368,13 +392,12 @@ export function TradingKeyCard() {
           </button>
         )}
         <Status msg={msg} />
-      </div>
-    </section>
+    </Frame>
   );
 }
 
 /** Builder-fee approval. Shown only when the builder code is switched on for this network (D6). */
-export function BuilderCard() {
+export function BuilderCard({ variant = 'card' }: { variant?: CardVariant } = {}) {
   const me = useMe();
   const qc = useQueryClient();
   const { chainId, sign } = useWalletSigner();
@@ -399,14 +422,7 @@ export function BuilderCard() {
     }
   }
   return (
-    <section className="panel" aria-labelledby="bf-h">
-      <div className="ph">
-        <h2 id="bf-h">Bulwark fee</h2>
-        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
-          {ok ? `Approved up to ${(approvedMax / 1000).toFixed(3)}%` : 'Not approved'}
-        </span>
-      </div>
-      <div className="pb col" style={{ gap: 10 }}>
+    <Frame variant={variant} id="bf-h" title="Bulwark fee" chip={ok ? `Approved up to ${(approvedMax / 1000).toFixed(3)}%` : 'Not approved'}>
         <span className="small t2">
           Bulwark charges 3 bps (0.03%) on orders placed through it, through Hyperliquid's builder code. You approve a cap of {BUILDER_APPROVE_MAX_RATE} ({BUILDER_APPROVE_MAX_TENTHS_BPS / 10} bps) and can lower it to zero at any time. {NETWORK === 'testnet' ? 'This is testnet.' : ''}
         </span>
@@ -416,48 +432,7 @@ export function BuilderCard() {
           </button>
         ) : null}
         <Status msg={msg} />
-      </div>
-    </section>
-  );
-}
-
-export function TelegramCard() {
-  const me = useMe();
-  const [code, setCode] = useState<string | null>(null);
-  const [msg, setMsg] = useState<Msg>(null);
-  const linked = Boolean(me.data?.user?.telegramChatId);
-  return (
-    <section className="panel" aria-labelledby="tg-h">
-      <div className="ph">
-        <h2 id="tg-h">Telegram alerts</h2>
-        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
-          {linked ? 'Linked' : 'Not linked'}
-        </span>
-      </div>
-      <div className="pb col" style={{ gap: 10 }}>
-        <span className="small t2">
-          Every guard action and alert is sent to Telegram. Get a one-time code, then send <span className="num">/link CODE</span> to the Bulwark bot.
-        </span>
-        {code ? (
-          <div className="code">
-            <b>/link {code}</b> <span className="t3">· valid 15 minutes</span>
-          </div>
-        ) : null}
-        <button
-          type="button"
-          className="btn"
-          disabled={!me.data?.user}
-          onClick={() =>
-            api<{ code: string }>('/v1/telegram/code', { method: 'POST', body: {} })
-              .then((r) => setCode(r.code))
-              .catch((e: Error) => setMsg({ ok: false, text: e.message }))
-          }
-        >
-          {linked ? 'Link another chat' : 'Get a link code'}
-        </button>
-        <Status msg={msg} />
-      </div>
-    </section>
+    </Frame>
   );
 }
 
@@ -466,12 +441,15 @@ export function KillSwitchCard({ preview }: { preview?: 'busy' | 'error' } = {})
   const me = useMe();
   const command = useCommand();
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<Msg>(preview === 'error' ? { ok: false, text: 'The guard was not stopped: the signature arrived after it expired (commands are valid for 60 s). Sign again.' } : null);
+  const [msg, setMsg] = useState<Msg>(preview === 'error' ? { ok: false, text: 'Your signature arrived 74 s after it was made; we accept 60 s at most. Sign again.' } : null);
+  const [last, setLast] = useState<'stop' | 'resume'>('stop');
   const stopped = Boolean(me.data?.user?.killSwitch);
   const waiting = busy || preview === 'busy';
+  const ready = Boolean(me.data?.user);
   async function run(c: 'stop' | 'resume') {
     setBusy(true);
     setMsg(null);
+    setLast(c);
     try {
       await command(c);
       setMsg({ ok: true, text: c === 'stop' ? 'Guard stopped. Its resting orders are being cancelled.' : 'Guard resumed. It re-plans its backstops within 60 s.' });
@@ -481,33 +459,53 @@ export function KillSwitchCard({ preview }: { preview?: 'busy' | 'error' } = {})
       setBusy(false);
     }
   }
+  const failed = msg && !msg.ok;
+  const action = stopped ? 'resume' : 'stop';
+  const button = (
+    <button type="button" className={`btn btn-lg ${stopped ? 'btn-ink' : 'btn-crit'}`} disabled={waiting || !ready} onClick={() => run(action)}>
+      {waiting ? 'Waiting for your signature…' : failed ? 'Sign again' : stopped ? 'Resume the guard' : 'Stop the guard'}
+    </button>
+  );
   return (
-    <section className="panel" id="kill-switch" aria-labelledby="ks-h" style={{ borderColor: 'var(--line-2)' }}>
+    <section className="panel" id="kill-switch" aria-labelledby="ks-h">
       <div className="ph">
         <h2 id="ks-h">Kill switch</h2>
         <span className="tiny t3">stops the guard for this account</span>
-        <span className="sp" />
-        <span className={`chip chip-sm ${me.data?.user && stopped ? 'chip-risk' : ''}`}>{!me.data?.user ? 'Not set up' : stopped ? 'Guard stopped' : 'Guard running'}</span>
       </div>
       <div className="pb col" style={{ gap: 10 }}>
-        {stopped ? (
-          <div className="banner b-crit">
-            <span>
-              <b>The guard is stopped. Your positions are not protected.</b> It sends nothing and has cancelled its own resting orders. Resuming re-plans the backstops within 60 s.
-            </span>
-          </div>
+        {failed ? (
+          <>
+            <div className="banner b-crit" role="alert">
+              {Icon.alert()}
+              <span>
+                <b>The guard was not {last === 'stop' ? 'stopped' : 'resumed'}.</b> {msg.text}
+              </span>
+            </div>
+            <div className="row">
+              {button}
+              <span className="small t2">The guard is still {stopped ? 'stopped' : 'running'}.</span>
+            </div>
+          </>
         ) : (
-          <span className="small t2">
-            Stopping takes effect at once: the guard sends nothing more and cancels only its own resting orders. Your positions and your own orders stay as they are, with no protection until you resume. You sign the command in your wallet; it is valid for 60 s.
-          </span>
+          <div className="row nw ks-row">
+            <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
+              {!ready ? (
+                <span className="small t2">Finish setup to use the kill switch.</span>
+              ) : stopped ? (
+                <span className="small">
+                  <b className="ct">The guard is stopped. Your positions are not protected.</b> It sends nothing and has cancelled its own resting orders. Resuming re-plans the backstops within 60 s.
+                </span>
+              ) : (
+                <span className="small">
+                  <b>The guard is running.</b> Stopping it takes effect at once. The guard cancels only its own resting orders. Your positions and your own orders stay as they are, with no protection until you resume.
+                </span>
+              )}
+              <span className="tiny t3">{waiting ? 'Confirm in your wallet. Nothing has changed yet.' : `You sign the ${action} in your wallet. The signature is valid for 60 seconds.`}</span>
+              {msg?.ok ? <span className="small">{msg.text}</span> : null}
+            </div>
+            {button}
+          </div>
         )}
-        <div className="row">
-          <button type="button" className={`btn btn-lg ${stopped ? 'btn-ink' : 'btn-crit'}`} disabled={waiting || !me.data?.user} onClick={() => run(stopped ? 'resume' : 'stop')}>
-            {waiting ? 'Waiting for your signature…' : stopped ? 'Resume the guard' : 'Stop the guard'}
-          </button>
-          {waiting ? <span className="small t2">Confirm in your wallet. Nothing has changed yet.</span> : null}
-        </div>
-        {msg ? <span className={`small ${msg.ok ? '' : 'ct'}`}>{msg.text}</span> : null}
       </div>
     </section>
   );

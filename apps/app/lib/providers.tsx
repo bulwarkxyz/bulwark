@@ -6,6 +6,7 @@ import { WagmiProvider, createConfig, http } from 'wagmi';
 import { arbitrum, mainnet } from 'wagmi/chains';
 import { injected } from 'wagmi/connectors';
 import { ReviewProvider } from './review';
+import { TimesProvider } from './time';
 
 /**
  * Browser wallets only (EIP-6963 discovery through the injected connector). Hyperliquid's user-signed
@@ -23,7 +24,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={client}>
-        <ReviewProvider>{children}</ReviewProvider>
+        <ReviewProvider>
+          <TimesProvider>{children}</TimesProvider>
+        </ReviewProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

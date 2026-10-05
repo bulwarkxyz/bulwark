@@ -350,7 +350,7 @@ export default function SimulatorPage() {
             <div className="pb col" style={{ gap: 6 }}>
               {policy.rules.map((r) => (
                 <span key={r.id} className="small">
-                  <span className="pill-k num">{r.id}</span> {describeRule(r)}
+                  <span className="tag num">{r.id}</span> {describeRule(r)}
                 </span>
               ))}
             </div>

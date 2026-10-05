@@ -13,6 +13,7 @@ import { useAccountView } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
+import { useTimes } from '@/lib/time';
 
 export default function PositionsPage() {
   const review = useReview();
@@ -23,6 +24,7 @@ export default function PositionsPage() {
   const g = useGuardView();
   const now = useNow();
   const orders = useGuardOrders(address);
+  const times = useTimes();
   const command = useCommand();
   const [minutes, setMinutes] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -226,7 +228,7 @@ export default function PositionsPage() {
                         <th>Order</th>
                         <th className="r">Trigger</th>
                         <th className="r">Size</th>
-                        <th className="r">Placed (UTC)</th>
+                        <th className="r">Placed ({times.label})</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -238,7 +240,7 @@ export default function PositionsPage() {
                           <td>{orderKindLabel(o.kind)} · reduce-only</td>
                           <td className="r num">{fmtPx(o.triggerPx)}</td>
                           <td className="r num">{Math.abs(o.size)}</td>
-                          <td className="r num">{new Date(o.placedAt).toISOString().slice(5, 16).replace('T', ' ')}</td>
+                          <td className="r num">{times.fmt(o.placedAt, 'short')}</td>
                         </tr>
                       ))}
                     </tbody>

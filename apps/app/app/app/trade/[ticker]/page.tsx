@@ -16,6 +16,7 @@ import { useAccountView, useCandles, useXyzMarkets, type MarketCtx } from '@/lib
 import { MARKETS, homeOpen, marketByTicker, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { priceAtLine } from '@bulwarkxyz/guard-core';
+import { useTimes } from '@/lib/time';
 
 const TF = [
   { id: '5m', hours: 12 },
@@ -90,6 +91,7 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   const g = useGuardView();
   const guardOrders = useGuardOrders(address);
   const now = useNow();
+  const { utc } = useTimes();
   const [phoneTab, setPhoneTab] = useState<'chart' | 'book' | 'info'>('chart');
   const [sheet, setSheet] = useState<null | 'long' | 'short'>(null);
 
@@ -165,12 +167,12 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
       )}
       <span className="sp" />
       {open ? (
-        <span className="chip" title={`${HOME[m.session]} session`}>{sessionLabel(m.session, now)}</span>
+        <span className="chip" title={`${HOME[m.session]} session`}>{sessionLabel(m.session, now, utc)}</span>
       ) : (
         <>
           <span className="chip" title={`${HOME[m.session]} session`}>
             {Icon.moon(12)}
-            {sessionLabel(m.session, now)}
+            {sessionLabel(m.session, now, utc)}
           </span>
           {m.bound ? <span className="chip hide-sm">Off-hours price · ±{m.bound.pct}%</span> : null}
         </>
@@ -237,7 +239,7 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
             <div className="banner">
               {Icon.moon()}
               <span>
-                {m.ticker}’s home market is closed ({sessionLabel(m.session, now).replace(/^Closed · /, '')}). It trades on trade.xyz’s off-hours price{m.bound ? `, held within ±${m.bound.pct}%` : ''}. The guard keeps watching.
+                {m.ticker}’s home market is closed ({sessionLabel(m.session, now, utc).replace(/^Closed · /, '')}). It trades on trade.xyz’s off-hours price{m.bound ? `, held within ±${m.bound.pct}%` : ''}. The guard keeps watching.
               </span>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { NETWORK } from '@/lib/env';
 import { useBook, useTrades, type BookLevel } from '@/lib/hl';
 import { fmtPx } from './format';
+import { useTimes } from '@/lib/time';
 
 const fmtSz = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
 
@@ -30,6 +31,7 @@ function Side({ levels, kind, max }: { levels: BookLevel[]; kind: 'ask' | 'bid';
 
 /** Order book and recent trades as tabs (Hyperliquid's arrangement). Depth bars show cumulative size. */
 export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale }: { coin: string; ticker: string; depth?: number; forceLoading?: boolean; stale?: boolean }) {
+  const times = useTimes();
   const [tab, setTab] = useState<'book' | 'trades'>('book');
   const book = useBook(coin);
   const trades = useTrades(coin);
@@ -93,7 +95,7 @@ export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale }: { co
           <div className="hd">
             <span>Price</span>
             <span style={{ textAlign: 'right' }}>Size ({ticker})</span>
-            <span style={{ textAlign: 'right' }}>Time (UTC)</span>
+            <span style={{ textAlign: 'right' }}>Time ({times.label})</span>
           </div>
           {(trades.data ?? []).slice(0, 22).map((t, i) => (
             <div key={`${t.time}-${i}`} className="lv">
@@ -101,7 +103,7 @@ export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale }: { co
                 {t.side === 'B' ? '↑' : '↓'} {fmtPx(t.px)}
               </span>
               <span>{fmtSz(t.sz)}</span>
-              <span className="t3">{new Date(t.time).toISOString().slice(11, 19)}</span>
+              <span className="t3">{times.fmt(t.time, 'clock')}</span>
             </div>
           ))}
           {trades.data && !trades.data.length ? <div className="empty small">No trades yet{NETWORK === 'testnet' ? ' on testnet' : ''}.</div> : null}
