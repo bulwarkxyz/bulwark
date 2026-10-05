@@ -8,17 +8,20 @@ import { fmtPct, fmtPx, fmtUsd, upDown } from '@/components/app/format';
 import { GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
 import { DepthChart, FundingChart, MarketInfo } from '@/components/app/market-panels';
+import { MarketPicker } from '@/components/app/market-picker';
+import { saveLastMarket } from '@/lib/last-market';
 import { OrderBook } from '@/components/app/order-book';
 import { GuardCell } from '@/components/app/positions-table';
 import { Ticket } from '@/components/app/ticket';
 import { NETWORK } from '@/lib/env';
 import { describeAction, orderLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
-import { useAccountView, useCandles, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
-import { MARKETS, homeOpen, marketByTicker, sessionLabel, type Market } from '@/lib/markets';
+import { useAccountView, useCandles, useMarketActivity, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
+import { MARKETS, hasData, homeOpen, marketByTicker, rankMarkets, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { priceAtLine } from '@bulwarkxyz/guard-core';
 import { useTimes } from '@/lib/time';
 import { closeIntent, ticketIntent } from '@/lib/ticket-intent';
+import { Tip } from '@/components/app/tip';
 
 const TF = [
   { id: '5m', hours: 12 },
@@ -44,42 +47,12 @@ function Funding({ ctx }: { ctx: MarketCtx }) {
   const mm = String(Math.floor(left / 60_000)).padStart(2, '0');
   const ss = String(Math.floor((left % 60_000) / 1000)).padStart(2, '0');
   return (
-    <span className="num" title={`${fmtPct(ctx.fundingAprPct, 2, false)} a year at this rate`}>
+    <Tip className="num" text={`${fmtPct(ctx.fundingAprPct, 2, false)} a year at this rate`}>
       {ctx.fundingHourlyPct.toFixed(4)}% · {mm}:{ss} <Testnet />
-    </span>
+    </Tip>
   );
 }
 
-function MarketPicker({ m, maxLev }: { m: Market; maxLev?: number }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ position: 'relative' }}>
-      <button type="button" className="msel" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className="glyph">{m.ticker.slice(0, 2)}</span>
-        <span className="col" style={{ gap: 0, alignItems: 'flex-start' }}>
-          <b style={{ fontSize: 14 }}>{m.ticker}-USDC</b>
-          <span className="tiny t3">{m.name} · xyz</span>
-        </span>
-        {maxLev ? <span className="chip chip-sm num">{maxLev}×</span> : null}
-        {Icon.caret()}
-      </button>
-      {open ? (
-        <div className="mkmenu" role="listbox">
-          {MARKETS.map((x) => (
-            <Link key={x.coin} href={`/app/trade/${x.ticker}`} role="option" aria-selected={x.coin === m.coin} className={x.coin === m.coin ? 'on' : ''} onClick={() => setOpen(false)}>
-              <span className="glyph">{x.ticker.slice(0, 2)}</span>
-              <b>{x.ticker}</b>
-              <span className="small t3">{x.name}</span>
-            </Link>
-          ))}
-          <Link href="/app" className="small t2" onClick={() => setOpen(false)}>
-            All markets →
-          </Link>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export default function TradePage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
@@ -98,6 +71,10 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   const [phoneTab, setPhoneTab] = useState<'chart' | 'book' | 'trades' | 'info'>('chart');
   const [chartTab, setChartTab] = useState<'chart' | 'depth' | 'funding' | 'info'>('chart');
   const recentTrades = useTrades(m.coin);
+  const activity = useMarketActivity();
+  useEffect(() => saveLastMarket(m.ticker), [m.ticker]);
+  // For the empty state: the market with the most recent trades here, to switch to in one click.
+  const withData = activity.data ? rankMarkets(activity.data, NETWORK, Date.now()).find((x) => x.coin !== m.coin && hasData(activity.data![x.coin], Date.now())) : undefined;
   const lastTrade = recentTrades.data?.[0];
   const [sheet, setSheet] = useState<null | 'long' | 'short'>(null);
 
@@ -153,7 +130,7 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
         </>
       ) : ctx ? (
         <>
-          <div className="col" style={{ gap: 0 }} title={lastTrade ? 'Last trade' : 'Mark price'}>
+          <div className="col" style={{ gap: 0 }} aria-label={lastTrade ? 'Last trade' : 'Mark price'}>
             <span className="num" style={{ fontSize: 20, fontWeight: 600 }}>
               {fmtPx(lastTrade?.px ?? ctx.mark)}
             </span>
@@ -189,13 +166,13 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
       )}
       <span className="sp" />
       {open ? (
-        <span className="chip" title={`${HOME[m.session]} session`}>{sessionLabel(m.session, now, utc)}</span>
+        <Tip className="chip" text={`${HOME[m.session]} session`}>{sessionLabel(m.session, now, utc)}</Tip>
       ) : (
         <>
-          <span className="chip" title={`${HOME[m.session]} session`}>
+          <Tip className="chip" text={`${HOME[m.session]} session`}>
             {Icon.moon(12)}
             {sessionLabel(m.session, now, utc)}
-          </span>
+          </Tip>
           {m.bound ? <span className="chip hide-sm">Off-hours price · ±{m.bound.pct}%</span> : null}
         </>
       )}
@@ -265,7 +242,22 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
       ) : candles.data?.length ? (
         <CandleChart candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} />
       ) : (
-        <div className="empty">No candles for {m.ticker} yet{NETWORK === 'testnet' ? ' on testnet' : ''}.</div>
+        <div className="empty">
+          <div className="ico">{Icon.markets(18)}</div>
+          <b>
+            No chart for {m.ticker} {NETWORK === 'testnet' ? 'on testnet' : 'yet'}.
+          </b>
+          <span className="small" style={{ maxWidth: 420 }}>
+            {NETWORK === 'testnet'
+              ? `Nobody has traded ${m.ticker} on Hyperliquid's testnet recently, so there are no candles to draw. We only show real data, never a placeholder chart.`
+              : `Hyperliquid has no candles for ${m.ticker} yet. We only show real data, never a placeholder chart.`}
+          </span>
+          {withData ? (
+            <Link className="btn btn-sm btn-ink" href={`/app/trade/${withData.ticker}`}>
+              Open {withData.ticker}, which has live trades
+            </Link>
+          ) : null}
+        </div>
       )}
     </>
   );

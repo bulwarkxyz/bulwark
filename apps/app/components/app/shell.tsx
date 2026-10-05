@@ -10,10 +10,11 @@ import { BufferMeter, GuardChip } from './guard-ui';
 import { ConnectButton } from './connect';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { BrandMark, Icon } from './icons';
+import { TopLayer } from './layer';
 import { useTimes } from '@/lib/time';
 
 const NAV = [
-  { href: '/app/trade/CL', label: 'Trade', match: '/app/trade' },
+  { href: '/app/trade', label: 'Trade', match: '/app/trade' },
   { href: '/app', label: 'Markets' },
   { href: '/app/positions', label: 'Positions' },
   { href: '/app/rules', label: 'Guard rules' },
@@ -22,7 +23,7 @@ const NAV = [
 ];
 const TABS = [
   { href: '/app', label: 'Markets', icon: Icon.markets },
-  { href: '/app/trade/CL', label: 'Trade', icon: Icon.trade, match: '/app/trade' },
+  { href: '/app/trade', label: 'Trade', icon: Icon.trade, match: '/app/trade' },
   { href: '/app/positions', label: 'Positions', icon: Icon.positions },
   { href: '/app/rules', label: 'Guard', icon: Icon.shield },
   { href: '/app/settings', label: 'More', icon: Icon.more, also: ['/app/account', '/app/audit', '/app/simulator'] },
@@ -339,6 +340,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {focused ? null : <MobileGuard />}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>{children}</main>
       <StatusBar />
+      <TopLayer />
       {focused ? null : <MobileTabBar />}
     </div>
   );

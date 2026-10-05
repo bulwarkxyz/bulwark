@@ -99,3 +99,56 @@ export function sessionLabel(kind: SessionKind, t: number, utc = true): string {
     : '';
   return open ? `Open${when ? ` · closes ${when}` : ''}` : `Closed${when ? ` · opens ${when}` : ''}`;
 }
+
+/**
+ * Which curated market the trade screen opens on: the one with the most real activity recently on this
+ * network, read live (useMarketActivity): the most traded value in the last 24 hours, then the latest trade. Ties and missing data fall back to a fixed order per network. A market with
+ * no trade in the last 7 days and no 24h volume counts as having no data here, and is never the default.
+ */
+export const FALLBACK_ORDER: Record<'mainnet' | 'testnet', string[]> = {
+  mainnet: ['CL', 'GOLD', 'SP500', 'XYZ100', 'NVDA', 'BRENTOIL', 'SILVER', 'TSLA', 'MU', 'SKHX'],
+  testnet: ['GOLD', 'SILVER', 'NVDA', 'XYZ100', 'TSLA', 'MU', 'SKHX', 'CL', 'SP500', 'BRENTOIL'],
+};
+export const NO_DATA_AFTER_MS = 7 * 86_400_000;
+
+export interface MarketActivity {
+  /** Time of the latest trade Hyperliquid reports, or null for none. */
+  lastTradeAt: number | null;
+  dayVolumeUsd: number;
+  delisted: boolean;
+}
+
+export function hasData(a: MarketActivity | undefined, now: number): boolean {
+  if (!a || a.delisted) return false;
+  return (a.lastTradeAt !== null && now - a.lastTradeAt < NO_DATA_AFTER_MS) || a.dayVolumeUsd > 0;
+}
+
+/** Curated markets: those with data first (most traded in 24h, then latest trade), then the rest in the fallback order. */
+export function rankMarkets(activity: Readonly<Record<string, MarketActivity>>, network: 'mainnet' | 'testnet', now: number): Market[] {
+  const order = FALLBACK_ORDER[network];
+  const at = (m: Market) => (order.indexOf(m.ticker) === -1 ? 99 : order.indexOf(m.ticker));
+  return [...MARKETS].sort((x, y) => {
+    const dx = hasData(activity[x.coin], now);
+    const dy = hasData(activity[y.coin], now);
+    if (dx !== dy) return dx ? -1 : 1;
+    // Most activity in the last 24 hours first (traded value); then the latest trade; then the fixed order.
+    const vx = activity[x.coin]?.dayVolumeUsd ?? 0;
+    const vy = activity[y.coin]?.dayVolumeUsd ?? 0;
+    if (dx && vx !== vy) return vy - vx;
+    const tx = activity[x.coin]?.lastTradeAt ?? 0;
+    const ty = activity[y.coin]?.lastTradeAt ?? 0;
+    if (dx && tx !== ty) return ty - tx;
+    return at(x) - at(y);
+  });
+}
+
+/**
+ * The market to open: the user's last one if it still has data, else the best ranked. While activity is
+ * unknown, the user's last market, else the first in the fallback order.
+ */
+export function defaultMarket(activity: Readonly<Record<string, MarketActivity>> | null, network: 'mainnet' | 'testnet', now: number, last: string | null): Market {
+  const lastM = last ? marketByTicker(last) : undefined;
+  if (!activity) return lastM ?? marketByTicker(FALLBACK_ORDER[network][0]!)!;
+  if (lastM && hasData(activity[lastM.coin], now)) return lastM;
+  return rankMarkets(activity, network, now)[0]!;
+}
