@@ -304,3 +304,12 @@ html.light .bw{
 /* Phones: the page title lives in the top bar, so the in-page heading is not repeated */
 .ptl{font-size:17px;font-weight:620;letter-spacing:-.01em}
 @media (max-width:760px){.ptitle .h1{display:none}}
+/* "After it acts": two explicit options, neither pre-selected */
+.choice{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+.choice .opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line-2);border-radius:8px;cursor:pointer}
+.choice .opt.on{border-color:var(--ink);background:var(--s2)}
+.choice .opt input{margin-top:3px;accent-color:var(--ink)}
+/* Setup on phones: the step's main button stays at the bottom of the screen while the step is in view */
+@media (max-width:760px){
+  .obody .btn-ink{position:sticky;bottom:12px;z-index:5;width:100%;min-height:46px;box-shadow:0 0 0 6px var(--bg)}
+}

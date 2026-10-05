@@ -221,6 +221,20 @@ export default function RulesPage() {
         </Link>
       </div>
 
+      {policy?.needsRepeatChoice?.length ? (
+        <div className="banner b-warn" role="status">
+          <span>
+            <b>
+              {policy.needsRepeatChoice.length} stage{policy.needsRepeatChoice.length > 1 ? 's need' : ' needs'} a choice: act once per fall, or every time the line is crossed.
+            </b>{' '}
+            Until you choose and sign, {policy.needsRepeatChoice.length > 1 ? 'they act' : 'it acts'} every time, as before.
+          </span>
+          <span className="sp" />
+          <button type="button" className="btn btn-sm" onClick={() => document.getElementById(`need-${policy.needsRepeatChoice![0]}`)?.scrollIntoView({ block: 'center' })}>
+            Choose
+          </button>
+        </div>
+      ) : null}
       {me.isError ? (
         <div className="banner b-crit">
           {Icon.alert()}

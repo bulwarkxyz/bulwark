@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useSignedIn } from '@/lib/api';
 import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { NETWORK } from '@/lib/env';
-import { orderKindLabel, tickerOf, useGuardOrders, type GuardView } from '@/lib/guard';
+import { TOGETHER_NOTE, orderLabel, tickerOf, useGuardOrders, type GuardView } from '@/lib/guard';
 import { info, useFills } from '@/lib/hl';
 import { useReview } from '@/lib/review';
 import { fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
@@ -141,7 +141,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
                 {guardOrders.orders.map((o) => (
                   <tr key={o.oid}>
                     <td><b>{tickerOf(o.coin)}</b></td>
-                    <td>{orderKindLabel(o.kind)} · reduce-only</td>
+                    <td style={{ whiteSpace: 'normal' }}>{orderLabel(o)} · reduce-only{o.pricing === 'together' ? <span className="tiny t3" style={{ display: 'block' }}>{TOGETHER_NOTE}</span> : null}</td>
                     <td className="r num">{fmtPx(o.triggerPx)}</td>
                     <td className="r num">{Math.abs(o.size)}</td>
                     <td className="r num">{ts(o.placedAt)}</td>

@@ -25,7 +25,8 @@ export interface Me {
   newKeyCustody: 'sealed' | 'kms';
   keyStatus: 'none' | 'creating' | 'ready' | 'wiped';
   pendingAgent: null | { address: Hex };
-  policy: null | { version: number; hash: string; confirmedAt: number; policy: Policy };
+  /** `needsRepeatChoice`: rule ids still without the once / every-time choice (empty when none). */
+  policy: null | { version: number; hash: string; confirmedAt: number; policy: Policy; needsRepeatChoice?: string[] };
 }
 
 /** The signed-in user's Bulwark record (null when signed out). */
@@ -53,6 +54,6 @@ function reviewMe(account: Hex, exampleRules: boolean, stopped: boolean, key: 's
     newKeyCustody: 'kms',
     keyStatus: wiped ? 'wiped' : 'ready',
     pendingAgent: null,
-    policy: exampleRules ? { version: 3, hash: 'example', confirmedAt: Date.UTC(2026, 9, 4, 14, 2), policy: examplePolicy(account) } : null,
+    policy: exampleRules ? { version: 3, hash: 'example', confirmedAt: Date.UTC(2026, 9, 4, 14, 2), policy: examplePolicy(account), needsRepeatChoice: examplePolicy(account).rules.filter((r) => !r.repeat).map((r) => r.id) } : null,
   };
 }

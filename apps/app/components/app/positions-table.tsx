@@ -2,7 +2,7 @@
 
 import type { AccountRisk, PoolRisk, PositionRisk } from '@bulwarkxyz/guard-core';
 import Link from 'next/link';
-import { describeAction, orderKindLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
+import { describeAction, orderLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useViewer } from '@/lib/review';
 import { closeIntent, ticketIntent } from '@/lib/ticket-intent';
@@ -64,7 +64,7 @@ export function GuardActsAt({ g, pool, row, align, noResting }: { g: GuardView; 
         ) : null}
         {(noResting ? [] : resting).map((o) => (
           <span key={o.oid} className="tiny t2">
-            {orderKindLabel(o.kind)} resting at <span className="num">{fmtPx(o.triggerPx)}</span>
+            {orderLabel(o)}: resting at <span className="num">{fmtPx(o.triggerPx)}</span>
           </span>
         ))}
       </div>

@@ -113,7 +113,7 @@ export function MarketInfo({ m, ctx }: { m: Market; ctx: MarketCtx | undefined }
           <div className="kv line"><span className="small">Size step</span><span className="small num">{(10 ** -ctx.szDecimals).toFixed(ctx.szDecimals)} {m.ticker}</span></div>
         </>
       ) : null}
-      <div className="kv"><span className="small">Source</span><a className="small" href={MARKETS_SOURCE.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>{MARKETS_SOURCE.label}</a></div>
+      <div className="kv"><span className="small">Source</span><span className="small" style={{ textAlign: 'right' }}><a href={MARKETS_SOURCE.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>{MARKETS_SOURCE.label}</a> · <a href={MARKETS_SOURCE.all} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>all sources</a></span></div>
     </div>
   );
 }

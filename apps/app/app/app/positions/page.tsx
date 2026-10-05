@@ -8,7 +8,7 @@ import { Icon } from '@/components/app/icons';
 import { PositionCards, PositionsTable, poolState } from '@/components/app/positions-table';
 import { useSignedIn } from '@/lib/api';
 import { useCommand } from '@/lib/commands';
-import { STATE_STALE_MS, describeAction, nextWindowOpen, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
+import { STATE_STALE_MS, describeAction, nextWindowOpen, TOGETHER_NOTE, orderLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView, useFills } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
@@ -307,7 +307,7 @@ export default function PositionsPage() {
                   {orders.orders.map((o) => (
                     <li key={o.oid} className="row nw" style={{ justifyContent: 'space-between', flexDirection: 'row' }}>
                       <span className="small">
-                        {tickerOf(o.coin)} {orderKindLabel(o.kind).toLowerCase()} · reduce-only
+                        {tickerOf(o.coin)} · {orderLabel(o).toLowerCase()}
                       </span>
                       <span className="num small">
                         {fmtPx(o.triggerPx)} · {Math.abs(o.size)} {tickerOf(o.coin)}
@@ -332,7 +332,7 @@ export default function PositionsPage() {
                           <td>
                             <b>{tickerOf(o.coin)}</b>
                           </td>
-                          <td>{orderKindLabel(o.kind)} · reduce-only</td>
+                          <td style={{ whiteSpace: 'normal' }}>{orderLabel(o)} · reduce-only{o.pricing === 'together' ? <span className="tiny t3" style={{ display: 'block' }}>{TOGETHER_NOTE}</span> : null}</td>
                           <td className="r num">{fmtPx(o.triggerPx)}</td>
                           <td className="r num">{Math.abs(o.size)}</td>
                           <td className="r num">{times.fmt(o.placedAt, 'short')}</td>

@@ -38,6 +38,11 @@ export interface RuleForm {
   toLeverage: string;
   /** topUp: USDC */
   usdc: string;
+  /** After it acts: the user's explicit choice; '' until they choose (nothing is pre-selected). */
+  repeat: '' | 'oncePerBreach' | 'everyCrossing';
+  /** Optional limit: at most `limitTimes` actions within any `limitHours` hours, both typed. */
+  limitTimes: string;
+  limitHours: string;
 }
 
 /** An empty form: every number blank, so the user types each one. */
@@ -58,7 +63,27 @@ export const EMPTY_FORM: RuleForm = {
   toLevMarket: '',
   toLeverage: '',
   usdc: '',
+  repeat: '',
+  limitTimes: '',
+  limitHours: '',
 };
+
+/** Copy for the choice (reports/B9.md), word for word. */
+export const REPEAT_OPTIONS = [
+  { mode: 'oncePerBreach', label: 'Once per fall', chip: 'Once per fall', text: 'Acts once when the line is crossed, then leaves the rest of the fall to your backstop. It acts again only after the price recovers to where it acted.' },
+  { mode: 'everyCrossing', label: 'Every time the line is crossed', chip: 'Every time', text: 'Acts each time your buffer comes back above the line and falls through it, including after its own trim.' },
+] as const;
+export const REPEAT_UNSET = 'Choose what this stage does after it acts';
+export const REPEAT_OLDER = 'Until you choose and sign, it acts every time the line is crossed.';
+/** The backtests section that replays the same days both ways. */
+export const REPEAT_EVIDENCE = '/docs/backtests#once-per-fall-or-every-time';
+
+/** The chip for a rule's choice: "Once per fall", "Every time", plus "≤ N in H h" with a limit; null if not chosen. */
+export function repeatChip(r: Pick<Rule, 'repeat'>): string | null {
+  if (!r.repeat) return null;
+  const base = REPEAT_OPTIONS.find((o) => o.mode === r.repeat!.mode)!.chip;
+  return r.repeat.limit ? `${base} · ≤ ${r.repeat.limit.times} in ${r.repeat.limit.perHours} h` : base;
+}
 
 export const WHEN_OPTIONS: Array<{ kind: WhenKind; label: string }> = [
   { kind: 'buffer', label: 'Buffer falls below' },
@@ -180,7 +205,16 @@ export function buildRule(f: RuleForm, id: string): BuildResult {
       action = { kind: 'alert' };
       break;
   }
-  const rule = { id, when, then: [action], ...(f.window ? { window: f.window } : {}) };
+  if (!f.repeat) return { ok: false, problem: REPEAT_UNSET };
+  let limit: { times: number; perHours: number } | undefined;
+  if (f.limitTimes.trim() || f.limitHours.trim()) {
+    const times = num(f.limitTimes);
+    const hours = num(f.limitHours);
+    if (times === null || !Number.isInteger(times) || times < 1) return { ok: false, problem: 'Enter a whole number of actions' };
+    if (hours === null || !(hours > 0)) return { ok: false, problem: 'Enter hours above 0' };
+    limit = { times, perHours: hours };
+  }
+  const rule = { id, when, then: [action], ...(f.window ? { window: f.window } : {}), repeat: { mode: f.repeat, ...(limit ? { limit } : {}) } };
   const parsed = Rule.safeParse(rule);
   return parsed.success ? { ok: true, rule: parsed.data } : { ok: false, problem: parsed.error.issues[0]?.message ?? 'This rule is not valid.' };
 }
@@ -211,6 +245,8 @@ export function formFromRule(r: Rule): RuleForm | null {
   if (a.kind === 'reduceToBuffer') f.toBuffer = String(a.buffer);
   if (a.kind === 'reduceToLeverage') Object.assign(f, { toLevMarket: a.market, toLeverage: String(a.leverage) });
   if (a.kind === 'topUp') f.usdc = String(a.maxUsdc);
+  // An older rule has no choice yet: the form shows it unset, so the user must choose.
+  if (r.repeat) Object.assign(f, { repeat: r.repeat.mode, limitTimes: r.repeat.limit ? String(r.repeat.limit.times) : '', limitHours: r.repeat.limit ? String(r.repeat.limit.perHours) : '' });
   return f;
 }
 
@@ -245,6 +281,8 @@ export type DraftPolicyResult = { ok: true; policy: Policy } | { ok: false; prob
 
 /** The next policy version to sign, or what is still missing. */
 export function draftPolicy(signed: Policy | null | undefined, d: PolicyDraft, account: string): DraftPolicyResult {
+  const unchosen = d.rules.filter((r) => !r.repeat).length;
+  if (unchosen) return { ok: false, problem: `${unchosen} rule${unchosen > 1 ? 's need' : ' needs'} your choice: once per fall, or every time the line is crossed.` };
   const slip = num(d.slippage);
   if (slip === null) return { ok: false, problem: 'Type the max slippage for guard orders.' };
   if (!(slip > 0 && slip <= 10)) return { ok: false, problem: 'Max slippage must be above 0% and at most 10%.' };

@@ -9,7 +9,7 @@
  * Off-hours the oracle is trade.xyz's internal price: https://docs.trade.xyz/perpetuals/mechanics/oracle-price.md
  */
 /** Where the sessions and bounds come from, and when they were checked (shown in the app). */
-export const MARKETS_SOURCE = { url: 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md', label: 'trade.xyz specification index, checked 5 Oct 2026' };
+export const MARKETS_SOURCE = { url: 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md', label: 'trade.xyz specification index, checked 5 Oct 2026', all: '/docs/sources' };
 
 export type Category = 'Commodities' | 'Indices' | 'Stocks';
 export type SessionKind = 'futures' | 'futuresBrent' | 'usStocks' | 'korea';

@@ -260,6 +260,11 @@ export default function OnboardingPage() {
             <RuleBuilder s={draft} held={held} disabled={!connected} bare />
             <HowGuardTrades s={draft} bare />
             <ActiveRules s={draft} status={() => ({ text: 'Not active until you sign', cls: 'wt' })} loading={false} bare title="Your first rules" />
+            {draft.changes.any ? (
+              <button type="button" className="btn btn-ink btn-lg mobile-only" disabled={!draft.next.ok || draft.busy} onClick={draft.sign}>
+                {draft.busy ? 'Waiting for signature…' : `Sign version ${draft.signedVersion + 1}`}
+              </button>
+            ) : null}
           </>
         )}
       </div>
@@ -311,7 +316,7 @@ export default function OnboardingPage() {
               {current + 1} of {STEPS.length}
             </span>
           </div>
-          {body}
+          <div className="obody">{body}</div>
           {done[current] ? (
             <div className="row" style={{ padding: '0 12px 12px' }}>
               {current < STEPS.length - 1 ? (

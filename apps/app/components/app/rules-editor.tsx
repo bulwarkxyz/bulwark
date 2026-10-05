@@ -5,13 +5,17 @@ import type { Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount, useChainId, useSignTypedData } from 'wagmi';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { tickerOf } from '@/lib/guard';
 import { MARKETS } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview } from '@/lib/review';
 import {
   EMPTY_FORM,
+  REPEAT_EVIDENCE,
+  REPEAT_OLDER,
+  REPEAT_OPTIONS,
+  REPEAT_UNSET,
   TARGET_OPTIONS,
   THEN_OPTIONS,
   WHEN_OPTIONS,
@@ -23,6 +27,7 @@ import {
   formFromRule,
   needsTarget,
   nextRuleId,
+  repeatChip,
   type PolicyDraft,
   type RuleForm,
 } from '@/lib/rule-builder';
@@ -46,6 +51,8 @@ export function usePolicyDraft() {
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm }>({ id: null, form: EMPTY_FORM });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Rule ids the API refused for want of the repeat choice (400 { needsChoice }).
+  const [refused, setRefused] = useState<string[]>([]);
   // A newly signed (or first loaded) version replaces the draft.
   const signedKey = me.data?.policy?.hash ?? 'none';
   useEffect(() => {
@@ -70,8 +77,11 @@ export function usePolicyDraft() {
       await api('/v1/policy', { body: { policy: next.policy, signature, chainId } });
       await qc.invalidateQueries({ queryKey: ['me'] });
       setMsg({ ok: true, text: `Version ${next.policy.version} signed. The guard runs it from now.` });
+      setRefused([]);
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      const need = e instanceof ApiError && Array.isArray(e.body.needsChoice) ? (e.body.needsChoice as string[]) : [];
+      setRefused(need);
+      setMsg({ ok: false, text: need.length ? `Not signed: ${need.length} rule${need.length > 1 ? 's need' : ' needs'} your choice, marked below.` : (e as Error).message });
     } finally {
       setBusy(false);
     }
@@ -104,6 +114,10 @@ export function usePolicyDraft() {
       // An edited rule no longer matches the sentence it came from, so the sentence is not kept.
       setEditing({ id: null, form: EMPTY_FORM });
     },
+    refused,
+    /** Set the once / every-time choice on one rule in the draft (older rules, or any rule). */
+    choose: (id: string, mode: 'oncePerBreach' | 'everyCrossing') =>
+      setDraft((d) => ({ ...d, rules: d.rules.map((r) => (r.id === id ? { ...r, repeat: { ...r.repeat, mode } } : r)) })),
     remove: (id: string) => setDraft((d) => ({ ...d, rules: d.rules.filter((r) => r.id !== id) })),
     restore: (r: Rule) => setDraft((d) => (d.rules.some((x) => x.id === r.id) ? d : { ...d, rules: [...d.rules, r] })),
     reset: () => {
@@ -210,15 +224,10 @@ export function RuleBuilder({ s, held = [], disabled, bare }: { s: PolicyDraftSt
       <div className={bare ? 'col' : 'pb col'} style={{ gap: 10 }}>
         <Pick id="rb-when" label="When" value={f.when} options={WHEN_OPTIONS.map((o) => ({ value: o.kind, label: o.label }))} onChange={(when) => set({ when })} />
         {f.when === 'buffer' ? (
-          <div className="row nw">
+          <>
             <Num id="rb-line" label="Line" unit="×" value={f.line} onChange={(line) => set({ line })} />
-            <div className="field" style={{ flex: 1, minWidth: 0 }}>
-              <span className="lbl">Pool</span>
-              <span className="small t2" style={{ padding: '9px 0' }}>
-                Each pool on its own
-              </span>
-            </div>
-          </div>
+            <span className="tiny t3">Every margin pool is checked against this line on its own.</span>
+          </>
         ) : f.when === 'drawdown' ? (
           <Num id="rb-dd" label="Fall in account value" unit="%" value={f.drawdownPct} onChange={(drawdownPct) => set({ drawdownPct })} />
         ) : f.when === 'priceMove' ? (
@@ -255,13 +264,55 @@ export function RuleBuilder({ s, held = [], disabled, bare }: { s: PolicyDraftSt
           </div>
         ) : null}
         {f.then === 'topUp' ? <Num id="rb-usdc" label="Amount" unit="USDC" value={f.usdc} onChange={(usdc) => set({ usdc })} /> : null}
+        <RepeatChoice f={f} set={set} />
         {built.ok ? <span className="small t2">{describeRule(built.rule)}</span> : tried ? <span className="small ct">{built.problem}</span> : null}
-        <button type="button" className="btn btn-block" disabled={disabled} onClick={add}>
+        <button type="button" className="btn btn-block" disabled={disabled || !f.repeat} title={f.repeat ? undefined : REPEAT_UNSET} onClick={add}>
           {s.editing.id ? 'Update rule' : 'Add to rules'}
         </button>
         <span className="tiny t3">Nothing runs until you sign the new version{bare ? ' below' : ' under Active rules'}.</span>
       </div>
     </Box>
+  );
+}
+
+/**
+ * "After it acts": the user's explicit choice, required, nothing pre-selected; and the optional limit,
+ * both numbers typed. Copy from reports/B9.md.
+ */
+function RepeatChoice({ f, set }: { f: RuleForm; set: (p: Partial<RuleForm>) => void }) {
+  return (
+    <fieldset className="choice" aria-describedby="rp-help">
+      <legend className="lbl">After it acts</legend>
+      {REPEAT_OPTIONS.map((o) => (
+        <label key={o.mode} className={`opt ${f.repeat === o.mode ? 'on' : ''}`}>
+          <input type="radio" name="rb-repeat" checked={f.repeat === o.mode} onChange={() => set({ repeat: o.mode })} />
+          <span className="col" style={{ gap: 2 }}>
+            <b className="small">{o.label}</b>
+            <span className="tiny t2">{o.text}</span>
+          </span>
+        </label>
+      ))}
+      <span id="rp-help" className="tiny t3">
+        {f.repeat ? null : <span className="wt">{REPEAT_UNSET}. </span>}
+        <a href={REPEAT_EVIDENCE} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
+          See both on real crash days
+        </a>
+      </span>
+      <div className="col" style={{ gap: 4 }}>
+        <span className="lbl">Limit (optional)</span>
+        <div className="row nw" style={{ alignItems: 'center', gap: 6 }}>
+          <span className="small t2">At most</span>
+          <div className="input" style={{ width: 84 }}>
+            <input aria-label="Most actions" inputMode="numeric" value={f.limitTimes} onChange={(e) => set({ limitTimes: e.target.value })} />
+          </div>
+          <span className="small t2">actions in</span>
+          <div className="input" style={{ width: 84 }}>
+            <input aria-label="Hours" inputMode="decimal" value={f.limitHours} onChange={(e) => set({ limitHours: e.target.value })} />
+          </div>
+          <span className="small t2">hours</span>
+        </div>
+      </div>
+    </fieldset>
   );
 }
 
@@ -332,9 +383,29 @@ export function ActiveRules({ s, status, loading, bare, title = 'Active rules' }
                 <span className="n">{i + 1}</span>
                 <div className="col" style={{ gap: 3 }}>
                   <span style={{ fontSize: 14 }}>
-                    {describeRule(r)} {isNew ? <span className="tag">new</span> : isChanged ? <span className="tag">edited</span> : null}
+                    {describeRule({ when: r.when, then: r.then, window: r.window })} {isNew ? <span className="tag">new</span> : isChanged ? <span className="tag">edited</span> : null}
                   </span>
                   {r.source ? <span className="small t3">You wrote: “{r.source.text}”</span> : null}
+                  {repeatChip(r) ? (
+                    <span className="row nw" style={{ gap: 6 }}>
+                      <span className="chip chip-sm">{repeatChip(r)}</span>
+                    </span>
+                  ) : (
+                    <span className="col" style={{ gap: 6, alignItems: 'flex-start' }} id={`need-${r.id}`}>
+                      <span className={`chip chip-sm ${s.refused.includes(r.id) ? 'chip-risk' : 'chip-acting'}`}>Needs your choice</span>
+                      <span className="tiny t2">{REPEAT_OLDER}</span>
+                      <span className="row" style={{ gap: 6 }}>
+                        {REPEAT_OPTIONS.map((o) => (
+                          <button key={o.mode} type="button" className="btn btn-sm" onClick={() => s.choose(r.id, o.mode)}>
+                            {o.label}
+                          </button>
+                        ))}
+                        <a className="tiny" href={REPEAT_EVIDENCE} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', alignSelf: 'center' }}>
+                          See both outcomes
+                        </a>
+                      </span>
+                    </span>
+                  )}
                   <span className={`tiny ${st.cls}`}>{st.text}</span>
                 </div>
                 <div className="row nw">

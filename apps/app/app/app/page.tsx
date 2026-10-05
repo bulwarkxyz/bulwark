@@ -90,7 +90,7 @@ function Detail({ m, ctx, now, position }: { m: Market; ctx: MarketCtx | undefin
           Trade {m.ticker}
         </Link>
         <span className="tiny t3">
-          Sessions and bounds: <a href={SPEC} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>trade.xyz specification index</a>, checked 5 Oct 2026. Margin mode and leverage are read live from Hyperliquid.
+          Sessions and bounds: <a href={SPEC} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>trade.xyz specification index</a>, checked 5 Oct 2026. Margin mode and leverage are read live from Hyperliquid. <a href={MARKETS_SOURCE.all} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>All sources</a>
         </span>
       </div>
     </aside>

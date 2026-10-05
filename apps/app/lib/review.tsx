@@ -74,8 +74,9 @@ export function examplePolicy(account: Hex): Policy {
     version: 3,
     account,
     rules: [
-      { id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }], source: { text: 'Alert me if my buffer drops below 3', compiler: 'example' } },
-      { id: 'stage-2', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'reduce', target: { kind: 'first_position' }, fraction: 0.25 }], source: { text: 'Below 2.5, cut my biggest position by a quarter', compiler: 'example' } },
+      { id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing' }, source: { text: 'Alert me every time my buffer drops below 3', compiler: 'example' } },
+      { id: 'stage-2', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'reduce', target: { kind: 'first_position' }, fraction: 0.25 }], repeat: { mode: 'oncePerBreach', limit: { times: 3, perHours: 24 } }, source: { text: 'Below 2.5, cut my biggest position by a quarter, only once per fall, at most 3 times in 24 hours', compiler: 'example' } },
+      // Signed before the choice existed: shows the "needs your choice" state.
       { id: 'stage-3', when: { kind: 'buffer', below: 1.8 }, then: [{ kind: 'close', target: { kind: 'all' } }] },
     ],
     execution: { maxSlippagePct: 0.5 },

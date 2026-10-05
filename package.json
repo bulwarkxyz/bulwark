@@ -12,7 +12,8 @@
     "fixtures:capture": "node scripts/capture-fixtures.mjs",
     "screenshots": "node scripts/screenshots.mjs",
     "check:contrast": "node scripts/contrast-check.mjs",
-    "check:review-mode": "node scripts/review-mode-check.mjs"
+    "check:review-mode": "node scripts/review-mode-check.mjs",
+    "check:public": "node scripts/public-repo-check.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

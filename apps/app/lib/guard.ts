@@ -108,6 +108,10 @@ export interface RestingOrders {
 }
 const ORDER_KIND_LABEL: Record<string, string> = { backstop: 'Backstop stop' };
 export const orderKindLabel = (kind: string) => ORDER_KIND_LABEL[kind] ?? kind.replace(/_/g, ' ');
+/** "Backstop stop at your 1.8× line" (reports/B9.md); the plain kind for orders from before lines were recorded. */
+export const orderLabel = (o: Pick<GuardOrder, 'kind' | 'line'>) => (o.line ? `${orderKindLabel(o.kind)} at your ${o.line}× line` : orderKindLabel(o.kind));
+/** Shown when a backstop was priced for the whole pool (B9, decision 1). */
+export const TOGETHER_NOTE = 'Priced as if every position in this pool moves against you at once. If only one falls, it fires earlier than strictly needed.';
 export function useGuardOrders(address: `0x${string}` | undefined): RestingOrders {
   const review = useReview();
   const signedIn = useSignedIn();
@@ -130,7 +134,7 @@ export function useGuardOrders(address: `0x${string}` | undefined): RestingOrder
       for (const pool of view.data?.risk?.pools ?? [])
         for (const row of pool.positions) {
           const lvl = priceAtLine(pool, row, low);
-          if (lvl) orders.push({ oid: -orders.length - 1, coin: row.position.coin, kind: 'backstop', triggerPx: lvl.price, size: -row.position.size, placedAt: REVIEW_PLACED_AT });
+          if (lvl) orders.push({ oid: -orders.length - 1, coin: row.position.coin, kind: 'backstop', triggerPx: lvl.price, size: -row.position.size, placedAt: REVIEW_PLACED_AT, line: low, pricing: 'single' }); // priced for the position alone, so labelled single
         }
   }
   return { orders, example, forCoin: (coin) => orders.filter((o) => o.coin === coin), isLoading: q.isLoading, error: (q.error as Error | null) ?? null };

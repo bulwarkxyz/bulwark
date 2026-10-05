@@ -11,6 +11,7 @@ import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 
 const KIND_LABEL: Record<string, string> = {
+  key: 'Guard key',
   guard_action: 'Guard action',
   rejected: 'Refused by checks',
   rule_confirmed: 'Policy signed',
@@ -34,6 +35,8 @@ const FILTERS: Array<{ id: string; label: string; kinds: string[] | null }> = [
 
 /** Who wrote the entry: you (a signature), the guard (an action), or the checks and the system. */
 const BY: Record<string, string> = { rule_confirmed: 'you', command: 'you', approval: 'you', guard_action: 'guard', backstop: 'guard', alert: 'guard', window: 'guard', degraded: 'guard', rejected: 'checks', rule_draft_rejected: 'system', key: 'system' };
+/** Backstops priced for the whole pool say so (proof.pricing, apps/api/CONTRACT.md). */
+const pricedTogether = (e: AuditEntry) => e.kind === 'backstop' && (e.proof as { pricing?: unknown } | null | undefined)?.pricing === 'together';
 const shortHash = (h: string) => (h.startsWith('0x') ? `${h.slice(0, 6)}…${h.slice(-4)}` : h);
 
 /** The log as JSON, exactly as received (hashes included), so it can be checked outside the app. */
@@ -163,6 +166,7 @@ export default function AuditPage() {
                   </div>
                   <span className="small">{e.what}</span>
                   <span className="tiny t2">{e.why}</span>
+                  {pricedTogether(e) ? <span className="tag" style={{ alignSelf: 'flex-start' }}>priced together</span> : null}
                   {a ? (
                     <span className={`tiny num ${a.n > 1 ? 'wt' : 't2'}`}>
                       Attempt {a.n}
@@ -200,6 +204,7 @@ export default function AuditPage() {
                       <td style={{ whiteSpace: 'normal', minWidth: 260 }}>
                         {e.what}
                         {e.why ? <span className="tiny t3" style={{ display: 'block' }}>{e.why}</span> : null}
+                        {pricedTogether(e) ? <span className="tag" style={{ marginTop: 4, display: 'inline-block' }}>priced together</span> : null}
                       </td>
                       <td className="r num">{(() => {
                         const a = attemptOf(e);
