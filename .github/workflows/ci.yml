@@ -14,8 +14,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
       - run: pnpm typecheck
       - run: pnpm test
         env:
           FC_RUNS: '5000'
-      - run: pnpm build
