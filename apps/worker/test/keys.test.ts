@@ -3,7 +3,7 @@ import { SealedDigestSigner, parseMasterKeys } from '@bulwarkxyz/signer';
 import { MemoryStore } from '@bulwarkxyz/store';
 import { keccak256, recoverAddress, toHex, type Hex } from 'viem';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { KeyService, SEALED_PREFIX } from '../src/keys.js';
+import { KMS_PREFIX, KeyService, SEALED_PREFIX } from '../src/keys.js';
 
 const ACCOUNT = '0x9959260f1aa229f8a70e0c495ca9b251106c1a86';
 const master = parseMasterKeys(`m1:${randomBytes(32).toString('base64')}`);
@@ -97,5 +97,37 @@ describe('key service', () => {
     expect((await store.user(ACCOUNT))!.agentKeyRef).toBe('wiped');
     expect((await store.agentKeys(ACCOUNT, 'testnet'))[0]).toMatchObject({ status: 'wiped' });
     expect(store.audit.raw(ACCOUNT).at(-1)).toMatchObject({ kind: 'key', what: expect.stringContaining('wiped') });
+  });
+});
+
+describe('key service, KMS custody', () => {
+  const putKms = (address: string, keyId: string, status: 'active' | 'pending') =>
+    store.putKmsKey({ account: ACCOUNT, network: 'testnet', address: address as Hex, kmsKeyId: keyId, status, masterKeyId: null, createdAt: now, updatedAt: now });
+
+  it('promotes an approved KMS replacement: the user points at the new KMS key; the old one goes to the API to retire', async () => {
+    await putKms('0x00000000000000000000000000000000000000a1', 'k-old', 'active');
+    await store.setUserAgent(ACCOUNT, `${KMS_PREFIX}k-old`, '0x00000000000000000000000000000000000000a1');
+    await putKms('0x00000000000000000000000000000000000000a2', 'k-new', 'pending');
+    approved = ['0x00000000000000000000000000000000000000A2'];
+    expect(await service().promoteRotations([ACCOUNT])).toBe(1);
+    expect((await store.user(ACCOUNT))!.agentKeyRef).toBe(`${KMS_PREFIX}k-new`);
+    expect(await store.kmsKeysToRetire('testnet')).toEqual([{ account: ACCOUNT, network: 'testnet', address: '0x00000000000000000000000000000000000000a1', kmsKeyId: 'k-old' }]);
+    expect(store.audit.raw(ACCOUNT).at(-1)?.what).toMatch(/no longer signs and is being disabled in AWS KMS/);
+  });
+
+  it('wipe: the KMS key stops signing at once and is queued for the API to disable and delete', async () => {
+    await putKms('0x00000000000000000000000000000000000000a1', 'k-1', 'active');
+    await store.setUserAgent(ACCOUNT, `${KMS_PREFIX}k-1`, '0x00000000000000000000000000000000000000a1');
+    expect(await service().wipe(ACCOUNT, 'You signed a command to wipe your guard key')).toBe(1);
+    expect((await store.user(ACCOUNT))!.agentKeyRef).toBe('wiped');
+    expect(dropped).toContain(ACCOUNT);
+    expect((await store.kmsKeysToRetire('testnet')).map((k) => k.kmsKeyId)).toEqual(['k-1']);
+    expect(store.audit.raw(ACCOUNT).at(-1)?.what).toMatch(/1 AWS KMS key no longer used, to be disabled and deleted/);
+  });
+
+  it('wipe also retires a KMS key from before keys were recorded', async () => {
+    await store.setUserAgent(ACCOUNT, `${KMS_PREFIX}k-legacy`, '0x00000000000000000000000000000000000000b1');
+    await service().wipe(ACCOUNT, 'wipe');
+    expect((await store.kmsKeysToRetire('testnet')).map((k) => k.kmsKeyId)).toEqual(['k-legacy']);
   });
 });

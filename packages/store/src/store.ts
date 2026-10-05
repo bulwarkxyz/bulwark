@@ -103,8 +103,18 @@ export interface AgentKeyInfo {
   address: Hex;
   status: AgentKeyStatus;
   masterKeyId: string | null;
+  /** Set for keys held in AWS KMS (the key id; no key material). */
+  kmsKeyId?: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/** A KMS key that no longer signs for anyone and still has to be disabled and scheduled for deletion. */
+export interface KmsKeyToRetire {
+  account: string;
+  network: string;
+  address: Hex;
+  kmsKeyId: string;
 }
 
 export interface KeyRequest {
@@ -132,6 +142,8 @@ export interface KeyVault {
   /** Destroys the account's blobs on the network (all, or one address); status 'wiped'. Returns how many were live. */
   wipeAgentKeys(account: string, network: string, now: number, address?: string): Promise<number>;
   setUserAgent(account: string, agentKeyRef: string, agentAddress: string | null): Promise<void>;
+  /** Records a key held in AWS KMS (id and address only). */
+  putKmsKey(k: AgentKeyInfo & { kmsKeyId: string }): Promise<void>;
 }
 
 /** What the API needs on top of the worker's view. */
@@ -139,6 +151,10 @@ export interface ApiStore extends GuardStore {
   /** Asks the signing service for a new agent key. Idempotent while a request is pending. */
   requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number): Promise<{ id: number; created: boolean }>;
   agentKeys(account: string, network: string): Promise<AgentKeyInfo[]>;
+  putKmsKey(k: AgentKeyInfo & { kmsKeyId: string }): Promise<void>;
+  /** KMS keys that were wiped or replaced and are not yet disabled in AWS. */
+  kmsKeysToRetire(network: string): Promise<KmsKeyToRetire[]>;
+  markKmsRetired(account: string, network: string, address: string, now: number): Promise<void>;
   upsertUser(u: GuardUser, now: number): Promise<void>;
   setKillSwitch(account: string, on: boolean): Promise<void>;
   confirmPolicy(account: string, cp: ConfirmedPolicy): Promise<void>;
@@ -245,7 +261,7 @@ export class MemoryStore implements ApiStore, KeyVault {
     if (c) Object.assign(c, { doneAt: now, result });
   }
   // ---------------------------------------------------------------- agent keys
-  private readonly keys: Array<AgentKeyInfo & { sealed: string | null }> = [];
+  private readonly keys: Array<AgentKeyInfo & { sealed: string | null; kmsRetiredAt?: number }> = [];
   private readonly keyReqs: Array<KeyRequest & { doneAt?: number; result?: Record<string, unknown> }> = [];
   async requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number) {
     const open = this.keyReqs.find((r) => r.account === this.k(account) && r.network === network && r.doneAt === undefined);
@@ -255,7 +271,7 @@ export class MemoryStore implements ApiStore, KeyVault {
     return { id, created: true };
   }
   async agentKeys(account: string, network: string): Promise<AgentKeyInfo[]> {
-    return this.keys.filter((x) => x.account === this.k(account) && x.network === network).map(({ sealed: _s, ...info }) => info);
+    return this.keys.filter((x) => x.account === this.k(account) && x.network === network).map(({ sealed: _s, kmsRetiredAt: _r, ...info }) => ({ ...info, kmsKeyId: info.kmsKeyId ?? null }));
   }
   async pendingKeyRequests(network: string) {
     return this.keyReqs.filter((r) => r.network === network && r.doneAt === undefined).map(({ id, account, network: n, kind, requestedAt }) => ({ id, account, network: n, kind, requestedAt }));
@@ -266,6 +282,18 @@ export class MemoryStore implements ApiStore, KeyVault {
   }
   async putSealedKey(k: AgentKeyInfo & { sealed: string }) {
     this.keys.push({ ...k, account: this.k(k.account), address: k.address.toLowerCase() as Hex });
+  }
+  async putKmsKey(k: AgentKeyInfo & { kmsKeyId: string }) {
+    this.keys.push({ ...k, sealed: null, account: this.k(k.account), address: k.address.toLowerCase() as Hex });
+  }
+  async kmsKeysToRetire(network: string): Promise<KmsKeyToRetire[]> {
+    return this.keys
+      .filter((x) => x.network === network && x.kmsKeyId && (x.status === 'retired' || x.status === 'wiped') && x.kmsRetiredAt === undefined)
+      .map((x) => ({ account: x.account, network: x.network, address: x.address, kmsKeyId: x.kmsKeyId as string }));
+  }
+  async markKmsRetired(account: string, network: string, address: string, now: number) {
+    const x = this.findKey(account, network, address);
+    if (x) x.kmsRetiredAt = now;
   }
   private findKey(account: string, network: string, address: string) {
     return this.keys.find((x) => x.account === this.k(account) && x.network === network && x.address === address.toLowerCase());
@@ -288,7 +316,8 @@ export class MemoryStore implements ApiStore, KeyVault {
   async wipeAgentKeys(account: string, network: string, now: number, address?: string) {
     let n = 0;
     for (const x of this.keys) {
-      if (x.account !== this.k(account) || x.network !== network || x.sealed === null) continue;
+      const live = x.sealed !== null || (Boolean(x.kmsKeyId) && x.status !== 'wiped');
+      if (x.account !== this.k(account) || x.network !== network || !live) continue;
       if (address && x.address !== address.toLowerCase()) continue;
       Object.assign(x, { sealed: null, masterKeyId: null, status: 'wiped' as const, updatedAt: now });
       n++;

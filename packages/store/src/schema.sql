@@ -145,3 +145,7 @@ create table if not exists guard_status (
   updated_at         bigint not null,
   check ((state = 'paused') = (reason is not null))
 );
+
+-- Keys held in AWS KMS: the key id (no key material), and when the API disabled it and scheduled deletion.
+alter table agent_keys add column if not exists kms_key_id text;
+alter table agent_keys add column if not exists kms_retired_at bigint;

@@ -9,10 +9,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { KMSClient } from '@aws-sdk/client-kms';
 import type { MessagesClient } from '@bulwarkxyz/compiler';
 import { InfoClient, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
-import { ProvisionerKms, createGuardKey } from '@bulwarkxyz/signer';
+import { ProvisionerKms, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
 import { PgStore, migrate } from '@bulwarkxyz/store';
 import postgres from 'postgres';
-import { createApp } from './app.js';
+import { createApp, retireKmsKeys } from './app.js';
 
 const network = (process.env.NETWORK ?? 'testnet') as Network;
 const need = (k: string) => {
@@ -33,8 +33,9 @@ async function main() {
     }
   }
   const kms = process.env.AWS_ACCESS_KEY_ID ? new ProvisionerKms(new KMSClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' })) : null;
+  const store = new PgStore(sql);
   const app = createApp({
-    store: new PgStore(sql),
+    store,
     info: new InfoClient(network),
     jwtSecret: new TextEncoder().encode(need('JWT_SECRET')),
     proxySecret: need('PROXY_SECRET'),
@@ -45,6 +46,11 @@ async function main() {
     ...(kms ? { provisionAgent: (account: Hex) => createGuardKey(kms, { user: account, env: network }) } : {}),
     now: Date.now,
   });
+  // Wiped or replaced KMS keys: disable and schedule deletion (provisioner role only).
+  if (kms) {
+    const retire = { store, network, retireKmsKey: (keyId: string) => retireGuardKey(kms, keyId), now: Date.now };
+    setInterval(() => void retireKmsKeys(retire).catch((e) => console.error('retireKmsKeys', e)), 15_000);
+  }
   serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) });
   console.log(JSON.stringify({ msg: 'api started', network, kms: Boolean(kms), translator: Boolean(process.env.ANTHROPIC_API_KEY) }));
 }

@@ -3,7 +3,7 @@ import { MemoryStore } from '@bulwarkxyz/store';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { STATUS_MAX_AGE_MS, createApp } from '../src/app.js';
+import { STATUS_MAX_AGE_MS, createApp, retireKmsKeys } from '../src/app.js';
 
 const user = privateKeyToAccount(`0x${'77'.repeat(32)}`);
 const stranger = privateKeyToAccount(`0x${'78'.repeat(32)}`);
@@ -280,5 +280,64 @@ describe('guard status', () => {
     expect(await get(token)).toMatchObject({ state: 'paused', reason: 'stale_data' }); // rules just signed
     await store.setGuardStatus(ACCOUNT, { state: 'stopped', reason: null, lastEvaluatedAt: now, updatedAt: now });
     expect(await get(token)).toMatchObject({ state: 'paused', reason: 'stale_data' }); // just resumed
+  });
+});
+
+describe('KMS custody (active)', () => {
+  let n = 0;
+  const kmsApp = (retired: string[] = []) =>
+    createApp({
+      store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now,
+      provisionAgent: async () => ({ keyId: `key-${++n}`, address: `0x${String(n).padStart(40, 'a')}` as `0x${string}` }),
+      retireKmsKey: async (id) => void retired.push(id),
+    });
+  const onboard = async (a: ReturnType<typeof kmsApp>) => {
+    const token = await signIn();
+    await a.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    await a.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
+    return token;
+  };
+
+  it('records the KMS key (id and address only) and logs that its private key cannot leave KMS', async () => {
+    const a = kmsApp();
+    await onboard(a);
+    const [k] = await store.agentKeys(ACCOUNT, 'testnet');
+    expect(k).toMatchObject({ status: 'active', kmsKeyId: `key-${n}`, masterKeyId: null });
+    expect(store.audit.raw(ACCOUNT).at(-1)?.what).toMatch(/created in AWS KMS .* cannot leave KMS/);
+  });
+
+  it('rotation creates a replacement KMS key that waits for approval; asking again returns the same one', async () => {
+    const a = kmsApp();
+    const token = await onboard(a);
+    const r1 = (await (await a.request('/v1/guard-key/rotate', { method: 'POST', headers: authed(token) })).json()) as { pendingAgent: { address: string } };
+    const r2 = (await (await a.request('/v1/guard-key/rotate', { method: 'POST', headers: authed(token) })).json()) as { pendingAgent: { address: string } };
+    expect(r2.pendingAgent.address).toBe(r1.pendingAgent.address);
+    expect((await store.agentKeys(ACCOUNT, 'testnet')).map((k) => k.status)).toEqual(['active', 'pending']);
+  });
+
+  it('a wiped KMS key is disabled and scheduled for deletion in AWS, once, and logged', async () => {
+    const retired: string[] = [];
+    const a = kmsApp(retired);
+    await onboard(a);
+    const keyId = `key-${n}`;
+    const deps = { store, network: 'testnet' as const, retireKmsKey: async (id: string) => void retired.push(id), now: () => now };
+    expect(await retireKmsKeys(deps)).toEqual({ retired: 0, failed: 0 }); // still in use: untouched
+    await store.wipeAgentKeys(ACCOUNT, 'testnet', now); // what the worker's wipe does
+    expect(await retireKmsKeys(deps)).toEqual({ retired: 1, failed: 0 });
+    expect(await retireKmsKeys(deps)).toEqual({ retired: 0, failed: 0 });
+    expect(retired).toEqual([keyId]);
+    expect(store.audit.raw(ACCOUNT).at(-1)?.what).toMatch(/AWS KMS key .* disabled; AWS deletes it after 7 days/);
+  });
+
+  it('a failed retirement is tried again; a key already pending deletion counts as done', async () => {
+    const a = kmsApp();
+    await onboard(a);
+    await store.wipeAgentKeys(ACCOUNT, 'testnet', now);
+    const fail = Object.assign(new Error('throttled'), { name: 'ThrottlingException' });
+    const gone = Object.assign(new Error('pending deletion'), { name: 'KMSInvalidStateException' });
+    const deps = (e: Error) => ({ store, network: 'testnet' as const, retireKmsKey: async () => { throw e; }, now: () => now });
+    expect(await retireKmsKeys(deps(fail))).toEqual({ retired: 0, failed: 1 });
+    expect(await retireKmsKeys(deps(gone))).toEqual({ retired: 1, failed: 0 });
+    expect(await store.kmsKeysToRetire('testnet')).toEqual([]);
   });
 });

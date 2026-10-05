@@ -2,9 +2,11 @@ import { createSealedAgentKey, resealAgentKey, type MasterKeys } from '@bulwarkx
 import type { AuditInput, GuardStore, KeyVault } from '@bulwarkxyz/store';
 
 /**
- * Encrypted-at-rest agent keys on the signing service: creates them on request, promotes a rotated
- * key once the user has approved it on Hyperliquid, reseals after a master-key rotation, and wipes.
- * Only addresses and blobs move through here; private keys exist only inside the signer, per signature.
+ * Agent keys on the signing service. Encrypted-at-rest keys (the fallback custody): creates them on
+ * request, reseals after a master-key rotation. For both custodies: promotes a replacement key once
+ * the user has approved it on Hyperliquid, and wipes. Keys held in AWS KMS are created by the API
+ * (the provisioner role) and, once wiped or replaced here, disabled and scheduled for deletion by the
+ * API too: the signing role cannot delete keys. Only addresses, blobs and KMS key ids move through here.
  */
 export interface KeyServiceDeps {
   vault: KeyVault;
@@ -20,6 +22,8 @@ export interface KeyServiceDeps {
 }
 
 export const SEALED_PREFIX = 'sealed:';
+export const KMS_PREFIX = 'kms:';
+const refFor = (k: { address: string; kmsKeyId?: string | null }) => (k.kmsKeyId ? `${KMS_PREFIX}${k.kmsKeyId}` : `${SEALED_PREFIX}${k.address}`);
 
 export class KeyService {
   constructor(private readonly d: KeyServiceDeps) {}
@@ -83,13 +87,20 @@ export class KeyService {
       const now = this.d.now();
       const previous = user.agentAddress;
       await this.d.vault.setAgentKeyStatus(account, this.d.network, next.address, 'active', now);
-      await this.d.vault.setUserAgent(account, `${SEALED_PREFIX}${next.address}`, next.address);
+      await this.d.vault.setUserAgent(account, refFor(next), next.address);
       if (previous && previous.toLowerCase() !== next.address.toLowerCase()) {
         await this.d.vault.setAgentKeyStatus(account, this.d.network, previous, 'retired', now);
         await this.d.vault.wipeAgentKeys(account, this.d.network, now, previous);
       }
       this.d.onKeyChanged(account);
-      await this.audit({ account, kind: 'key', why: 'You approved your replacement guard key on Hyperliquid', what: `Guard key replaced; the old key (${previous ?? 'none'}) was wiped`, proof: { address: next.address, previous } });
+      const oldWasKms = user.agentKeyRef.startsWith(KMS_PREFIX);
+      await this.audit({
+        account,
+        kind: 'key',
+        why: 'You approved your replacement guard key on Hyperliquid',
+        what: `Guard key replaced; the old key (${previous ?? 'none'}) ${oldWasKms ? 'no longer signs and is being disabled in AWS KMS' : 'was wiped'}`,
+        proof: { address: next.address, previous },
+      });
       promoted++;
     }
     return promoted;
@@ -106,13 +117,31 @@ export class KeyService {
     return stale.length;
   }
 
-  /** Destroys every sealed key for the account. The guard cannot sign for it afterwards. */
+  /**
+   * Wipes every guard key for the account: encrypted keys are destroyed here; KMS keys stop signing
+   * here at once and are then disabled and scheduled for deletion by the API. The guard cannot sign
+   * for the account afterwards.
+   */
   async wipe(account: string, why: string): Promise<number> {
     const now = this.d.now();
+    const user = await this.d.store.user(account);
+    // A KMS key from before keys were recorded: record it so it is retired too.
+    if (user?.agentKeyRef.startsWith(KMS_PREFIX) && user.agentAddress) {
+      const known = await this.d.vault.agentKeys(account, this.d.network);
+      if (!known.some((k) => k.address.toLowerCase() === user.agentAddress!.toLowerCase()))
+        await this.d.vault.putKmsKey({ account, network: this.d.network, address: user.agentAddress, status: 'active', masterKeyId: null, kmsKeyId: user.agentKeyRef.slice(KMS_PREFIX.length), createdAt: now, updatedAt: now });
+    }
+    const keys = await this.d.vault.agentKeys(account, this.d.network);
+    const kms = keys.filter((k) => k.kmsKeyId && k.status !== 'wiped').length;
     const n = await this.d.vault.wipeAgentKeys(account, this.d.network, now);
     await this.d.vault.setUserAgent(account, 'wiped', null);
     this.d.onKeyChanged(account);
-    await this.audit({ account, kind: 'key', why, what: n ? `Guard key wiped (${n} encrypted key${n > 1 ? 's' : ''} destroyed)` : 'No stored guard key to wipe' });
+    const sealed = n - kms;
+    const parts = [
+      ...(sealed > 0 ? [`${sealed} encrypted key${sealed > 1 ? 's' : ''} destroyed`] : []),
+      ...(kms > 0 ? [`${kms} AWS KMS key${kms > 1 ? 's' : ''} no longer used, to be disabled and deleted`] : []),
+    ];
+    await this.audit({ account, kind: 'key', why, what: n ? `Guard key wiped (${parts.join('; ')})` : 'No stored guard key to wipe' });
     return n;
   }
 }

@@ -61,6 +61,19 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.retries('0x0000000000000000000000000000000000000001')).toEqual([]);
   });
 
+  it('KMS keys: recorded without material, queued for retirement once wiped, then marked retired', async () => {
+    const A = '0x00000000000000000000000000000000000000c0';
+    await store.upsertUser({ account: A, agentKeyRef: 'kms:k-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
+    await store.putKmsKey({ account: A, network: 'testnet', address: '0x00000000000000000000000000000000000000a1', kmsKeyId: 'k-1', status: 'active', masterKeyId: null, createdAt: 1, updatedAt: 1 });
+    expect((await store.agentKeys(A, 'testnet')).at(-1)).toMatchObject({ kmsKeyId: 'k-1', status: 'active' });
+    expect(await store.kmsKeysToRetire('testnet')).toEqual([]);
+    expect(await store.wipeAgentKeys(A, 'testnet', 5, '0x00000000000000000000000000000000000000A1')).toBe(1);
+    expect(await store.kmsKeysToRetire('testnet')).toEqual([{ account: A, network: 'testnet', address: '0x00000000000000000000000000000000000000a1', kmsKeyId: 'k-1' }]);
+    await store.markKmsRetired(A, 'testnet', '0x00000000000000000000000000000000000000a1', 6);
+    expect(await store.kmsKeysToRetire('testnet')).toEqual([]);
+    expect(await store.wipeAgentKeys(A, 'testnet', 7, '0x00000000000000000000000000000000000000a1')).toBe(0);
+  });
+
   it('round-trips the guard status; a reason only with paused', async () => {
     expect(await store.guardStatus(A)).toBeNull();
     await store.setGuardStatus(A, { state: 'paused', reason: 'stale_data', lastEvaluatedAt: 10, updatedAt: 20 });

@@ -3,7 +3,7 @@ import { Policy, type CommandName, type RetryChain } from '@bulwarkxyz/guard-cor
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, PendingCommand } from './store.js';
+import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, KmsKeyToRetire, PendingCommand } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -160,11 +160,11 @@ export class PgStore implements ApiStore, KeyVault {
     return { id: Number(again?.id), created: false };
   }
   private toKey(r: Record<string, unknown>): AgentKeyInfo {
-    return { account: r.account as string, network: r.network as string, address: r.address as Hex, status: r.status as AgentKeyStatus, masterKeyId: (r.master_key_id as string | null) ?? null, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at) };
+    return { account: r.account as string, network: r.network as string, address: r.address as Hex, status: r.status as AgentKeyStatus, masterKeyId: (r.master_key_id as string | null) ?? null, kmsKeyId: (r.kms_key_id as string | null) ?? null, createdAt: Number(r.created_at), updatedAt: Number(r.updated_at) };
   }
   async agentKeys(account: string, network: string): Promise<AgentKeyInfo[]> {
     // The sealed column is deliberately not selected here.
-    const rows = await this.sql`select account, network, address, status, master_key_id, created_at, updated_at from agent_keys where account = ${this.k(account)} and network = ${network} order by created_at`;
+    const rows = await this.sql`select account, network, address, status, master_key_id, kms_key_id, created_at, updated_at from agent_keys where account = ${this.k(account)} and network = ${network} order by created_at`;
     return rows.map((r) => this.toKey(r));
   }
   async pendingKeyRequests(network: string): Promise<KeyRequest[]> {
@@ -177,6 +177,18 @@ export class PgStore implements ApiStore, KeyVault {
   async putSealedKey(k: AgentKeyInfo & { sealed: string }) {
     await this.sql`insert into agent_keys (account, network, address, sealed, master_key_id, status, created_at, updated_at)
       values (${this.k(k.account)}, ${k.network}, ${k.address.toLowerCase()}, ${k.sealed}, ${k.masterKeyId}, ${k.status}, ${k.createdAt}, ${k.updatedAt})`;
+  }
+  async putKmsKey(k: AgentKeyInfo & { kmsKeyId: string }) {
+    await this.sql`insert into agent_keys (account, network, address, kms_key_id, status, created_at, updated_at)
+      values (${this.k(k.account)}, ${k.network}, ${k.address.toLowerCase()}, ${k.kmsKeyId}, ${k.status}, ${k.createdAt}, ${k.updatedAt})`;
+  }
+  async kmsKeysToRetire(network: string): Promise<KmsKeyToRetire[]> {
+    const rows = await this.sql`select account, network, address, kms_key_id from agent_keys
+      where network = ${network} and kms_key_id is not null and status in ('retired', 'wiped') and kms_retired_at is null order by updated_at`;
+    return rows.map((r) => ({ account: r.account as string, network: r.network as string, address: r.address as Hex, kmsKeyId: r.kms_key_id as string }));
+  }
+  async markKmsRetired(account: string, network: string, address: string, now: number) {
+    await this.sql`update agent_keys set kms_retired_at = ${now}, updated_at = ${now} where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()}`;
   }
   async sealedKey(account: string, network: string, address: string) {
     const [r] = await this.sql`select sealed, master_key_id from agent_keys where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and sealed is not null`;
@@ -196,9 +208,9 @@ export class PgStore implements ApiStore, KeyVault {
   async wipeAgentKeys(account: string, network: string, now: number, address?: string) {
     const rows = address
       ? await this.sql`update agent_keys set sealed = null, master_key_id = null, status = 'wiped', updated_at = ${now}
-          where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and sealed is not null returning address`
+          where account = ${this.k(account)} and network = ${network} and address = ${address.toLowerCase()} and (sealed is not null or (kms_key_id is not null and status <> 'wiped')) returning address`
       : await this.sql`update agent_keys set sealed = null, master_key_id = null, status = 'wiped', updated_at = ${now}
-          where account = ${this.k(account)} and network = ${network} and sealed is not null returning address`;
+          where account = ${this.k(account)} and network = ${network} and (sealed is not null or (kms_key_id is not null and status <> 'wiped')) returning address`;
     return rows.length;
   }
   async setUserAgent(account: string, agentKeyRef: string, agentAddress: string | null) {

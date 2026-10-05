@@ -31,9 +31,12 @@ export interface ApiDeps {
   siweDomain: string;
   /** Creates a per-user KMS key; absent until AWS access exists. */
   provisionAgent?: (account: Hex) => Promise<{ keyId: string; address: Hex }>;
+  /** Disables a KMS key and schedules its deletion (provisioner role). */
+  retireKmsKey?: (keyId: string) => Promise<void>;
   /**
-   * Where agent keys live. 'sealed': generated and stored encrypted by the signing service (the API
-   * only files a request and never sees key material). 'kms': per-user AWS KMS keys via provisionAgent.
+   * Where new agent keys live. 'kms' (active): a per-user, non-exportable AWS KMS key created through
+   * provisionAgent; the private key never leaves KMS. 'sealed' (fallback): generated and stored
+   * encrypted by the signing service; the API only files a request and never sees key material.
    */
   keyCustody: 'sealed' | 'kms';
   network: 'mainnet' | 'testnet';
@@ -124,7 +127,9 @@ export function createApp(deps: ApiDeps) {
       account,
       user,
       agent: user?.agentAddress ? { address: user.agentAddress, approved: Boolean(agent), validUntil: agent?.validUntil ?? null } : null,
-      keyCustody: deps.keyCustody,
+      // Where this user's key actually lives (new keys use the service's mode), so the app describes it truthfully.
+      keyCustody: user?.agentKeyRef.startsWith('kms:') ? 'kms' : user?.agentKeyRef.startsWith('sealed:') ? 'sealed' : deps.keyCustody,
+      newKeyCustody: deps.keyCustody,
       keyStatus: user?.agentKeyRef === 'wiped' ? 'wiped' : user?.agentAddress ? 'ready' : keyMeta.length || user?.agentKeyRef === 'requested' ? 'creating' : 'none',
       pendingAgent: pending ? { address: pending.address } : null,
       builder: { address: BUILDER_ADDRESS, feeTenthsBps: BUILDER_FEE_TENTHS_BPS, approvedMaxTenthsBps: maxFee },
@@ -177,18 +182,37 @@ export function createApp(deps: ApiDeps) {
       console.error(JSON.stringify({ msg: 'guard key provisioning failed', account, error: (e as Error).name, detail: (e as Error).message }));
       return c.json({ error: 'guard keys are not available yet; please try again later' }, 503);
     }
-    await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, deps.now());
+    const now = deps.now();
+    await deps.store.putKmsKey({ account, network: deps.network, address: key.address, kmsKeyId: key.keyId, status: 'active', masterKeyId: null, createdAt: now, updatedAt: now });
+    await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, now);
+    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked for a guard key', what: `Guard key created in AWS KMS (address ${key.address}); its private key cannot leave KMS`, proof: { address: key.address } });
     return c.json({ agentAddress: key.address });
   });
 
-  // Replace the guard key (sealed custody). The new key takes over once the user approves it on Hyperliquid.
+  // Replace the guard key. The new key takes over once the user approves it on Hyperliquid; the old one
+  // is then wiped (encrypted) or disabled and scheduled for deletion (KMS).
   app.post('/v1/guard-key/rotate', async (c) => {
     const account = c.get('account');
     const user = await deps.store.user(account);
-    if (deps.keyCustody !== 'sealed') return c.json({ error: 'key rotation here applies to stored keys only' }, 409);
     if (!user?.agentAddress) return c.json({ error: 'no guard key yet' }, 409);
-    await deps.store.requestAgentKey(account, deps.network, 'rotate', deps.now());
-    return c.json({ status: 'creating' }, 202);
+    if (deps.keyCustody === 'sealed') {
+      await deps.store.requestAgentKey(account, deps.network, 'rotate', deps.now());
+      return c.json({ status: 'creating' }, 202);
+    }
+    const pending = (await deps.store.agentKeys(account, deps.network)).find((k) => k.status === 'pending');
+    if (pending) return c.json({ status: 'pending', pendingAgent: { address: pending.address } });
+    if (!deps.provisionAgent) return c.json({ error: 'guard keys are not available yet' }, 503);
+    let key: { keyId: string; address: Hex };
+    try {
+      key = await deps.provisionAgent(account);
+    } catch (e) {
+      console.error(JSON.stringify({ msg: 'guard key provisioning failed', account, error: (e as Error).name, detail: (e as Error).message }));
+      return c.json({ error: 'guard keys are not available yet; please try again later' }, 503);
+    }
+    const now = deps.now();
+    await deps.store.putKmsKey({ account, network: deps.network, address: key.address, kmsKeyId: key.keyId, status: 'pending', masterKeyId: null, createdAt: now, updatedAt: now });
+    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked to replace your guard key', what: `Replacement guard key created in AWS KMS (address ${key.address}); it takes over once you approve it on Hyperliquid`, proof: { address: key.address } });
+    return c.json({ status: 'pending', pendingAgent: { address: key.address } });
   });
 
   // -------------------------------------------------------------- policy
@@ -323,4 +347,33 @@ async function accountNow(deps: ApiDeps, account: Hex) {
   });
   const risk = assessRisk(snapshot);
   return { accountValue: risk.accountValue, marks: Object.fromEntries(snapshot.positions.map((p) => [p.coin, p.markAtSnapshot])) };
+}
+
+/**
+ * Disables, and schedules for deletion, every KMS key that was wiped or replaced. Runs on the API because
+ * only the provisioner role may do this; the signing role can only sign. AWS deletes a scheduled key after
+ * 7 days; until then it is disabled and cannot sign. Safe to repeat.
+ */
+export async function retireKmsKeys(deps: Pick<ApiDeps, 'store' | 'network' | 'retireKmsKey' | 'now'>): Promise<{ retired: number; failed: number }> {
+  if (!deps.retireKmsKey) return { retired: 0, failed: 0 };
+  let retired = 0;
+  let failed = 0;
+  for (const k of await deps.store.kmsKeysToRetire(deps.network)) {
+    try {
+      await deps.retireKmsKey(k.kmsKeyId);
+    } catch (e) {
+      // Already pending deletion, or gone: nothing left to do. Anything else is retried next round.
+      const name = (e as Error).name;
+      if (name !== 'KMSInvalidStateException' && name !== 'NotFoundException') {
+        failed++;
+        console.error(JSON.stringify({ msg: 'kms key retirement failed', account: k.account, error: name, detail: (e as Error).message }));
+        continue;
+      }
+    }
+    const now = deps.now();
+    await deps.store.markKmsRetired(k.account, k.network, k.address, now);
+    await deps.store.audit.append({ account: k.account, at: now, kind: 'key', why: 'Your guard key was wiped or replaced', what: `AWS KMS key for ${k.address} disabled; AWS deletes it after 7 days`, proof: { address: k.address } });
+    retired++;
+  }
+  return { retired, failed };
 }
