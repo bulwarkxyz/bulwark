@@ -1,0 +1,8 @@
+/* Document base for the Bulwark app. Component styles live in app/app/app.css. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
+html.dark body { background: #090C10; }
+html.light body { background: #F3F4F0; }
+h1, h2, h3, h4, p { margin: 0; }
+button, input, select, textarea { font: inherit; }
+img, svg { display: block; max-width: 100%; }

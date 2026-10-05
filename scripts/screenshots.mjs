@@ -16,7 +16,7 @@ const address = flag('--address');
 const routesArg = flag('--routes');
 const base = args[0] ?? 'http://localhost:3217';
 const out = args[1] ?? 'screenshots';
-const routes = routesArg ? routesArg.split(',') : ['/app', '/app/trade/CL', '/app/positions', '/app/settings', '/app/onboarding', '/app/audit'];
+const routes = routesArg ? routesArg.split(',') : ['/app', '/app/trade/CL', '/app/positions', '/app/rules', '/app/simulator', '/app/account', '/app/audit', '/app/settings', '/app/onboarding'];
 const sizes = [
   { name: '1440', width: 1440, height: 1000, mobile: false },
   { name: '390', width: 390, height: 844, mobile: true },
