@@ -84,7 +84,9 @@ class Stream {
       if (!coin) return;
       const entry = this.subs.get(`${msg.channel}:${coin}`);
       if (!entry) return;
-      this.setStatus({ lastMessageAt: Date.now() });
+      // The status bar shows the age in seconds: tell it at most once a second, not on every message.
+      const at = Date.now();
+      if (at - this.status.lastMessageAt >= 1_000) this.setStatus({ lastMessageAt: at });
       for (const fn of entry.listeners) fn(msg.data);
     };
     ws.onclose = () => {

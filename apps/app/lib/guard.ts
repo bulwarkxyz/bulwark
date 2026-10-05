@@ -153,6 +153,7 @@ export function useGuardStatus(enabled: boolean) {
       }
       return api<GuardStatus>('/v1/guard/status');
     },
+    staleTime: 4_000,
     refetchInterval: 5_000,
     retry: 0,
   });

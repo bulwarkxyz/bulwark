@@ -223,7 +223,7 @@ export default function MarketsPage() {
                       return (
                         <tr key={m.coin} className={sel === m.coin ? 'sel' : ''} onClick={() => (setSel(m.coin), setPicked(true))} style={{ cursor: 'pointer' }}>
                           <td>
-                            <Link className="sym" href={`/app/trade/${m.ticker}`} onClick={(e) => e.stopPropagation()}>
+                            <Link className="sym" href={`/app/trade/${m.ticker}`} prefetch={false} onClick={(e) => e.stopPropagation()}>
                               <span className="glyph">{m.ticker.slice(0, 2)}</span>
                               <span className="col" style={{ gap: 0 }}>
                                 <b>{m.ticker}</b>
@@ -251,7 +251,7 @@ export default function MarketsPage() {
                 {rows.map((m) => {
                   const c = markets.data?.get(m.coin);
                   return (
-                    <Link key={m.coin} className="row nw" href={`/app/trade/${m.ticker}`} style={{ padding: 12, borderBottom: '1px solid var(--line)' }}>
+                    <Link key={m.coin} className="row nw" href={`/app/trade/${m.ticker}`} prefetch={false} style={{ padding: 12, borderBottom: '1px solid var(--line)' }}>
                       <span className="glyph">{m.ticker.slice(0, 2)}</span>
                       <span className="col" style={{ gap: 1, flex: 1 }}>
                         <b>

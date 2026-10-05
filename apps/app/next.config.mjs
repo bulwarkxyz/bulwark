@@ -11,6 +11,8 @@ const nextConfig = {
   // Workspace packages ship TypeScript-built ESM; let Next compile them with the app.
   transpilePackages: ['@bulwarkxyz/guard-core', '@bulwarkxyz/hyperliquid', '@bulwarkxyz/config', '@bulwarkxyz/store', '@bulwarkxyz/compiler'],
   devIndicators: false,
+  // Source maps in the browser only for local CPU profiling (PROFILE_SOURCEMAPS=1 next build); never in a deploy.
+  productionBrowserSourceMaps: process.env.PROFILE_SOURCEMAPS === '1',
   // Served as a zone under the landing site: /app and /api/bw route here; assets live under /app-static.
   assetPrefix: '/app-static',
   env: { NEXT_PUBLIC_REVIEW_MODE: reviewMode },

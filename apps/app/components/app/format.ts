@@ -1,3 +1,12 @@
+// Number formatters, one per digit count: toLocaleString with options builds a new one on every call,
+// and the order book and tables format hundreds of numbers per update.
+const NF = new Map<number, Intl.NumberFormat>();
+export function fixed(n: number, digits: number): string {
+  let f = NF.get(digits);
+  if (!f) NF.set(digits, (f = new Intl.NumberFormat('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })));
+  return f.format(n);
+}
+
 export const shortAddr = (a: string) => `${a.slice(0, 5)}…${a.slice(-4)}`;
 
 export function fmtUsd(n: number, digits = 2): string {
@@ -6,7 +15,7 @@ export function fmtUsd(n: number, digits = 2): string {
   const abs = Math.abs(n);
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+  return `${sign}$${fixed(abs, digits)}`;
 }
 
 export function fmtSignedUsd(n: number): string {
@@ -24,7 +33,7 @@ export function fmtPct(n: number, digits = 2, signed = true): string {
 export function fmtPx(n: number): string {
   if (!Number.isFinite(n)) return '—';
   const digits = n >= 10000 ? 0 : n >= 1000 ? 1 : n >= 100 ? 2 : n >= 1 ? 3 : 6;
-  return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return fixed(n, digits);
 }
 
 export function fmtBuffer(b: number): string {

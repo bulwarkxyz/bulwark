@@ -72,6 +72,7 @@ export function useXyzMarkets() {
       });
       return out;
     },
+    staleTime: REFRESH_MS - 1_000,
     refetchInterval: REFRESH_MS,
   });
 }
@@ -105,6 +106,7 @@ export function useAccountView(address: Hex | undefined) {
       });
       return { snapshot, risk: assessRisk(snapshot), abstraction };
     },
+    staleTime: REFRESH_MS - 1_000,
     refetchInterval: REFRESH_MS,
   });
 }
