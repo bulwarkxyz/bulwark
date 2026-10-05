@@ -4,7 +4,7 @@
 // first visit and on a repeat; and whether the click was a client-side navigation or a full page load.
 // Profiles: "laptop" (no throttling) and "phone" (390 wide, 4x CPU slowdown, 4G-class network).
 // Usage: node scripts/perf-tabs.mjs <baseUrl> [--profile laptop|phone] [--json out.json] [--trace out.zip]
-//        [--budget-frame ms] [--budget-data ms]
+//        [--budget-frame ms] [--budget-data ms] [--query 'watch=0x…']
 // Budgets: every tab switch (first and repeat visit) must show its frame within --budget-frame, and every
 // repeat visit must show its data within --budget-data; otherwise the script exits 1 (the CI check).
 import { writeFileSync } from 'node:fs';
@@ -18,6 +18,7 @@ const opt = (n, d) => {
 const profile = opt('--profile', 'laptop');
 const jsonOut = opt('--json');
 const traceOut = opt('--trace');
+const query = opt('--query', ''); // e.g. watch=0x… on a review build: the screens with an account's data
 const budgetFrame = Number(opt('--budget-frame', '0'));
 const budgetData = Number(opt('--budget-data', '0'));
 const base = args[0] ?? 'https://bulwark.0xo.in';
@@ -55,7 +56,7 @@ page.on('requestfinished', (r) => requests.push(r.url()));
 
 const results = [];
 const t0 = Date.now();
-await page.goto(`${base}/app`, { waitUntil: 'commit', timeout: 120_000 });
+await page.goto(`${base}/app${query ? `?${query}` : ''}`, { waitUntil: 'commit', timeout: 120_000 });
 await page.locator(TABS[0].frame).filter({ visible: true }).first().waitFor({ timeout: 120_000 });
 const coldFrame = Date.now() - t0;
 await page.waitForFunction(() => !document.querySelector('main .sk, main .skb'), null, { timeout: 120_000 }).catch(() => {});
@@ -104,7 +105,7 @@ if (traceOut) await ctx.tracing.stop({ path: traceOut });
 await browser.close();
 
 const pad = (s, n) => String(s).padEnd(n);
-console.log(`${profile} · ${base}`);
+console.log(`${profile} · ${base}${query ? ` · ?${query}` : ''}`);
 console.log(`${pad('tab', 30)}${pad('visit', 8)}${pad('frame ms', 10)}${pad('data ms', 10)}${pad('full load', 11)}requests`);
 for (const r of results) console.log(`${pad(r.tab, 30)}${pad(r.round === 0 ? 'cold' : r.round === 1 ? 'first' : 'repeat', 8)}${pad(r.frameMs, 10)}${pad(r.dataMs, 10)}${pad(r.fullLoad ? 'yes' : 'no', 11)}${r.requests ?? ''}`);
 if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ profile, base, at: new Date().toISOString(), results }, null, 1));
