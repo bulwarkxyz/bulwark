@@ -174,3 +174,11 @@ textarea.area{width:100%;min-height:96px;resize:vertical;padding:12px 14px;borde
 .bw select { background: transparent; color: var(--text); border: 0; font: inherit; }
 .bw .seg button[disabled], .bw .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .bw .link { color: var(--guard-text); font-weight: 600; }
+
+/* Filled buttons keep their dark text even when rendered as links (`.app a` would otherwise win),
+   and a disabled primary keeps AA contrast: a muted lime fill with full-strength dark text, no fading. */
+.bw .btn-primary, .bw a.btn-primary { color: var(--guard-ink); }
+.bw .btn-long, .bw a.btn-long { color: #05101E; }
+.bw .btn-short, .bw a.btn-short { color: #1C0B00; }
+.bw .btn-danger, .bw a.btn-danger { color: #1A0204; }
+.bw .btn-primary[disabled] { opacity: 1; background: color-mix(in srgb, var(--guard) 55%, var(--bg)); color: var(--guard-ink); }

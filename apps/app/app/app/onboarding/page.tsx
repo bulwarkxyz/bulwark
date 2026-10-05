@@ -7,6 +7,7 @@ import { useAccount } from 'wagmi';
 import { ConnectButton, useSignIn } from '@/components/app/connect';
 import { fmtUsd } from '@/components/app/format';
 import { BrandMark } from '@/components/app/icons';
+import { NetworkBadge } from '@/components/app/network-badge';
 import { BuilderCard, GuardKeyCard, TradingKeyCard } from '@/components/app/keys';
 import { StageForm } from '@/components/app/stage-form';
 import { api, ApiError } from '@/lib/api';
@@ -91,7 +92,10 @@ export default function OnboardingPage() {
           <BrandMark />
           Bulwark
         </Link>
-        <ConnectButton />
+        <span className="row" style={{ gap: 8 }}>
+          <NetworkBadge />
+          <ConnectButton />
+        </span>
       </div>
       <h1 style={{ fontSize: 26, letterSpacing: '-.02em', margin: '0 0 6px' }}>Set up your guard</h1>
       <p className="muted" style={{ margin: '0 0 20px' }}>

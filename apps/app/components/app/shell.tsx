@@ -8,6 +8,7 @@ import { useMe } from '@/lib/me';
 import { BrandMark, Icon } from './icons';
 import { fmtBuffer, fmtUsd, shortAddr } from './format';
 import { ConnectButton } from './connect';
+import { NetworkBadge } from './network-badge';
 
 const NAV = [
   { href: '/app', label: 'Markets', icon: Icon.markets, tab: true },
@@ -109,6 +110,7 @@ export function TopBar({ title, children }: { title: React.ReactNode; children?:
   return (
     <header className="topbar">
       <h1>{title}</h1>
+      <NetworkBadge />
       {children}
       <span className="spacer" />
       {address && view.data ? (
