@@ -2981,6 +2981,16 @@
     "isDelisted": true,
     "marginMode": "noCross",
     "deployerFeeScale": "1.0"
+   },
+   {
+    "szDecimals": 2,
+    "name": "xyz:INNOLIGHT",
+    "maxLeverage": 10,
+    "marginTableId": 10,
+    "onlyIsolated": true,
+    "isDelisted": true,
+    "marginMode": "noCross",
+    "deployerFeeScale": "1.0"
    }
   ],
   "marginTables": [

@@ -1,16 +1,22 @@
 'use client';
 
-import { describeRule } from '@bulwarkxyz/compiler';
 import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
-import { useAccount, useChainId, useSignTypedData } from 'wagmi';
-import { StageForm } from '@/components/app/stage-form';
-import { TopBar } from '@/components/app/shell';
+import { useChainId, useSignTypedData } from 'wagmi';
+import { fmtBuffer } from '@/components/app/format';
+import { BufferMeter } from '@/components/app/guard-ui';
+import { Icon } from '@/components/app/icons';
+import { ActiveRules, HowGuardTrades, RuleBuilder, usePolicyDraft, type PolicyDraftState } from '@/components/app/rules-editor';
 import { api, ApiError, useSignedIn } from '@/lib/api';
+import { describeAction, tickerOf, useGuardView, useNow, type GuardView } from '@/lib/guard';
+import { useAccountView } from '@/lib/hl';
+import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
+import { useReview, useViewer } from '@/lib/review';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
+import { useTimes } from '@/lib/time';
 
 type DraftReply =
   | { kind: 'draft'; rule: Rule; description: string; provenance: Array<{ path: string; value: number; typed: number }>; policy: Policy }
@@ -18,8 +24,7 @@ type DraftReply =
   | { kind: 'refuse'; reason: string }
   | { kind: 'rejected'; violations: string[] };
 
-function Translator() {
-  const me = useMe();
+function Translator({ enabled, forced, s }: { enabled: boolean; forced: 'loading' | 'error' | null; s: PolicyDraftState }) {
   const qc = useQueryClient();
   const chainId = useChainId();
   const { signTypedDataAsync } = useSignTypedData();
@@ -37,7 +42,7 @@ function Translator() {
     try {
       setReply(await api<DraftReply>('/v1/rules/draft', { body: { text } }));
     } catch (e) {
-      setErr(e instanceof ApiError && e.status === 503 ? 'The AI translator is not switched on yet. You can still write rules with the stage editor below.' : (e as Error).message);
+      setErr(e instanceof ApiError && e.status === 503 ? 'The AI translator is not switched on yet. You can still build rules by hand.' : (e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -50,7 +55,7 @@ function Translator() {
       const signature = await signPolicy(signTypedDataAsync as unknown as SignTypedData, chainId, reply.policy);
       await api('/v1/policy', { body: { policy: reply.policy, signature, chainId } });
       await qc.invalidateQueries({ queryKey: ['me'] });
-      setDone(`Added. Policy v${reply.policy.version} is now running.`);
+      setDone(`Added. Version ${reply.policy.version} is now running.`);
       setReply(null);
       setText('');
     } catch (e) {
@@ -60,148 +65,251 @@ function Translator() {
     }
   }
 
+  const translating = forced === 'loading' || busy === 'translate';
   return (
-    <section className="card" aria-labelledby="ai-h">
-      <div className="card-h">
-        <h2 id="ai-h">Add a rule in your own words</h2>
-        <span className="chip" style={{ marginLeft: 'auto' }}>
-          AI translator
-        </span>
+    <section className="panel" aria-labelledby="ai-h">
+      <div className="ph">
+        <h2 id="ai-h">Write a rule in your own words</h2>
+        <span className="tag">AI translator</span>
+        <span className="sp" />
+        <span className="tiny t3">30 translations an hour</span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
-          An AI model (Claude) turns your sentence into a rule. It only uses numbers you type, it can only add protection, and you sign the result before it runs. It never suggests limits.
-        </span>
-        <textarea className="area" aria-label="Your rule" placeholder="Describe one rule, with your own numbers" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} disabled={!me.data?.policy} />
-        <button type="button" className="btn btn-primary" style={{ alignSelf: 'flex-start' }} disabled={!text.trim() || busy !== null || !me.data?.policy} onClick={translate}>
-          {busy === 'translate' ? 'Translating…' : 'Translate'}
-        </button>
-        {!me.data?.policy ? <span className="faint" style={{ fontSize: 12 }}>Sign your stages and slippage limit first (below); the translator adds to them.</span> : null}
+      <div className="pb col" style={{ gap: 12 }}>
+        <label className="small t2" htmlFor="rule-text">
+          What should the guard do, and when? Use your own numbers.
+        </label>
+        <textarea id="rule-text" className="area" placeholder="Say what the guard should do, and at what buffer, price move or time." maxLength={500} value={text} onChange={(e) => setText(e.target.value)} disabled={!enabled} />
+        <div className="row">
+          <button type="button" className="btn btn-ink" disabled={!text.trim() || busy !== null || !enabled} onClick={translate}>
+            {translating ? 'Translating…' : 'Translate'}
+          </button>
+          <span className="small t3">{enabled ? 'The translator turns your sentence into a rule. It never adds a number.' : 'Sign your first rules (build one by hand) first; the translator adds to them.'}</span>
+        </div>
+
+        {translating ? (
+          <div className="panel pb col" style={{ background: 'var(--s2)', gap: 10 }}>
+            <b className="small">Translating your sentence…</b>
+            <span className="sk" style={{ width: '80%' }} />
+            <span className="sk" style={{ width: '55%' }} />
+          </div>
+        ) : null}
+        {forced === 'error' ? (
+          <div className="banner b-crit" style={{ flexDirection: 'column', gap: 6 }}>
+            <b>The draft failed the safety checks, so it was not shown.</b>
+            <span>It contained a number that is not in your sentence. It was discarded and logged in your audit log. Write the number you want into your sentence and try again.</span>
+          </div>
+        ) : null}
 
         {reply?.kind === 'draft' ? (
-          <div className="callout guard" style={{ flexDirection: 'column', gap: 10 }}>
-            <b style={{ color: 'var(--guard-text)' }}>{reply.description}</b>
-            <div className="row" style={{ gap: 6 }}>
-              {reply.provenance.map((p) => (
-                <span key={p.path} className="pill-k num" title={p.path}>
-                  {p.value} · you typed {p.typed}
-                </span>
-              ))}
-            </div>
-            <span className="faint" style={{ fontSize: 12 }}>
-              Your existing rules and limits stay as they are. This becomes policy v{reply.policy.version}.
-            </span>
+          <div className="panel pb col" style={{ background: 'var(--s2)', gap: 10 }}>
             <div className="row">
-              <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={sign}>
-                {busy === 'sign' ? 'Waiting for signature…' : 'Sign and add'}
+              <b className="small">Draft rule</b>
+              <span className="tag">not active until you sign</span>
+            </div>
+            <p style={{ fontSize: 14, margin: 0 }}>{reply.description}</p>
+            <div className="disclose">
+              {Icon.check(14)}
+              <span>
+                Every number in this rule is one you typed:{' '}
+                {reply.provenance.map((p, i) => (
+                  <span key={p.path}>
+                    {i ? ', ' : ''}
+                    <span className="num">{p.typed}</span>
+                  </span>
+                ))}
+                . The wording above is generated from the rule itself, not by the AI.
+              </span>
+            </div>
+            <div className="row">
+              <button type="button" className="btn btn-sm btn-ink" disabled={busy !== null || s.changes.any} onClick={sign}>
+                {busy === 'sign' ? 'Waiting for signature…' : `Sign version ${reply.policy.version}`}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setReply(null)}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  s.startFrom(reply.rule);
+                  setReply(null);
+                }}
+              >
+                Edit by hand
+              </button>
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setReply(null)}>
                 Discard
               </button>
             </div>
+            {s.changes.any ? <span className="tiny wt">You have changes below that aren’t signed. Sign or discard them first, or use Edit by hand to add this rule to them.</span> : null}
           </div>
         ) : reply?.kind === 'clarify' ? (
-          <div className="callout">
+          <div className="banner">
             <span>
-              <b>Needs one more detail.</b> {reply.question} Edit your sentence and translate again.
+              <b>The translator has one question.</b> {reply.question} Edit your sentence and translate again.
             </span>
           </div>
         ) : reply?.kind === 'refuse' ? (
-          <div className="callout warn">
+          <div className="banner b-warn">
             <span>
               <b>Not a guard rule.</b> {reply.reason}
             </span>
           </div>
         ) : reply?.kind === 'rejected' ? (
-          <div className="callout crit" style={{ flexDirection: 'column', gap: 6 }}>
+          <div className="banner b-crit" style={{ flexDirection: 'column', gap: 6 }}>
             <b>The draft failed the safety checks, so it was not used.</b>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
               {reply.violations.map((v) => (
                 <li key={v}>{v}</li>
               ))}
             </ul>
-            <span style={{ fontSize: 12 }}>Write the number you want into your sentence and try again.</span>
+            <span>Write the number you want into your sentence and try again.</span>
           </div>
         ) : null}
-        {err ? <span className="err" style={{ fontSize: 13 }}>{err}</span> : null}
-        {done ? <span className="ok-text" style={{ fontSize: 13 }}>{done}</span> : null}
+        {err ? <span className="small ct">{err}</span> : null}
+        {done ? <span className="small">{done}</span> : null}
+        <div className="disclose">
+          {Icon.lines(14)}
+          <span>
+            <b>The AI only translates what you wrote.</b> It never suggests a number, and a draft with any number you didn’t type is thrown away. You sign every rule before it runs.
+          </span>
+        </div>
       </div>
     </section>
   );
 }
 
+function ruleStatus(r: Rule, g: GuardView): { text: string; cls: string } {
+  if (r.when.kind === 'buffer') {
+    const line = r.when.below;
+    const below = (g.worst && g.worst.buffer < line) || false;
+    if (below) return { text: `Crossed now: the lowest pool is at ${fmtBuffer(g.worst!.buffer)}`, cls: g.state === 'risk' ? 'ct' : 'wt' };
+    return { text: g.worst ? `Idle · lowest buffer ${fmtBuffer(g.worst.buffer)}` : 'Idle · no positions', cls: 't3' };
+  }
+  return { text: r.window ? 'Watching during its window' : 'Watching', cls: 't3' };
+}
+
 export default function RulesPage() {
-  const { address } = useAccount();
-  const signedIn = useSignedIn();
+  const review = useReview();
+  const { address, connected } = useViewer();
+  const signedIn = useSignedIn() || review.on;
   const me = useMe();
+  const g = useGuardView();
+  const now = useNow();
+  const view = useAccountView(address);
   const policy = me.data?.policy;
+  const draft = usePolicyDraft();
+  const times = useTimes();
+  const held = (view.data?.risk.pools ?? []).flatMap((p) => p.positions.map((r) => r.position.coin));
+  const draftLines = draft.draft.rules.flatMap((r) => (r.when.kind === 'buffer' && !g.lines.includes(r.when.below) ? [r.when.below] : []));
+  const loading = review.state === 'loading' || (connected && signedIn && !me.isFetched);
+  const closed = (view.data?.risk.pools ?? []).flatMap((p) => p.positions).some((r) => {
+    const m = marketByCoin(r.position.coin);
+    return m ? !homeOpen(m.session, now) : false;
+  });
+  const doesAt = (line: number) => {
+    const r = g.rules.find((x) => x.when.kind === 'buffer' && x.when.below === line);
+    return r ? r.then.map(describeAction).join(', ') : '';
+  };
 
   return (
-    <>
-      <TopBar title="Guard rules">
-        {policy ? (
-          <span className="chip chip-guard">
-            <i />
-            Policy v{policy.version} · signed {new Date(policy.confirmedAt).toISOString().slice(0, 10)}
-          </span>
-        ) : null}
-      </TopBar>
-      <div className="content">
-        {!address || !signedIn ? <div className="callout">Connect a wallet and sign in to see and change your rules.</div> : null}
-        {me.data && !me.data.user ? (
-          <div className="callout guard">
-            <span>
-              Finish setting up first.{' '}
-              <Link className="link" href="/app/onboarding">
-                Continue onboarding
-              </Link>
-            </span>
-          </div>
-        ) : null}
-
-        <section className="card" aria-labelledby="cur-h">
-          <div className="card-h">
-            <h2 id="cur-h">Running now</h2>
-            {policy ? (
-              <span className="faint" style={{ marginLeft: 'auto', fontSize: 12 }}>
-                Guard trades at most {policy.policy.execution.maxSlippagePct}% from the mark
-              </span>
-            ) : null}
-          </div>
-          <div className="card-b">
-            {policy?.policy.rules.length ? (
-              policy.policy.rules.map((r, i) => (
-                <div key={r.id} className="stage armed">
-                  <span className="n">{i + 1}</span>
-                  <div className="stack" style={{ gap: 4 }}>
-                    <span>{describeRule(r)}</span>
-                    {r.source ? (
-                      <span className="faint" style={{ fontSize: 12 }}>
-                        From your words: “{r.source.text}”
-                      </span>
-                    ) : null}
-                  </div>
-                  <span className="pill-k num">{r.id}</span>
-                </div>
-              ))
-            ) : (
-              <span className="faint">No rules yet.</span>
-            )}
-          </div>
-        </section>
-
-        <Translator />
-
-        <section className="card" aria-labelledby="stages-h">
-          <div className="card-h">
-            <h2 id="stages-h">Buffer stages</h2>
-            <span className="faint" style={{ marginLeft: 'auto', fontSize: 12 }}>
-              Editing here can loosen limits; you sign every change
-            </span>
-          </div>
-          <div className="card-b">{me.isFetched ? <StageForm key={policy?.version ?? 0} /> : <div className="skeleton" style={{ height: 120 }} />}</div>
-        </section>
+    <div className="pg">
+      <div className="ptitle">
+        <h1 className="h1">Guard rules</h1>
+        <span className="small t2">{policy ? `Version ${policy.version} · signed ${times.fmt(policy.confirmedAt)} ${times.label} · ${policy.policy.rules.length} rule${policy.policy.rules.length === 1 ? '' : 's'}` : connected ? 'No signed rules yet' : ''}</span>
+        {g.exampleRules ? <span className="tag">Example rules</span> : null}
+        <span className="sp" />
+        <Link className="btn btn-sm" href="/app/simulator">
+          Test in the simulator
+        </Link>
       </div>
-    </>
+
+      {policy?.needsRepeatChoice?.length ? (
+        <div className="banner b-warn" role="status">
+          <span>
+            <b>
+              {policy.needsRepeatChoice.length} stage{policy.needsRepeatChoice.length > 1 ? 's need' : ' needs'} a choice: act once per fall, or every time the line is crossed.
+            </b>{' '}
+            Until you choose and sign, {policy.needsRepeatChoice.length > 1 ? 'they act' : 'it acts'} every time, as before.
+          </span>
+          <span className="sp" />
+          <button type="button" className="btn btn-sm" onClick={() => document.getElementById(`need-${policy.needsRepeatChoice![0]}`)?.scrollIntoView({ block: 'center' })}>
+            Choose
+          </button>
+        </div>
+      ) : null}
+      {me.isError ? (
+        <div className="banner b-crit">
+          {Icon.alert()}
+          <span>
+            <b>Can’t reach Bulwark’s server.</b> Your signed rules keep running on the guard. Changes need the server; try again shortly.
+          </span>
+        </div>
+      ) : null}
+      {closed ? (
+        <div className="banner">
+          {Icon.moon()}
+          <span>
+            <b>A home market is closed.</b> Price and buffer rules keep running on trade.xyz’s off-hours prices. Time-window rules run at their window.
+          </span>
+        </div>
+      ) : null}
+      {!connected || !signedIn ? (
+        <div className="banner">
+          <span>
+            Connect a wallet and sign in to see and change your rules. <Link href="/app/onboarding" style={{ textDecoration: 'underline' }}>Set up</Link>
+          </span>
+        </div>
+      ) : me.data && !me.data.user ? (
+        <div className="banner">
+          <span>
+            Finish setting up first. <Link href="/app/onboarding" style={{ textDecoration: 'underline' }}>Continue setup</Link>
+          </span>
+        </div>
+      ) : null}
+
+      <div className="grid2 w400">
+        <div className="col" style={{ gap: 16 }}>
+          <Translator enabled={Boolean(policy)} forced={review.state === 'loading' ? 'loading' : review.state === 'error' ? 'error' : null} s={draft} />
+          <ActiveRules s={draft} status={(r) => ruleStatus(r, g)} loading={loading} />
+        </div>
+
+        <div className="col" style={{ gap: 16 }}>
+          <section className="panel" aria-label="Your lines">
+            <div className="ph">
+              <h2>Your lines on the buffer</h2>
+              {g.worst ? (
+                <span className="tiny t3">
+                  now <span className="num">{fmtBuffer(g.worst.buffer)}</span>
+                  {g.worst.positions.length === 1 ? ` · ${tickerOf(g.worst.positions[0]!.position.coin)}` : ''}
+                </span>
+              ) : null}
+            </div>
+            <div className="pb">
+              {loading ? (
+                <span className="sk" style={{ width: '100%', height: 12 }} />
+              ) : (
+                <>
+                  <BufferMeter buffer={g.worst?.buffer ?? null} lines={g.lines} draft={draftLines} state={g.state} labels does={doesAt} />
+                  {!g.lines.length ? <span className="tiny t3">No lines yet. Your lines appear here as you add rules.</span> : null}
+                </>
+              )}
+            </div>
+          </section>
+
+          {loading ? null : <RuleBuilder s={draft} held={held} disabled={!connected} />}
+          <HowGuardTrades s={draft} />
+
+          <section className="panel" aria-labelledby="retry-h">
+            <div className="ph">
+              <h2 id="retry-h">If an order doesn’t fill</h2>
+            </div>
+            <div className="pb small t2" style={{ lineHeight: 1.55 }}>
+              In a fast market an order can miss or fill only partly. The guard then sends the rest again on the next price update, while this stage’s line is still crossed. Each retry is priced from the price at that moment, never beyond your slippage limit, and never larger than what is left. After 3 attempts that don’t fully fill, you get an alert. The guard keeps trying until the line is no longer crossed.{' '}
+              <Link href="/app/audit" style={{ textDecoration: 'underline' }}>
+                Each attempt is in the audit log.
+              </Link>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
   );
 }

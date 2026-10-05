@@ -2,9 +2,15 @@
  * Curated HIP-3 markets on trade.xyz and their home-market sessions.
  * Sessions and off-hours price bounds: trade.xyz Specification Index
  * https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md and
- * discovery bounds https://docs.trade.xyz/perpetuals/mechanics/discovery-bounds.md (checked 2026-10-05).
+ * discovery bounds https://docs.trade.xyz/perpetuals/mechanics/discovery-bounds.md.
+ * Every bound and reset count below was re-checked against the specification index table on 5 Oct 2026,
+ * and max leverage and margin mode against live mainnet meta (both list cross margin for all ten).
+ * The table is authoritative: it publishes XYZ100 at ±3.5% (not 1 ÷ 30×) and SKHX as SKHYNIX.
  * Off-hours the oracle is trade.xyz's internal price: https://docs.trade.xyz/perpetuals/mechanics/oracle-price.md
  */
+/** Where the sessions and bounds come from, and when they were checked (shown in the app). */
+export const MARKETS_SOURCE = { url: 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md', label: 'trade.xyz specification index, checked 5 Oct 2026', all: '/docs/sources' };
+
 export type Category = 'Commodities' | 'Indices' | 'Stocks';
 export type SessionKind = 'futures' | 'futuresBrent' | 'usStocks' | 'korea';
 
@@ -16,10 +22,14 @@ export interface Market {
   session: SessionKind;
   /** Off-hours mark bound and number of re-anchors, where trade.xyz publishes them. */
   bound?: { pct: number; resets: number };
+  /** Names other front ends use for the same market (the API coin is unchanged). */
+  aliases?: string[];
 }
 
 export const MARKETS: Market[] = [
-  { coin: 'xyz:CL', ticker: 'CL', name: 'WTI crude oil', category: 'Commodities', session: 'futures', bound: { pct: 5, resets: 2 } },
+  // Checked against mainnet and testnet meta on 5 Oct 2026: the API coin is still xyz:CL; Hyperliquid's
+  // app and trade.xyz now display it as WTIOIL (app.hyperliquid.xyz/trade/xyz:CL redirects to xyz:WTIOIL).
+  { coin: 'xyz:CL', ticker: 'CL', name: 'WTI crude oil', category: 'Commodities', session: 'futures', bound: { pct: 5, resets: 2 }, aliases: ['WTIOIL'] },
   { coin: 'xyz:BRENTOIL', ticker: 'BRENTOIL', name: 'Brent crude oil', category: 'Commodities', session: 'futuresBrent', bound: { pct: 5, resets: 2 } },
   { coin: 'xyz:GOLD', ticker: 'GOLD', name: 'Gold', category: 'Commodities', session: 'futures', bound: { pct: 4, resets: 2 } },
   { coin: 'xyz:SILVER', ticker: 'SILVER', name: 'Silver', category: 'Commodities', session: 'futures', bound: { pct: 4, resets: 2 } },
@@ -27,11 +37,17 @@ export const MARKETS: Market[] = [
   { coin: 'xyz:XYZ100', ticker: 'XYZ100', name: 'US tech 100 index', category: 'Indices', session: 'futures', bound: { pct: 3.5, resets: 1 } },
   { coin: 'xyz:NVDA', ticker: 'NVDA', name: 'NVIDIA', category: 'Stocks', session: 'usStocks', bound: { pct: 5, resets: 2 } },
   { coin: 'xyz:MU', ticker: 'MU', name: 'Micron', category: 'Stocks', session: 'usStocks', bound: { pct: 10, resets: 1 } },
-  { coin: 'xyz:TSLA', ticker: 'TSLA', name: 'Tesla', category: 'Stocks', session: 'usStocks' },
-  { coin: 'xyz:SKHX', ticker: 'SKHX', name: 'SK Hynix', category: 'Stocks', session: 'korea' },
+  { coin: 'xyz:TSLA', ticker: 'TSLA', name: 'Tesla', category: 'Stocks', session: 'usStocks', bound: { pct: 5, resets: 2 } },
+  // The API coin is xyz:SKHX; trade.xyz's specification index lists it as SKHYNIX.
+  { coin: 'xyz:SKHX', ticker: 'SKHX', name: 'SK Hynix', category: 'Stocks', session: 'korea', bound: { pct: 10, resets: 1 }, aliases: ['SKHYNIX'] },
 ];
 
 export const marketByCoin = (coin: string) => MARKETS.find((m) => m.coin === coin);
+/** A ticker from a URL, matching aliases too (WTIOIL → CL). */
+export const marketByTicker = (t: string) => {
+  const up = t.toUpperCase();
+  return MARKETS.find((m) => m.ticker === up || m.aliases?.includes(up));
+};
 
 interface ZonedParts {
   weekday: number; // 0 Sun … 6 Sat

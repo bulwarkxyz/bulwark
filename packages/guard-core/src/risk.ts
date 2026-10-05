@@ -1,4 +1,4 @@
-import { liquidationPrice, maintenanceMargin } from './margin.js';
+import { liquidationPrice, maintenanceMargin, priceForBuffer } from './margin.js';
 import type { AccountMode, AccountSnapshot, IdleSource, Pool, Position } from './snapshot.js';
 
 /** Current marks by coin. Missing coins keep their snapshot mark. */
@@ -99,4 +99,54 @@ export function positionLeverage(risk: AccountRisk, coin: string): number | null
     if (row) return pool.equity > 0 ? row.notional / pool.equity : Number.POSITIVE_INFINITY;
   }
   return null;
+}
+
+/** Where one of the user's buffer lines sits in price terms for one position. */
+export interface GuardLevel {
+  /** The user's line (buffer, ×). */
+  line: number;
+  /** Mark of this position at which its pool reaches the line, every other mark held. */
+  price: number;
+  /** (price − mark) / mark: negative for a fall, positive for a rise. */
+  move: number;
+}
+
+/**
+ * The mark at which `row`'s pool reaches `line`, moving only this position against itself
+ * (down for a long, up for a short). Null when the pool is already at or below the line, or when
+ * no adverse price reaches it (for example a line at or above 2 × max leverage).
+ */
+export function priceAtLine(pool: PoolRisk, row: PositionRisk, line: number): GuardLevel | null {
+  if (!(line > 0) || !(pool.buffer > line) || !Number.isFinite(pool.equity)) return null;
+  const price = priceForBuffer({
+    mark: row.mark,
+    size: row.position.size,
+    equity: pool.equity,
+    otherMaintenance: pool.maintenance - row.maintenance,
+    tiers: row.position.tiers,
+    buffer: line,
+  });
+  if (price === null) return null;
+  const adverse = row.position.size > 0 ? price < row.mark : price > row.mark;
+  if (!adverse) return null;
+  return { line, price, move: (price - row.mark) / row.mark };
+}
+
+/**
+ * "Guard acts at": the first of the user's lines this position's pool would cross as the position
+ * moves against itself, i.e. the highest line still below the pool's buffer that a price can reach.
+ * Lines are the numbers the user typed in buffer rules; there are no defaults.
+ */
+export function guardActsAt(pool: PoolRisk, row: PositionRisk, lines: readonly number[]): GuardLevel | null {
+  const below = [...new Set(lines)].filter((l) => l < pool.buffer).sort((a, b) => b - a);
+  for (const line of below) {
+    const level = priceAtLine(pool, row, line);
+    if (level) return level;
+  }
+  return null;
+}
+
+/** Every buffer line the user typed, from their policy's buffer triggers. */
+export function bufferLines(rules: ReadonlyArray<{ when: { kind: string; below?: number } }>): number[] {
+  return [...new Set(rules.flatMap((r) => (r.when.kind === 'buffer' && typeof r.when.below === 'number' ? [r.when.below] : [])))].sort((a, b) => b - a);
 }
