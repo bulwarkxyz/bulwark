@@ -3,7 +3,7 @@
 import { assessRisk, buildAssetIndex, buildSnapshot, dexCollateral, type AccountRisk, type AccountSnapshot, type AssetIndex, type RawClearinghouseState, type RawPerpDexs, type RawPerpMeta, type RawSpotState } from '@bulwarkxyz/guard-core';
 import { InfoClient, type Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from './api';
 import { NETWORK } from './env';
 import { MARKETS, type MarketActivity } from './markets';
@@ -129,6 +129,51 @@ export function useCandles(coin: string, interval: '5m' | '15m' | '1h' | '4h' | 
     },
     refetchInterval: 60_000,
   });
+}
+
+type CandleRow = { t: number; o: string; c: string; h: string; l: string };
+const toCandle = (r: CandleRow): Candle => ({ t: r.t, o: Number(r.o), h: Number(r.h), l: Number(r.l), c: Number(r.c) });
+
+/**
+ * Candles with older history on demand, for zooming out and panning back: the live window (useCandles,
+ * refreshed each minute) plus pages of the same span before it, fetched by loadOlder(). Hyperliquid
+ * serves the most recent 5,000 candles per interval; when a page comes back empty there is no more.
+ */
+export function useCandleHistory(coin: string, interval: Parameters<typeof useCandles>[1], hours: number) {
+  const live = useCandles(coin, interval, hours);
+  const key = `${NETWORK}|${coin}|${interval}`;
+  const [older, setOlder] = useState<{ key: string; rows: Candle[]; done: boolean }>({ key, rows: [], done: false });
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const busy = useRef(false);
+  const cur = older.key === key ? older : { key, rows: [], done: false };
+  const first = cur.rows[0]?.t ?? live.data?.[0]?.t;
+  const loadOlder = useCallback(async () => {
+    if (busy.current || cur.done || first === undefined) return;
+    busy.current = true;
+    setLoadingOlder(true);
+    try {
+      const end = first - 1;
+      const rows = await info.request<CandleRow[]>({ type: 'candleSnapshot', req: { coin, interval, startTime: end - hours * 3_600_000, endTime: end } });
+      const page = rows.map(toCandle).filter((c) => c.t < first);
+      setOlder((prev) => {
+        const base = prev.key === key ? prev.rows : [];
+        return { key, rows: [...page, ...base], done: page.length === 0 };
+      });
+    } catch {
+      /* the chart keeps what it has; the next pan asks again */
+    } finally {
+      busy.current = false;
+      setLoadingOlder(false);
+    }
+  }, [coin, interval, hours, key, first, cur.done]);
+  // Reset when the market or interval changes.
+  useEffect(() => {
+    busy.current = false;
+  }, [key]);
+  const liveRows = live.data ?? [];
+  const firstLive = liveRows[0]?.t ?? Infinity;
+  const data = live.data ? [...cur.rows.filter((c) => c.t < firstLive), ...liveRows] : undefined;
+  return { ...live, data, loadOlder, loadingOlder, noOlder: cur.done };
 }
 
 export interface BookLevel {

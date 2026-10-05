@@ -407,3 +407,8 @@ html.light .bw,html.light [data-rk]{
 [data-rk] [role="dialog"] h1{font-weight:600!important;font-size:16px!important;letter-spacing:0!important}
 [data-rk] [role="dialog"] button div{font-weight:500}
 [data-rk] [role="dialog"] h2,[data-rk] [role="dialog"] h3{font-weight:600!important}
+/* Zoomable chart: the chart takes every touch that starts on it (pinch, drag); touches elsewhere scroll the page. */
+.cchart{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;overscroll-behavior:contain}
+.cchart:active{cursor:grabbing}
+.cchart-reset{position:absolute;left:8px;bottom:28px;z-index:1}
+.cchart-note{position:absolute;left:8px;top:6px}

@@ -15,7 +15,7 @@ import { GuardCell } from '@/components/app/positions-table';
 import { Ticket } from '@/components/app/ticket';
 import { NETWORK } from '@/lib/env';
 import { describeAction, orderLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
-import { useAccountView, useCandles, useMarketActivity, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
+import { useAccountView, useCandleHistory, useMarketActivity, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
 import { MARKETS, hasData, homeOpen, marketByTicker, rankMarkets, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { priceAtLine } from '@bulwarkxyz/guard-core';
@@ -79,7 +79,7 @@ export function TradeScreen({ ticker }: { ticker: string }) {
   const markets = useXyzMarkets();
   const ctx = markets.data?.get(m.coin);
   const [tf, setTf] = useState<(typeof TF)[number]>(TF[2]);
-  const candles = useCandles(m.coin, tf.id, tf.hours);
+  const candles = useCandleHistory(m.coin, tf.id, tf.hours);
   const view = useAccountView(address);
   const g = useGuardView();
   const guardOrders = useGuardOrders(address);
@@ -250,7 +250,7 @@ export function TradeScreen({ ticker }: { ticker: string }) {
           <span className="small t3">Loading candles from Hyperliquid…</span>
         </div>
       ) : candles.data?.length ? (
-        <CandleChart candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} />
+        <CandleChart key={`${m.coin}-${tf.id}`} candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} onNeedOlder={candles.loadOlder} loadingOlder={candles.loadingOlder} noOlder={candles.noOlder} />
       ) : (
         <div className="empty">
           <div className="ico">{Icon.markets(18)}</div>
