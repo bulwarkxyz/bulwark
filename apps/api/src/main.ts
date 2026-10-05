@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { KMSClient } from '@aws-sdk/client-kms';
 import type { MessagesClient } from '@bulwarkxyz/compiler';
 import { InfoClient, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
-import { createGuardKey } from '@bulwarkxyz/signer';
+import { ProvisionerKms, createGuardKey } from '@bulwarkxyz/signer';
 import { PgStore, migrate } from '@bulwarkxyz/store';
 import postgres from 'postgres';
 import { createApp } from './app.js';
@@ -32,7 +32,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** attempt)));
     }
   }
-  const kms = process.env.AWS_ACCESS_KEY_ID ? new KMSClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' }) : null;
+  const kms = process.env.AWS_ACCESS_KEY_ID ? new ProvisionerKms(new KMSClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' })) : null;
   const app = createApp({
     store: new PgStore(sql),
     info: new InfoClient(network),

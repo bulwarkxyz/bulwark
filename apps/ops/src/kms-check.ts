@@ -8,7 +8,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { KMSClient } from '@aws-sdk/client-kms';
-import { AwsKmsBackend, KmsDigestSigner, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
+import { AwsKmsBackend, KmsDigestSigner, ProvisionerKms, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
 import { recoverAddress, type Hex } from 'viem';
 
 const [cmd, arg, nArg] = process.argv.slice(2);
@@ -17,7 +17,7 @@ const region = process.env.AWS_REGION ?? 'ap-southeast-1';
 async function main() {
   if (cmd === 'create') {
     const t0 = performance.now();
-    const k = await createGuardKey(new KMSClient({ region }), { user: '0x0000000000000000000000000000000000000000', env: 'kms-check' });
+    const k = await createGuardKey(new ProvisionerKms(new KMSClient({ region })), { user: '0x0000000000000000000000000000000000000000', env: 'kms-check' });
     console.log(JSON.stringify({ keyId: k.keyId, address: k.address, createMs: +(performance.now() - t0).toFixed(1) }));
     return;
   }
@@ -41,7 +41,7 @@ async function main() {
     return;
   }
   if (cmd === 'retire' && arg) {
-    await retireGuardKey(new KMSClient({ region }), arg);
+    await retireGuardKey(new ProvisionerKms(new KMSClient({ region })), arg);
     console.log(JSON.stringify({ retired: arg }));
     return;
   }

@@ -1,4 +1,14 @@
-import { CreateKeyCommand, DisableKeyCommand, GetPublicKeyCommand, KMSClient, ScheduleKeyDeletionCommand, SignCommand } from '@aws-sdk/client-kms';
+import {
+  CreateKeyCommand,
+  DescribeKeyCommand,
+  DisableKeyCommand,
+  GetPublicKeyCommand,
+  KMSClient,
+  ScheduleKeyDeletionCommand,
+  SignCommand,
+  type CreateKeyCommandOutput,
+  type GetPublicKeyCommandOutput,
+} from '@aws-sdk/client-kms';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { recoverAddress } from 'viem';
@@ -133,12 +143,38 @@ export class KmsDigestSigner implements DigestSigner {
   }
 }
 
+/** Commands the provisioner may send. TagResource and UntagResource are deliberately absent. */
+const PROVISIONER_COMMANDS = [CreateKeyCommand, GetPublicKeyCommand, DescribeKeyCommand, DisableKeyCommand, ScheduleKeyDeletionCommand] as const;
+
 /**
- * Creates one non-exportable secp256k1 signing key per user, tagged for the IAM conditions in the B0
- * report (`aws:RequestTag/app = bulwark`). Requires the provisioner role, which cannot sign.
+ * The api service's only handle on KMS. The provisioner's IAM policy allows kms:TagResource in the
+ * region (KMS does not see request tags when it checks TagResource during CreateKey), so this guard
+ * narrows it on our side: tags travel only inside CreateKey, so they can only ever land on the key
+ * created by that same request. Any other command, including TagResource and UntagResource on an
+ * existing key, is refused before it reaches AWS. CreateKey must carry the app=bulwark tag, which keeps
+ * the signer's access limited to Bulwark keys.
  */
-export async function createGuardKey(client: KMSClient, args: { user: Hex; env: string }): Promise<{ keyId: string; address: Hex }> {
-  const out = await client.send(
+export class ProvisionerKms {
+  constructor(private readonly inner: { send(command: never): Promise<unknown> }) {}
+  send(command: CreateKeyCommand): Promise<CreateKeyCommandOutput>;
+  send(command: GetPublicKeyCommand): Promise<GetPublicKeyCommandOutput>;
+  send(command: DescribeKeyCommand | DisableKeyCommand | ScheduleKeyDeletionCommand): Promise<unknown>;
+  async send(command: object): Promise<unknown> {
+    if (!PROVISIONER_COMMANDS.some((C) => command instanceof C)) throw new Error(`provisioner may not send ${command.constructor.name}`);
+    if (command instanceof CreateKeyCommand) {
+      const tags = command.input.Tags ?? [];
+      if (!tags.some((t) => t.TagKey === 'app' && t.TagValue === 'bulwark')) throw new Error('CreateKey must carry the app=bulwark tag');
+    }
+    return this.inner.send(command as never);
+  }
+}
+
+/**
+ * Creates one non-exportable secp256k1 signing key per user, tagged in the same request
+ * (`app=bulwark`, `user`, `env`). Requires the provisioner, which cannot sign.
+ */
+export async function createGuardKey(kms: ProvisionerKms, args: { user: Hex; env: string }): Promise<{ keyId: string; address: Hex }> {
+  const out = await kms.send(
     new CreateKeyCommand({
       KeySpec: 'ECC_SECG_P256K1',
       KeyUsage: 'SIGN_VERIFY',
@@ -154,15 +190,15 @@ export async function createGuardKey(client: KMSClient, args: { user: Hex; env: 
   );
   const keyId = out.KeyMetadata?.KeyId;
   if (!keyId) throw new Error('KMS did not return a key id');
-  const pk = await client.send(new GetPublicKeyCommand({ KeyId: keyId }));
+  const pk = await kms.send(new GetPublicKeyCommand({ KeyId: keyId }));
   if (!pk.PublicKey) throw new Error('KMS returned no public key');
   return { keyId, address: addressFromSpki(pk.PublicKey) };
 }
 
 /** Retires a user's key: disabled now, deleted after the minimum 7-day window. */
-export async function retireGuardKey(client: KMSClient, keyId: string): Promise<void> {
-  await client.send(new DisableKeyCommand({ KeyId: keyId }));
-  await client.send(new ScheduleKeyDeletionCommand({ KeyId: keyId, PendingWindowInDays: 7 }));
+export async function retireGuardKey(kms: ProvisionerKms, keyId: string): Promise<void> {
+  await kms.send(new DisableKeyCommand({ KeyId: keyId }));
+  await kms.send(new ScheduleKeyDeletionCommand({ KeyId: keyId, PendingWindowInDays: 7 }));
 }
 
 export { pad32 };
