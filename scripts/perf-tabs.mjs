@@ -4,7 +4,7 @@
 // first visit and on a repeat; and whether the click was a client-side navigation or a full page load.
 // Profiles: "laptop" (no throttling) and "phone" (390 wide, 4x CPU slowdown, 4G-class network).
 // Usage: node scripts/perf-tabs.mjs <baseUrl> [--profile laptop|phone] [--json out.json] [--trace out.zip]
-//        [--budget-frame ms] [--budget-data ms] [--query 'watch=0x…']
+//        [--budget-frame ms] [--budget-data ms] [--query 'watch=0x…'] [--limit ms]
 // Budgets: every tab switch (first and repeat visit) must show its frame within --budget-frame, and every
 // repeat visit must show its data within --budget-data; otherwise the script exits 1 (the CI check).
 import { writeFileSync } from 'node:fs';
@@ -18,6 +18,7 @@ const opt = (n, d) => {
 const profile = opt('--profile', 'laptop');
 const jsonOut = opt('--json');
 const traceOut = opt('--trace');
+const limit = Number(opt('--limit', '60000')); // give up on a tab after this long
 const query = opt('--query', ''); // e.g. watch=0x… on a review build: the screens with an account's data
 const budgetFrame = Number(opt('--budget-frame', '0'));
 const budgetData = Number(opt('--budget-data', '0'));
@@ -26,7 +27,7 @@ const phone = profile === 'phone';
 
 // What "the frame" and "the data" mean for each screen (selectors from the app's own markup).
 const TABS = [
-  { name: 'Markets', path: /\/app\/?$/, frame: 'h1:has-text("Markets"), .ptl:has-text("Markets")' },
+  { name: 'Markets', path: /\/app\/?(\?.*)?$/, frame: 'h1:has-text("Markets"), .ptl:has-text("Markets")' },
   { name: 'Trade', path: /\/app\/trade\/[A-Z0-9]+/, frame: '.tgrid' },
   { name: 'Positions', path: /\/app\/positions/, frame: 'h1:has-text("Positions"), .ptl:has-text("Positions")' },
   { name: phone ? 'Guard' : 'Guard rules', path: /\/app\/rules/, frame: 'h1:has-text("Guard rules"), .ptl:has-text("Guard rules")' },
@@ -74,9 +75,15 @@ for (const round of [1, 2]) {
     const docsBefore = documents;
     const reqBefore = requests.length;
     const start = Date.now();
-    await link(tab.name).first().click({ timeout: 60_000, noWaitAfter: true });
-    await page.waitForURL(tab.path, { timeout: 120_000 });
-    await page.locator(tab.frame).filter({ visible: true }).first().waitFor({ timeout: 120_000 });
+    try {
+      await link(tab.name).first().click({ timeout: 60_000, noWaitAfter: true });
+      await page.waitForURL(tab.path, { timeout: limit });
+      await page.locator(tab.frame).filter({ visible: true }).first().waitFor({ timeout: limit });
+    } catch {
+      // Not on screen within the limit: record it as over and carry on from the next tab.
+      results.push({ tab: tab.name, round, frameMs: null, dataMs: null, fullLoad: null, requests: requests.length - reqBefore });
+      continue;
+    }
     const frameMs = Date.now() - start;
     // Data: no loading placeholder in the page, and stays that way for 300 ms.
     await page
@@ -107,9 +114,10 @@ await browser.close();
 const pad = (s, n) => String(s).padEnd(n);
 console.log(`${profile} · ${base}${query ? ` · ?${query}` : ''}`);
 console.log(`${pad('tab', 30)}${pad('visit', 8)}${pad('frame ms', 10)}${pad('data ms', 10)}${pad('full load', 11)}requests`);
-for (const r of results) console.log(`${pad(r.tab, 30)}${pad(r.round === 0 ? 'cold' : r.round === 1 ? 'first' : 'repeat', 8)}${pad(r.frameMs, 10)}${pad(r.dataMs, 10)}${pad(r.fullLoad ? 'yes' : 'no', 11)}${r.requests ?? ''}`);
+const overLimit = `>${limit / 1000}s`;
+for (const r of results) console.log(`${pad(r.tab, 30)}${pad(r.round === 0 ? 'cold' : r.round === 1 ? 'first' : 'repeat', 8)}${pad(r.frameMs ?? overLimit, 10)}${pad(r.dataMs ?? overLimit, 10)}${pad(r.fullLoad === null ? '?' : r.fullLoad ? 'yes' : 'no', 11)}${r.requests ?? ''}`);
 if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ profile, base, at: new Date().toISOString(), results }, null, 1));
-const over = results.filter((r) => r.round > 0 && ((budgetFrame && r.frameMs > budgetFrame) || (budgetData && r.round === 2 && r.dataMs > budgetData)));
+const over = results.filter((r) => r.round > 0 && (r.frameMs === null || (budgetFrame && r.frameMs > budgetFrame) || (budgetData && r.round === 2 && r.dataMs > budgetData)));
 if (over.length) {
   console.log(`OVER BUDGET (frame ${budgetFrame} ms, repeat data ${budgetData} ms): ${over.map((r) => `${r.tab} (${r.round === 1 ? 'first' : 'repeat'})`).join(', ')}`);
   process.exit(1);
