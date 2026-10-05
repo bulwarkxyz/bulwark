@@ -6,6 +6,57 @@ The parts of the Bulwark API the app relies on. Field names here are stable. A c
 - **Base:** the app calls `/api/bw/...` (its server proxy), which forwards to the API.
 - **Auth:** every `/v1/*` route needs `Authorization: Bearer <session>` from `POST /auth/verify` (SIWE). Without it the answer is `401`.
 
+## Markets
+
+### `GET /markets/activity?coins=xyz:CL,xyz:GOLD,…`: which markets have recent data on this network
+
+**Public:** no session needed, because the trade screen works before sign-in. Call it through the proxy: `/api/bw/markets/activity?coins=…`.
+
+**Request:**
+- `coins`: 1 to 20 xyz markets, comma-separated, in the form `xyz:TICKER`.
+- The app sends its own curated list, so the list stays in one place.
+- Anything else answers `400`.
+
+**Use it for two things:**
+- **The default market:** open the trade screen on the first market in the curated order whose `hasRecentData` is true.
+- **The selector order:** sort by `hasRecentData`, then `trades24h`, then `dayNtlVlm`.
+
+```json
+{
+  "network": "testnet",
+  "checkedAt": 1791200000000,
+  "markets": [
+    { "coin": "xyz:GOLD", "listed": true, "delisted": false, "hasRecentData": true, "lastTradeAt": 1791190000000, "trades24h": 31, "candles24h": 24, "dayNtlVlm": 2348.5 }
+  ]
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `network` | `'mainnet' \| 'testnet'` | The network the API reads |
+| `checkedAt` | ms | When this answer was made |
+| `markets[]` | | In the order requested |
+| `listed` | boolean | The market exists on this network's xyz dex |
+| `delisted` | boolean | Listed but delisted. On testnet on 5 Oct 2026: BRENTOIL and SP500 |
+| `hasRecentData` | boolean | Traded at least once in the last 24 h, and not delisted |
+| `lastTradeAt` | ms \| null | Start of the latest hourly candle with a trade, looking back 7 days |
+| `trades24h` | number | Trades in the last 24 h, the sum of the hourly candles' trade counts |
+| `candles24h` | number | Hourly candles in the last 24 h: what a 1 h chart would draw |
+| `dayNtlVlm` | number | Hyperliquid's 24 h notional volume in USD |
+
+**Where the data comes from:**
+- Hyperliquid's public info endpoint:
+  - `metaAndAssetCtxs` for the xyz dex;
+  - one hourly `candleSnapshot` per market.
+- Each answer is cached for 2 minutes, so the API makes at most one round of requests per 2 minutes, whatever the number of visitors.
+- If Hyperliquid is unreachable, the answer is `503`. The app should then keep its static default.
+
+**On testnet on 5 Oct 2026, only three markets had candles:**
+- GOLD and NVDA, traded within the last few hours;
+- XYZ100, last traded 28 h earlier.
+
+CL, the old default, had none.
+
 ## Guard key
 
 ### `GET /v1/me`: who the user is and where their key lives

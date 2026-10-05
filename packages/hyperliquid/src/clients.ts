@@ -61,6 +61,8 @@ export class InfoClient {
   userRole = (user: Hex) => this.request<{ role: string }>({ type: 'userRole', user });
   allMids = (dex = '') => this.request<Record<string, string>>({ type: 'allMids', dex });
   metaAndAssetCtxs = (dex = '') => this.request<[unknown, unknown[]]>({ type: 'metaAndAssetCtxs', dex });
+  candleSnapshot = (coin: string, interval: string, startTime: number, endTime: number) =>
+    this.request<Array<{ t: number; T: number; o: string; h: string; l: string; c: string; v: string; n: number }>>({ type: 'candleSnapshot', req: { coin, interval, startTime, endTime } });
 }
 
 export type OrderStatus =

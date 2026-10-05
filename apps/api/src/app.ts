@@ -23,10 +23,11 @@ import { Hono, type Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import { getAddress, verifyMessage, verifyTypedData } from 'viem';
 import { parseSiweMessage } from 'viem/siwe';
+import { MAX_COINS, marketActivity } from './market-activity.js';
 
 export interface ApiDeps {
   store: ApiStore;
-  info: Pick<InfoClient, 'extraAgents' | 'maxBuilderFee' | 'userAbstraction' | 'clearinghouseState' | 'spotClearinghouseState' | 'perpDexs' | 'allPerpMetas'>;
+  info: Pick<InfoClient, 'extraAgents' | 'maxBuilderFee' | 'userAbstraction' | 'clearinghouseState' | 'spotClearinghouseState' | 'perpDexs' | 'allPerpMetas' | 'metaAndAssetCtxs' | 'candleSnapshot'>;
   jwtSecret: Uint8Array;
   /** The web app's server proxy proves itself with this; only then are its location headers trusted. */
   proxySecret: string;
@@ -87,6 +88,18 @@ export function createApp(deps: ApiDeps) {
   };
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  // -------------------------------------------------------------- market activity (public, cached)
+  const activity = marketActivity(deps.info, deps.now);
+  app.get('/markets/activity', async (c) => {
+    const coins = [...new Set((c.req.query('coins') ?? '').split(',').map((s) => s.trim()).filter(Boolean))];
+    if (coins.length === 0 || coins.length > MAX_COINS || coins.some((s) => !/^xyz:[A-Z0-9]{1,16}$/.test(s))) return c.json({ error: `coins: 1 to ${MAX_COINS} xyz markets, e.g. xyz:CL,xyz:GOLD` }, 400);
+    try {
+      return c.json({ network: deps.network, checkedAt: deps.now(), markets: await activity(coins) });
+    } catch {
+      return c.json({ error: 'Hyperliquid unreachable' }, 503);
+    }
+  });
 
   // -------------------------------------------------------------- sign in with Ethereum (EIP-4361)
   app.post('/auth/nonce', async (c) => {
