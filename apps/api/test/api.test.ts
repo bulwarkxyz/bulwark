@@ -3,7 +3,7 @@ import { MemoryStore } from '@bulwarkxyz/store';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createApp } from '../src/app.js';
+import { STATUS_MAX_AGE_MS, createApp } from '../src/app.js';
 
 const user = privateKeyToAccount(`0x${'77'.repeat(32)}`);
 const stranger = privateKeyToAccount(`0x${'78'.repeat(32)}`);
@@ -235,5 +235,50 @@ describe('encrypted-at-rest guard keys (sealed custody)', () => {
     expect(res.status).toBe(200);
     expect((await store.user(ACCOUNT))?.killSwitch).toBe(true);
     expect((await store.pendingCommands()).map((c) => c.command)).toContain('wipe');
+  });
+});
+
+describe('guard status', () => {
+  const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
+  const onboard = () => {
+    store.putUser({ account: ACCOUNT, agentKeyRef: 'sealed:0x1', agentAddress: '0x0000000000000000000000000000000000000001', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
+    store.putPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x00', signatureVerified: true, confirmedAt: now });
+  };
+  const get = async (token: string) => (await app.request('/v1/guard/status', { headers: authed(token) })).json();
+
+  it('needs a session', async () => expect((await app.request('/v1/guard/status')).status).toBe(401));
+
+  it('serves what the worker wrote: state, paused reason and last evaluation', async () => {
+    const token = await signIn();
+    onboard();
+    for (const [state, reason] of [['protected', null], ['acting', null], ['at_risk', null], ['alerts_only', null], ['paused', 'exchange_unreachable'], ['paused', 'signer_error'], ['paused', 'agent_expired'], ['paused', 'stale_data']] as const) {
+      await store.setGuardStatus(ACCOUNT, { state, reason, lastEvaluatedAt: now - 2000, updatedAt: now - 1000 });
+      expect(await get(token)).toEqual({ state, reason, lastEvaluatedAt: now - 2000, updatedAt: now - 1000 });
+    }
+  });
+
+  it('no_rules before onboarding or without a signed policy', async () => {
+    const token = await signIn();
+    expect(await get(token)).toEqual({ state: 'no_rules', reason: null, lastEvaluatedAt: null, updatedAt: null });
+  });
+
+  it('stopped at once when the kill switch is on, whatever the worker last wrote', async () => {
+    const token = await signIn();
+    onboard();
+    await store.setGuardStatus(ACCOUNT, { state: 'protected', reason: null, lastEvaluatedAt: now, updatedAt: now });
+    await store.setKillSwitch(ACCOUNT, true);
+    expect(await get(token)).toMatchObject({ state: 'stopped', reason: null, lastEvaluatedAt: now });
+  });
+
+  it('paused (stale_data) when the worker has not reported, has stopped reporting, or has not seen the latest change', async () => {
+    const token = await signIn();
+    onboard();
+    expect(await get(token)).toEqual({ state: 'paused', reason: 'stale_data', lastEvaluatedAt: null, updatedAt: null });
+    await store.setGuardStatus(ACCOUNT, { state: 'protected', reason: null, lastEvaluatedAt: now - STATUS_MAX_AGE_MS - 1, updatedAt: now - STATUS_MAX_AGE_MS - 1 });
+    expect(await get(token)).toMatchObject({ state: 'paused', reason: 'stale_data', lastEvaluatedAt: now - STATUS_MAX_AGE_MS - 1 });
+    await store.setGuardStatus(ACCOUNT, { state: 'no_rules', reason: null, lastEvaluatedAt: null, updatedAt: now });
+    expect(await get(token)).toMatchObject({ state: 'paused', reason: 'stale_data' }); // rules just signed
+    await store.setGuardStatus(ACCOUNT, { state: 'stopped', reason: null, lastEvaluatedAt: now, updatedAt: now });
+    expect(await get(token)).toMatchObject({ state: 'paused', reason: 'stale_data' }); // just resumed
   });
 });

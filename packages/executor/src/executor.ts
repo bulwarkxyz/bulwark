@@ -38,6 +38,8 @@ export interface ExecutionRecord {
   builderRetried: boolean;
   /** Sign + send, milliseconds. */
   latencyMs: number;
+  /** For `failed`: whether signing failed or the exchange could not be reached (no response). */
+  failedAt?: 'sign' | 'send';
 }
 
 /** Bulwark client order ids start with these bytes so they are recognisable in the user's order history. */
@@ -61,12 +63,15 @@ export async function executeActions(actions: readonly GuardAction[], check: Gua
     }
     const isOrder = action.type === 'order' || action.type === 'trigger';
     const cloid = isOrder ? (deps.newCloid ?? newGuardCloid)() : undefined;
+    let leg: 'sign' | 'send' = 'sign';
     const attempt = async (builder: BuilderWire | null) => {
+      leg = 'sign';
       const nonce = deps.nonces.next(deps.signer.address);
       const params = { network: deps.network, account: deps.account, nonce, assets: deps.assets, snapshot: check.snapshot, builder, ...(cloid ? { cloid } : {}) };
       const wire = toWireAction(action, params);
       const ctx = { ...check.ctx, now: now(), recentActions: recent };
       const signature = await deps.signer.sign(action, wire, params, { ...check, ctx });
+      leg = 'send';
       const result = await deps.exchange.send({ action: wire, nonce, signature });
       return { wire, nonce, signature, result };
     };
@@ -98,7 +103,7 @@ export async function executeActions(actions: readonly GuardAction[], check: Gua
       if (e instanceof InvariantViolation) {
         records.push({ action, status: 'rejected', violation: e.violation, builderRetried: false, latencyMs: now() - started });
       } else {
-        records.push({ action, status: 'failed', error: e instanceof Error ? e.message : String(e), builderRetried: false, latencyMs: now() - started });
+        records.push({ action, status: 'failed', error: e instanceof Error ? e.message : String(e), builderRetried: false, latencyMs: now() - started, failedAt: leg });
       }
     }
   }

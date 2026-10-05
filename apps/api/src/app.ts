@@ -16,7 +16,7 @@ import {
 } from '@bulwarkxyz/guard-core';
 import { compileRule, describeRule, type MarketRef, type MessagesClient } from '@bulwarkxyz/compiler';
 import type { Hex, InfoClient } from '@bulwarkxyz/hyperliquid';
-import type { ApiStore } from '@bulwarkxyz/store';
+import type { ApiStore, GuardState, PausedReason } from '@bulwarkxyz/store';
 import { Hono, type Context } from 'hono';
 import { SignJWT, jwtVerify } from 'jose';
 import { getAddress, verifyMessage, verifyTypedData } from 'viem';
@@ -49,6 +49,8 @@ type Env = { Variables: { account: Hex } };
 
 /** A command must be submitted within this long of the user signing it (engine constant). */
 export const COMMAND_MAX_AGE_MS = 60_000;
+/** The worker refreshes the status at least every 15 s; older than this, it has stopped reporting. */
+export const STATUS_MAX_AGE_MS = 60_000;
 const NONCE_TTL_MS = 10 * 60_000;
 const SESSION_HOURS = 12;
 
@@ -244,6 +246,22 @@ export function createApp(deps: ApiDeps) {
       return c.json({ kind: 'rejected', violations: r.check.violations });
     }
     return c.json({ kind: 'draft', rule: r.check.rule, description: describeRule(r.check.rule!), provenance: r.check.provenance, policy: r.check.policy });
+  });
+
+  // -------------------------------------------------------------- guard status
+  // The worker judges the state on every evaluation and writes it here. The API overrides it only to
+  // be more cautious: what it knows first (kill switch, no rules), and a status the worker has stopped
+  // refreshing, or one written before the user's latest change, is shown as paused (stale_data).
+  app.get('/v1/guard/status', async (c) => {
+    const account = c.get('account');
+    const [user, confirmed, s] = await Promise.all([deps.store.user(account), deps.store.policy(account), deps.store.guardStatus(account)]);
+    const times = { lastEvaluatedAt: s?.lastEvaluatedAt ?? null, updatedAt: s?.updatedAt ?? null };
+    const out = (state: GuardState, reason: PausedReason | null = null) => c.json({ state, reason, ...times });
+    if (user?.killSwitch) return out('stopped');
+    if (!user || !confirmed || confirmed.policy.rules.length === 0) return out('no_rules');
+    if (!s || deps.now() - s.updatedAt > STATUS_MAX_AGE_MS) return out('paused', 'stale_data');
+    if (s.state === 'stopped' || s.state === 'no_rules') return out('paused', 'stale_data'); // the worker has not seen the change yet
+    return out(s.state, s.reason);
   });
 
   // -------------------------------------------------------------- guard orders (the guard's own resting backstops)

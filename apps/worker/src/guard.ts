@@ -4,6 +4,8 @@ import {
   buildSnapshot,
   evaluate,
   planBackstops,
+  planRetries,
+  recordFill,
   windowContains,
   windowStart,
   type AccountSnapshot,
@@ -13,9 +15,10 @@ import {
   type OpenOrder,
   type RawClearinghouseState,
   type RawSpotState,
+  type RetryChain,
 } from '@bulwarkxyz/guard-core';
 import type { BuilderWire, Hex, Network, NonceManager } from '@bulwarkxyz/hyperliquid';
-import type { AuditInput, PendingCommand } from '@bulwarkxyz/store';
+import type { AuditInput, GuardState, PausedReason, PendingCommand } from '@bulwarkxyz/store';
 import { formatRun, type Notifier } from './notify.js';
 import type { GuardStore } from '@bulwarkxyz/store';
 
@@ -25,6 +28,20 @@ export const STATE_MAX_AGE_MS = 30_000;
 export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
 export const BACKSTOP_EVERY_MS = 60_000;
 export const OPEN_ORDERS_TTL_MS = 15_000;
+/** The status is written when it changes, and at least this often while the account is evaluated. */
+export const STATUS_WRITE_EVERY_MS = 15_000;
+/** How often the guard key is checked: still approved on Hyperliquid, not expired, loadable by the signer. */
+export const KEY_CHECK_EVERY_MS = 60_000;
+/** After the exchange did not answer, the guard shows as paused this long unless a later request gets through. */
+export const EXCHANGE_DOWN_HOLD_MS = 120_000;
+/** Exchange errors that mean the guard key is no longer approved for the account. */
+const AGENT_GONE = /does not exist|agent.*expired|api wallet.*(expired|invalid)/i;
+
+/** Size an order record actually filled (0 when it missed, was held back or failed). */
+export function filledSize(r: ExecutionRecord): number {
+  if (r.status !== 'sent') return 0;
+  return (r.result?.statuses ?? []).reduce((n, s) => n + (s.kind === 'filled' ? Number(s.totalSz) : 0), 0);
+}
 
 export interface EngineDeps {
   network: Network;
@@ -41,6 +58,8 @@ export interface EngineDeps {
   commandSignerFor(user: Hex): Promise<CommandSigner>;
   /** Builder field from config (null while the mainnet switch is off). */
   builder: BuilderWire | null;
+  /** Agents the user has approved on Hyperliquid (`extraAgents`), to tell when the guard key expired or was removed. */
+  agents?(user: Hex): Promise<Array<{ address: string; validUntil?: number | null }>>;
   now(): number;
 }
 
@@ -54,6 +73,13 @@ interface AccountCache {
   lastBackstopAt: number;
   positionsKey: string;
   lastDegradedAlert: number;
+  /** Undefined until read back from the store after a restart. */
+  lastEvaluatedAt?: number | null;
+  status?: { key: string; at: number };
+  exchangeDownAt: number;
+  signerError: boolean;
+  agentExpired: boolean;
+  keyCheckedAt: number;
 }
 
 const coinsOf = (c: AccountCache) => new Set(Object.values(c.dexStates).flatMap((s) => s.assetPositions.map((p) => p.position.coin)));
@@ -107,11 +133,16 @@ export class GuardEngine {
     return this.schedule(account);
   }
 
+  /** Re-runs every known account, so the status stays current while nothing moves. */
+  heartbeat(): Promise<void[]> {
+    return Promise.all([...this.cache.keys()].map((k) => this.schedule(k)));
+  }
+
   private entry(account: string): AccountCache {
     const k = account.toLowerCase();
     let c = this.cache.get(k);
     if (!c) {
-      c = { dexStates: {}, stateAt: 0, spotAt: 0, lastBackstopAt: 0, positionsKey: '', lastDegradedAlert: 0 };
+      c = { dexStates: {}, stateAt: 0, spotAt: 0, lastBackstopAt: 0, positionsKey: '', lastDegradedAlert: 0, exchangeDownAt: 0, signerError: false, agentExpired: false, keyCheckedAt: 0 };
       this.cache.set(k, c);
     }
     return c;
@@ -164,16 +195,19 @@ export class GuardEngine {
   async run(account: Hex): Promise<void> {
     const { store } = this.deps;
     const [user, confirmed] = await Promise.all([store.user(account), store.policy(account)]);
-    if (!user || !confirmed) return;
+    if (!user) return;
     const c = this.entry(account);
-    if (c.stateAt === 0) return;
-    if (!c.abstraction) c.abstraction = await this.deps.abstraction(account);
     const now = this.deps.now();
+    if (c.lastEvaluatedAt === undefined) c.lastEvaluatedAt = (await store.guardStatus(account))?.lastEvaluatedAt ?? null;
+    const report = (state: GuardState, reason: PausedReason | null = null) => this.report(account, c, user.killSwitch ? 'stopped' : state, user.killSwitch ? null : reason, now);
+    if (!confirmed || confirmed.policy.rules.length === 0) return report('no_rules');
+    if (c.stateAt === 0) return report('paused', 'stale_data');
+    if (!c.abstraction) c.abstraction = await this.deps.abstraction(account);
 
     // Never act on stale data: hold off and tell the user (throttled). Backstops on the exchange still stand.
     const held = [...coinsOf(c)];
     // Before the first price for a held coin arrives there is nothing to judge yet: wait quietly.
-    if (held.some((coin) => !this.marks.has(coin))) return;
+    if (held.some((coin) => !this.marks.has(coin))) return report('paused', 'stale_data');
     const staleMark = held.find((coin) => now - (this.marks.get(coin) as { at: number }).at > MARK_MAX_AGE_MS);
     const needsSpot = c.abstraction === 'unifiedAccount';
     const staleState = now - c.stateAt > STATE_MAX_AGE_MS || (needsSpot && now - c.spotAt > STATE_MAX_AGE_MS);
@@ -184,7 +218,7 @@ export class GuardEngine {
         await this.audit({ account, at: now, kind: 'degraded', why, what: 'The guard held off; backstop orders on the exchange still stand.' });
         if (user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, `Bulwark: ${why}. The guard is holding off until data is fresh; your backstop orders on Hyperliquid still stand.`).catch(() => undefined);
       }
-      return;
+      return report('paused', 'stale_data');
     }
 
     const snapshot = this.snapshot(account, c);
@@ -223,17 +257,73 @@ export class GuardEngine {
     };
     const decision = evaluate(policy, snapshot, marks, ctx);
     await store.saveLatched(account, decision.latched);
+    c.lastEvaluatedAt = now;
+    await this.checkKey(account, user, c, now);
 
-    if (decision.actions.length) {
-      const records = await this.execute(account, user, confirmed, snapshot, marks, ctx, decision.actions);
+    // Orders that did not fully fill are retried, re-priced, while their stage still holds (guard-core retry.ts).
+    const before = await store.retries(account);
+    const plan = planRetries(decision, before, { slippagePct: policy.execution.maxSlippagePct, automationAllowed: ctx.automationAllowed && !user.killSwitch, stateAt: c.stateAt });
+    let chains: RetryChain[] = plan.chains;
+    let records: ExecutionRecord[] = [];
+    if (plan.actions.length) {
+      records = await this.execute(account, user, confirmed, snapshot, marks, ctx, plan.actions);
       c.openOrders = undefined;
-      const text = formatRun(records);
+      if (!user.killSwitch) for (const r of records) if (r.action.type === 'order') chains = recordFill(chains, r.action, filledSize(r), now);
+      // A retry that missed again is in the audit log; the user hears about fills, and the alert after repeated misses.
+      const told = records.filter((r) => !(r.action.type === 'order' && (r.action.attempt ?? 1) > 1 && filledSize(r) === 0));
+      const text = formatRun(told);
       if (text && user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, text).catch(() => undefined);
     }
+    if (JSON.stringify(chains) !== JSON.stringify(before)) await store.saveRetries(account, chains);
 
     if (now - c.lastBackstopAt >= BACKSTOP_EVERY_MS && user.region === 'allowed' && !user.killSwitch) {
       c.lastBackstopAt = now;
       await this.backstops(account, user, confirmed, snapshot, marks, ctx);
+    }
+
+    const paused = this.pausedReason(c, now);
+    const acting = chains.length > 0 || records.some((r) => r.action.type !== 'alert' && r.status !== 'rejected');
+    if (paused) return report('paused', paused);
+    if (user.region !== 'allowed') return report('alerts_only');
+    if (acting) return report('acting');
+    if (decision.active.size > 0) return report('at_risk');
+    return report('protected');
+  }
+
+  private pausedReason(c: AccountCache, now: number): PausedReason | null {
+    if (c.agentExpired) return 'agent_expired';
+    if (c.signerError) return 'signer_error';
+    if (c.exchangeDownAt && now - c.exchangeDownAt < EXCHANGE_DOWN_HOLD_MS) return 'exchange_unreachable';
+    return null;
+  }
+
+  /** Writes the guard status when it changes, and at least every STATUS_WRITE_EVERY_MS. */
+  private async report(account: Hex, c: AccountCache, state: GuardState, reason: PausedReason | null, now: number): Promise<void> {
+    const key = `${state}|${reason}`;
+    if (c.status?.key === key && now - c.status.at < STATUS_WRITE_EVERY_MS) return;
+    c.status = { key, at: now };
+    await this.deps.store.setGuardStatus(account, { state, reason: state === 'paused' ? reason : null, lastEvaluatedAt: c.lastEvaluatedAt ?? null, updatedAt: now });
+  }
+
+  /** Every KEY_CHECK_EVERY_MS: the guard key loads, and is still approved and unexpired on Hyperliquid. */
+  private async checkKey(account: Hex, user: NonNullable<Awaited<ReturnType<GuardStore['user']>>>, c: AccountCache, now: number): Promise<void> {
+    if (now - c.keyCheckedAt < KEY_CHECK_EVERY_MS) return;
+    c.keyCheckedAt = now;
+    if (!user.agentAddress || user.agentKeyRef === 'pending') {
+      c.agentExpired = true;
+      return;
+    }
+    try {
+      await this.deps.signerFor(account);
+    } catch {
+      c.signerError = true;
+    }
+    if (!this.deps.agents) return;
+    try {
+      const mine = (await this.deps.agents(account)).find((a) => a.address.toLowerCase() === (user.agentAddress as string).toLowerCase());
+      c.agentExpired = !mine || (typeof mine.validUntil === 'number' && mine.validUntil <= now);
+    } catch {
+      // Could not ask Hyperliquid: keep the last known answer.
     }
   }
 
@@ -255,10 +345,22 @@ export class GuardEngine {
       recentActions: await store.recentActions(account, now() - 60_000),
       builder: builder ? { enabled: true, approvedMaxTenthsBps: Math.max(builder.f, 0), feeTenthsBps: builder.f } : null,
     };
+    const c = this.entry(account);
+    let signer: GuardedSigner;
+    try {
+      signer = await this.deps.signerFor(account);
+    } catch (e) {
+      // The signer could not load this account's key: nothing can be signed.
+      c.signerError = true;
+      const error = e instanceof Error ? e.message : String(e);
+      const failed = actions.map((action): ExecutionRecord => (action.type === 'alert' ? { action, status: 'alert', builderRetried: false, latencyMs: 0 } : { action, status: 'failed', error, failedAt: 'sign', builderRetried: false, latencyMs: 0 }));
+      await this.auditRecords(account, failed);
+      return failed;
+    }
     const records = await executeActions(actions, { policy: confirmed.policy, snapshot, marks, ctx: execCtx }, {
       network: this.deps.network,
       account,
-      signer: await this.deps.signerFor(account),
+      signer,
       exchange: this.deps.exchange,
       nonces: this.deps.nonces,
       assets: this.deps.assets,
@@ -267,16 +369,35 @@ export class GuardEngine {
     });
     for (const r of records) {
       if (r.status === 'sent' || r.status === 'failed') await store.addAction(account, now());
+      // Health: an answer from the exchange means it is reachable and the key signed.
+      if (r.result) {
+        c.exchangeDownAt = 0;
+        c.signerError = false;
+        if (!r.result.ok && AGENT_GONE.test(r.error ?? '')) c.agentExpired = true; // cleared only by the key check
+      } else if (r.failedAt === 'send') c.exchangeDownAt = now();
+      else if (r.failedAt === 'sign') c.signerError = true;
+    }
+    await this.auditRecords(account, records);
+    return records;
+  }
+
+  /** One audit entry per attempt, with what it filled. */
+  private async auditRecords(account: Hex, records: readonly ExecutionRecord[]): Promise<void> {
+    const now = this.deps.now;
+    for (const r of records) {
+      const a = r.action;
+      const order = a.type === 'order' ? a : null;
+      const fill = order && r.result ? `, filled ${filledSize(r)} of ${order.size}` : '';
+      const attempt = order && (order.attempt ?? 1) > 1 ? ` (attempt ${order.attempt})` : '';
       await this.audit({
         account,
         at: now(),
-        kind: r.status === 'rejected' ? 'rejected' : r.status === 'alert' ? 'alert' : r.action.type === 'trigger' ? 'backstop' : 'guard_action',
-        why: r.action.reason,
-        what: r.status === 'rejected' ? `Held back by ${r.violation?.invariant}: ${r.violation?.message}` : `${r.action.type} ${r.status}${r.error ? `: ${r.error}` : ''}`,
-        proof: { ruleId: r.action.ruleId, nonce: r.nonce, cloid: r.cloid, statuses: r.result?.statuses, latencyMs: r.latencyMs, builderRetried: r.builderRetried },
+        kind: r.status === 'rejected' ? 'rejected' : r.status === 'alert' ? 'alert' : a.type === 'trigger' ? 'backstop' : 'guard_action',
+        why: a.reason,
+        what: r.status === 'rejected' ? `Held back by ${r.violation?.invariant}: ${r.violation?.message}${attempt}` : `${a.type} ${r.status}${fill}${attempt}${r.error ? `: ${r.error}` : ''}`,
+        proof: { ruleId: a.ruleId, nonce: r.nonce, cloid: r.cloid, statuses: r.result?.statuses, latencyMs: r.latencyMs, builderRetried: r.builderRetried, ...(order ? { attempt: order.attempt ?? 1, filled: filledSize(r), limitPx: order.limitPx, keys: order.keys } : {}), ...(r.failedAt ? { failedAt: r.failedAt } : {}) },
       });
     }
-    return records;
   }
 
   /** Carries out a command the user signed (the API verified the signature before queueing it). */

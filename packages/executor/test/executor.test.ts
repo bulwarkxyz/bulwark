@@ -147,6 +147,19 @@ describe('executor', () => {
     expect('builder' in (ex.sent[1]!.action as object)).toBe(false);
   });
 
+  it('says which leg failed: the signer, or the exchange that never answered', async () => {
+    const orderOnly = decision.actions.filter((a) => a.type === 'order');
+    const check = { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx() };
+    const down = { async send(): Promise<ExchangeResult> { throw new Error('fetch failed'); } };
+    const [net] = await executeActions(orderOnly, check, { ...deps(mockExchange([])), exchange: down });
+    expect(net).toMatchObject({ status: 'failed', failedAt: 'send', error: 'fetch failed' });
+    const broken = { address: signer.address, async sign(): Promise<never> { throw new Error('no stored guard key for this account'); } };
+    const ex = mockExchange([]);
+    const [sig] = await executeActions(orderOnly, check, { ...deps(ex), signer: broken as unknown as GuardedSigner });
+    expect(sig).toMatchObject({ status: 'failed', failedAt: 'sign' });
+    expect(ex.sent).toEqual([]);
+  });
+
   it('sends no builder code when the switch is off', async () => {
     const ex = mockExchange([]);
     await executeActions(decision.actions.filter((a) => a.type === 'order'), { policy, snapshot, marks: { 'xyz:CL': 90 }, ctx: ctx({ builder: null }) }, deps(ex, null as never));

@@ -19,7 +19,7 @@ import { buildAssetIndex, dexCollateral, type AssetIndex, type OpenOrder, type R
 import { ExchangeClient, InfoClient, NonceManager, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, SealedDigestSigner, parseMasterKeys, type DigestSigner } from '@bulwarkxyz/signer';
 import postgres from 'postgres';
-import { GuardEngine } from './guard.js';
+import { GuardEngine, STATUS_WRITE_EVERY_MS } from './guard.js';
 import { KeyService, SEALED_PREFIX } from './keys.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
 import { PgStore, migrate } from '@bulwarkxyz/store';
@@ -126,6 +126,7 @@ async function main() {
       return new CommandSigner(await digestSigner(user, u.agentKeyRef), network === 'mainnet');
     },
     builder: builderField(network as ConfigNetwork) as { b: Hex; f: number } | null,
+    agents: async (user) => (await info.extraAgents(user)) as Array<{ address: string; validUntil?: number | null }>,
     now: Date.now,
   });
 
@@ -162,6 +163,8 @@ async function main() {
   }
   await syncUsers();
   setInterval(() => void syncUsers().catch((e) => console.error('syncUsers', e)), 30_000);
+  // Keeps every account's guard status current while prices and positions are still.
+  setInterval(() => void engine.heartbeat().catch((e) => console.error('heartbeat', e)), STATUS_WRITE_EVERY_MS);
   setInterval(() => void loadAssets().then((m) => (meta = m)).catch((e) => console.error('loadAssets', e)), 10 * 60_000);
 
   const keys = new KeyService({

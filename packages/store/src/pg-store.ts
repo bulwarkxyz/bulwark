@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { Policy, type CommandName } from '@bulwarkxyz/guard-core';
+import { Policy, type CommandName, type RetryChain } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardUser, KeyRequest, KeyRequestKind, KeyVault, PendingCommand } from './store.js';
+import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, PendingCommand } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -87,6 +87,25 @@ export class PgStore implements ApiStore, KeyVault {
   async saveLatched(account: string, keys: ReadonlySet<string>) {
     await this.sql`insert into latches (account, keys) values (${this.k(account)}, ${this.sql.json([...keys])})
       on conflict (account) do update set keys = excluded.keys`;
+  }
+  async retries(account: string) {
+    const [r] = await this.sql`select retries from latches where account = ${this.k(account)}`;
+    return (r?.retries as RetryChain[] | undefined) ?? [];
+  }
+  async saveRetries(account: string, chains: readonly RetryChain[]) {
+    await this.sql`insert into latches (account, keys, retries) values (${this.k(account)}, ${this.sql.json([])}, ${this.sql.json(chains as never)})
+      on conflict (account) do update set retries = excluded.retries`;
+  }
+  async guardStatus(account: string): Promise<GuardStatus | null> {
+    const [r] = await this.sql`select * from guard_status where account = ${this.k(account)}`;
+    if (!r) return null;
+    return { state: r.state, reason: r.reason ?? null, lastEvaluatedAt: r.last_evaluated_at === null ? null : Number(r.last_evaluated_at), updatedAt: Number(r.updated_at) };
+  }
+  async setGuardStatus(account: string, s: GuardStatus) {
+    await this.sql`insert into guard_status (account, state, reason, last_evaluated_at, updated_at)
+      values (${this.k(account)}, ${s.state}, ${s.reason}, ${s.lastEvaluatedAt}, ${s.updatedAt})
+      on conflict (account) do update set state = excluded.state, reason = excluded.reason,
+        last_evaluated_at = excluded.last_evaluated_at, updated_at = excluded.updated_at`;
   }
   async baselines(account: string) {
     const rows = await this.sql`select rule_id, body from baselines where account = ${this.k(account)}`;

@@ -16,7 +16,7 @@ describe.skipIf(!url)('postgres store', () => {
   const store = new PgStore(sql);
 
   beforeAll(async () => {
-    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands, agent_keys, agent_key_requests cascade`;
+    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands, agent_keys, agent_key_requests, guard_status cascade`;
     await migrate(sql);
     await migrate(sql); // idempotent
     await store.upsertUser({ account: A, agentKeyRef: 'kms:key-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
@@ -46,6 +46,28 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.guardOrders(A)).toEqual([]);
     await store.addAction(A, 100);
     expect(await store.recentActions(A, 50)).toEqual([100]);
+  });
+
+  it('round-trips retry chains next to the latches, without touching them', async () => {
+    await store.saveLatched(A, new Set(['stage-1@dex:xyz']));
+    const chain = { keys: ['stage-1@dex:xyz'], ruleId: 'stage-1', reason: 'buffer 1.80× below your 2× line', dex: 'xyz', coin: 'xyz:CL', isBuy: false, remaining: 0.12, failures: 2, lastAttemptAt: 50, alerted: false };
+    await store.saveRetries(A, [chain]);
+    expect(await store.retries(A)).toEqual([chain]);
+    expect([...(await store.latched(A))]).toEqual(['stage-1@dex:xyz']);
+    await store.saveLatched(A, new Set());
+    expect(await store.retries(A)).toEqual([chain]);
+    await store.saveRetries(A, []);
+    expect(await store.retries(A)).toEqual([]);
+    expect(await store.retries('0x0000000000000000000000000000000000000001')).toEqual([]);
+  });
+
+  it('round-trips the guard status; a reason only with paused', async () => {
+    expect(await store.guardStatus(A)).toBeNull();
+    await store.setGuardStatus(A, { state: 'paused', reason: 'stale_data', lastEvaluatedAt: 10, updatedAt: 20 });
+    expect(await store.guardStatus(A)).toEqual({ state: 'paused', reason: 'stale_data', lastEvaluatedAt: 10, updatedAt: 20 });
+    await store.setGuardStatus(A, { state: 'protected', reason: null, lastEvaluatedAt: 30, updatedAt: 30 });
+    expect(await store.guardStatus(A)).toEqual({ state: 'protected', reason: null, lastEvaluatedAt: 30, updatedAt: 30 });
+    await expect(store.setGuardStatus(A, { state: 'protected', reason: 'stale_data', lastEvaluatedAt: 30, updatedAt: 31 })).rejects.toThrow();
   });
 
   it('redeems a Telegram link code once, before it expires', async () => {

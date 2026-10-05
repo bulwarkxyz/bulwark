@@ -132,3 +132,16 @@ create unique index if not exists agent_key_requests_one_open on agent_key_reque
 -- Commands gain 'wipe' (destroy the user's sealed agent key).
 alter table commands drop constraint if exists commands_command_check;
 alter table commands add constraint commands_command_check check (command in ('unwind', 'stop', 'resume', 'wipe'));
+
+-- Guard orders that did not fully fill, retried while their stage holds (guard-core retry.ts).
+alter table latches add column if not exists retries jsonb not null default '[]'::jsonb;
+
+-- What the guard is doing for each account, written by the worker, served by the API.
+create table if not exists guard_status (
+  account            text primary key,
+  state              text not null check (state in ('protected', 'acting', 'at_risk', 'paused', 'stopped', 'no_rules', 'alerts_only')),
+  reason             text check (reason in ('stale_data', 'exchange_unreachable', 'signer_error', 'agent_expired')),
+  last_evaluated_at  bigint,
+  updated_at         bigint not null,
+  check ((state = 'paused') = (reason is not null))
+);

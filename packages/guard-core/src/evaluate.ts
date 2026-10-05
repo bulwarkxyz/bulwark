@@ -53,6 +53,10 @@ export type GuardAction =
       tif: 'Ioc';
       /** True when the order closes the whole position. */
       closesPosition: boolean;
+      /** Fire keys (`ruleId@scope`) of the stages that wanted this order; a retry needs one of them to still hold. */
+      keys?: string[];
+      /** 1 for the first try; 2 and up for retries of an order that did not fully fill. */
+      attempt?: number;
     })
   | (Base & {
       /** A reduce-only stop resting on the exchange that fires on mark even if Bulwark is unreachable. */
@@ -77,6 +81,8 @@ export interface Decision {
   actions: GuardAction[];
   /** The latch set to carry into the next evaluation. */
   latched: Set<string>;
+  /** Fire keys whose condition holds at this evaluation (latched or not). */
+  active: Set<string>;
 }
 
 interface Scope {
@@ -142,8 +148,12 @@ function targets(target: Target, pools: PoolRisk[]): PositionRisk[] {
   return out;
 }
 
-/** Size to sell/buy back, respecting lot size and the $10 minimum (a too-small trim becomes the minimum or a full close). */
-function sizedOrder(row: PositionRisk, wanted: number, slipPct: number, rule: Rule, reason: string, rounding: 'floor' | 'ceil' = 'floor'): GuardAction | null {
+/**
+ * A reduce-only IOC for `row`, sized to `wanted` within lot size and the $10 minimum (a too-small trim
+ * becomes the minimum or a full close), priced from the current mark at the user's slippage. Retries
+ * use it too, so every attempt is re-priced from the mark it is sent at and never past the slippage.
+ */
+export function sizedOrder(row: PositionRisk, wanted: number, slipPct: number, rule: Pick<Rule, 'id'>, reason: string, rounding: 'floor' | 'ceil' = 'floor'): GuardAction | null {
   const p = row.position;
   const full = Math.abs(p.size);
   const d = p.asset.szDecimals;
@@ -315,7 +325,9 @@ function merge(actions: GuardAction[]): GuardAction[] {
     if (a.type === 'order') {
       const k = `${a.dex}|${a.coin}`;
       const prev = orders.get(k);
-      if (!prev || a.size > prev.size) orders.set(k, a);
+      const keys = [...new Set([...(prev?.keys ?? []), ...(a.keys ?? [])])];
+      const kept = !prev || a.size > prev.size ? a : prev;
+      orders.set(k, keys.length ? { ...kept, keys } : kept);
     } else if (a.type === 'transfer') {
       const k = `${a.source}>${a.toDex}`;
       const prev = transfers.get(k);
@@ -338,25 +350,28 @@ function merge(actions: GuardAction[]): GuardAction[] {
 export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks | undefined, ctx: GuardContext): Decision {
   const risk = assessRisk(snapshot, marks);
   const latched = new Set(ctx.latched);
+  const active = new Set<string>();
   const fired: Decision['fired'] = [];
   const raw: GuardAction[] = [];
-  if (!risk.supported) return { risk, fired, actions: [], latched };
+  if (!risk.supported) return { risk, fired, actions: [], latched, active };
 
   const lines = policy.rules.filter((r) => r.when.kind === 'buffer').map((r) => (r.when as { below: number }).below);
   const highestLine = lines.length ? Math.max(...lines) : 1;
 
   for (const rule of policy.rules) {
-    const active = rule.window === undefined || windowContains(rule.window, ctx.now);
-    const hits = active ? firing(rule.when, rule, risk, ctx) : [];
+    const inWindow = rule.window === undefined || windowContains(rule.window, ctx.now);
+    const hits = inWindow ? firing(rule.when, rule, risk, ctx) : [];
     const hitKeys = new Set(hits.map((h) => `${rule.id}@${h.scope.id}`));
     // Re-arm keys whose condition has cleared.
     for (const key of [...latched]) if (key.startsWith(`${rule.id}@`) && !hitKeys.has(key)) latched.delete(key);
     for (const hit of hits) {
       const key = `${rule.id}@${hit.scope.id}`;
+      active.add(key);
       if (latched.has(key)) continue;
       latched.add(key);
       fired.push({ key, ruleId: rule.id, reason: hit.reason });
-      for (const action of rule.then) raw.push(...translate(action, rule, hit.scope, hit.reason, risk, policy, ctx, highestLine));
+      for (const action of rule.then)
+        for (const a of translate(action, rule, hit.scope, hit.reason, risk, policy, ctx, highestLine)) raw.push(a.type === 'order' ? { ...a, keys: [key], attempt: 1 } : a);
     }
   }
 
@@ -371,7 +386,7 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
       return [{ type: 'alert', ruleId: a.ruleId, reason: `${a.reason} — automatic action is off in your region; act manually`, level: 'critical' }];
     });
   }
-  return { risk, fired, actions, latched };
+  return { risk, fired, actions, latched, active };
 }
 
 export { markOf };

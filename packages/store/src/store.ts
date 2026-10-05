@@ -1,4 +1,4 @@
-import type { CommandName, Policy } from '@bulwarkxyz/guard-core';
+import type { CommandName, Policy, RetryChain } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { MemoryAuditStore, type AuditStore } from './audit.js';
 
@@ -45,12 +45,34 @@ export interface GuardOrder {
   placedAt: number;
 }
 
+/** What the guard is doing for an account, as the worker last judged it. */
+export type GuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
+/** Why the guard is paused. */
+export type PausedReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired';
+export const GUARD_STATES: readonly GuardState[] = ['protected', 'acting', 'at_risk', 'paused', 'stopped', 'no_rules', 'alerts_only'];
+export const PAUSED_REASONS: readonly PausedReason[] = ['stale_data', 'exchange_unreachable', 'signer_error', 'agent_expired'];
+
+export interface GuardStatus {
+  state: GuardState;
+  /** Set only when `state` is `paused`. */
+  reason: PausedReason | null;
+  /** Last time the guard evaluated the account's rules on fresh data; null if it never has. */
+  lastEvaluatedAt: number | null;
+  /** When the worker wrote this status. */
+  updatedAt: number;
+}
+
 export interface GuardStore {
   users(): Promise<GuardUser[]>;
   user(account: string): Promise<GuardUser | null>;
   policy(account: string): Promise<ConfirmedPolicy | null>;
   latched(account: string): Promise<Set<string>>;
   saveLatched(account: string, keys: ReadonlySet<string>): Promise<void>;
+  /** Guard orders that did not fully fill and are retried while their stage holds. */
+  retries(account: string): Promise<RetryChain[]>;
+  saveRetries(account: string, chains: readonly RetryChain[]): Promise<void>;
+  guardStatus(account: string): Promise<GuardStatus | null>;
+  setGuardStatus(account: string, status: GuardStatus): Promise<void>;
   baselines(account: string): Promise<Record<string, Baseline>>;
   setBaseline(account: string, ruleId: string, b: Baseline | null): Promise<void>;
   guardOrders(account: string): Promise<GuardOrder[]>;
@@ -156,6 +178,21 @@ export class MemoryStore implements ApiStore, KeyVault {
   }
   async saveLatched(account: string, keys: ReadonlySet<string>) {
     this.l.set(this.k(account), new Set(keys));
+  }
+  private readonly r = new Map<string, RetryChain[]>();
+  async retries(account: string) {
+    return structuredClone(this.r.get(this.k(account)) ?? []);
+  }
+  async saveRetries(account: string, chains: readonly RetryChain[]) {
+    this.r.set(this.k(account), structuredClone([...chains]));
+  }
+  private readonly st = new Map<string, GuardStatus>();
+  async guardStatus(account: string) {
+    const s = this.st.get(this.k(account));
+    return s ? { ...s } : null;
+  }
+  async setGuardStatus(account: string, status: GuardStatus) {
+    this.st.set(this.k(account), { ...status });
   }
   async baselines(account: string) {
     return { ...(this.b.get(this.k(account)) ?? {}) };

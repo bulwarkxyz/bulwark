@@ -1,5 +1,7 @@
 import { evaluate, type GuardAction } from './evaluate.js';
+import { MAX_ACTIONS_PER_MINUTE } from './invariants.js';
 import type { Policy } from './policy.js';
+import { planRetries, positionKey, recordFill, type RetryChain } from './retry.js';
 import { assessRisk, type Marks } from './risk.js';
 import type { AccountSnapshot, Position } from './snapshot.js';
 import { windowContains, type WindowName } from './windows.js';
@@ -34,6 +36,12 @@ export interface SimResult {
   feesPaid: number;
   /** Guard IOC orders that reached the exchange after the price had moved past their limit. */
   missedOrders: number;
+  /** Retry orders sent for earlier orders that did not fully fill. */
+  retryOrders: number;
+  /** Step of the first "cannot fill within your slippage" alert, or null. */
+  retryAlertAt: number | null;
+  /** Actions held back by the I6 rate cap (only counted when `stepMs` is set). */
+  rateCapped: number;
 }
 
 export interface SimInput {
@@ -52,6 +60,10 @@ export interface SimInput {
    * otherwise it is missed. 0 = immediate.
    */
   delaySteps?: number;
+  /** Retry orders that did not fully fill while their stage still holds (the guard's behaviour). Default true. */
+  retry?: boolean;
+  /** Length of one path step in ms. When set, the I6 cap (actions per minute) is applied. */
+  stepMs?: number;
 }
 
 function clone(s: AccountSnapshot): AccountSnapshot {
@@ -135,6 +147,18 @@ export function simulate(input: SimInput): SimResult {
   let missedOrders = 0;
   const delay = Math.max(0, Math.floor(input.delaySteps ?? 0));
   const pending: Array<{ due: number; action: GuardAction }> = [];
+  const retry = input.retry ?? true;
+  let chains: RetryChain[] = [];
+  const inFlight = new Set<string>();
+  let retryOrders = 0;
+  let retryAlertAt: number | null = null;
+  let rateCapped = 0;
+  const sentAt: number[] = [];
+  const settle = (a: GuardAction, filled: number, i: number) => {
+    if (a.type !== 'order') return;
+    inFlight.delete(positionKey(a.dex, a.coin));
+    if (retry) chains = recordFill(chains, a, filled, i);
+  };
 
   for (let i = 0; i < path.length && liquidatedAt === null; i++) {
     const marks = path[i]!;
@@ -148,9 +172,12 @@ export function simulate(input: SimInput): SimResult {
         const pos = s.positions.find((x) => x.coin === a.coin);
         if (!fillable || !pos) {
           missedOrders++;
+          settle(a, 0, i);
           continue;
         }
-        feesPaid += fill(s, a.coin, (a.isBuy ? 1 : -1) * Math.min(a.size, Math.abs(pos.size)), a.limitPx, m, feeRate);
+        const size = Math.min(a.size, Math.abs(pos.size));
+        feesPaid += fill(s, a.coin, (a.isBuy ? 1 : -1) * size, a.limitPx, m, feeRate);
+        settle(a, size, i);
       } else if (a.type === 'transfer') {
         const src = s.idle.find((x) => x.id === a.source);
         const amount = Math.min(a.amount, Math.max(0, src?.availableAtSnapshot ?? a.amount));
@@ -180,11 +207,38 @@ export function simulate(input: SimInput): SimResult {
     }
     const d = evaluate(policy, s, marks, { now, baselines, openOrders: [], latched, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
     latched = d.latched;
-    if (delay) for (const a of d.actions) pending.push({ due: i + delay, action: a });
-    else for (const a of d.actions) feesPaid += apply(s, a, marks, feeRate, resting);
+    let actions = d.actions;
+    if (retry) {
+      const planned = planRetries(d, chains, { slippagePct: policy.execution.maxSlippagePct, automationAllowed: input.automationAllowed ?? true, inFlight });
+      actions = planned.actions;
+      chains = planned.chains;
+      retryOrders += actions.filter((a) => a.type === 'order' && (a.attempt ?? 1) > 1).length;
+      if (retryAlertAt === null && actions.some((a) => a.type === 'alert' && a.level === 'critical' && a.reason.includes('cannot fill'))) retryAlertAt = i;
+    }
+    for (const a of actions) {
+      if (a.type === 'alert') continue;
+      if (input.stepMs) {
+        // I6: at most MAX_ACTIONS_PER_MINUTE guard actions in any minute; a capped order counts as unfilled.
+        const t = i * input.stepMs;
+        while (sentAt.length && sentAt[0]! <= t - 60_000) sentAt.shift();
+        if (sentAt.length >= MAX_ACTIONS_PER_MINUTE) {
+          rateCapped++;
+          settle(a, 0, i);
+          continue;
+        }
+        sentAt.push(t);
+      }
+      if (delay) {
+        pending.push({ due: i + delay, action: a });
+        if (a.type === 'order') inFlight.add(positionKey(a.dex, a.coin));
+      } else {
+        feesPaid += apply(s, a, marks, feeRate, resting);
+        if (a.type === 'order') settle(a, a.size, i);
+      }
+    }
     prune(s);
     const after = assessRisk(s, marks);
-    steps.push({ step: i, marks, buffer: after.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: after.accountValue, fired: d.fired.map((f) => f.ruleId), actions: d.actions, liquidated: false });
+    steps.push({ step: i, marks, buffer: after.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: after.accountValue, fired: d.fired.map((f) => f.ruleId), actions, liquidated: false });
   }
 
   const unguarded = path.findIndex((m) => assessRisk(input.snapshot, m).pools.some((p) => p.maintenance > 0 && p.buffer <= 1));
@@ -196,6 +250,9 @@ export function simulate(input: SimInput): SimResult {
     final: { buffer: last.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: last.accountValue, positions: s.positions.map((p) => ({ coin: p.coin, size: p.size })) },
     feesPaid,
     missedOrders,
+    retryOrders,
+    retryAlertAt,
+    rateCapped,
   };
 }
 
