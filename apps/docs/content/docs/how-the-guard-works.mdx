@@ -29,7 +29,7 @@ Your rules set lines on the buffer and what happens at each. Typical actions:
 - **Close** a position or everything.
 - **Cancel** your orders that would add to a position.
 
-A stage fires once and stays quiet until the buffer recovers above its line. Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
+A stage acts once each time its line is crossed, then stays quiet until the buffer recovers above the line. If its order does not fill, it is retried (see below). Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
 
 ## When an order does not fill
 
