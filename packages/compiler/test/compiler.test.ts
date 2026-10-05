@@ -51,7 +51,7 @@ describe('compileRule', () => {
     expect(r.check.policy?.version).toBe(4);
     expect(r.check.policy?.rules).toHaveLength(2);
     expect(r.check.rule?.id).toBe('ai-2');
-    expect(r.check.rule?.source).toEqual({ text, compiler: 'anthropic:claude-opus-5-5/v2' });
+    expect(r.check.rule?.source).toEqual({ text, compiler: 'anthropic:claude-opus-5-5/v3' });
     expect(describeRule(r.check.rule!)).toBe('Fri US close → Mon US open: when CL moves down 8% or more since the window opened, cut the CL position by 50%. Acts once per fall, then leaves the rest to the backstop.');
   });
 

@@ -54,7 +54,7 @@ describe('OpenAI provider', () => {
     const rule = { window: null, when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing', limit: null } };
     const ok = await compileRule(openAIProvider({ apiKey: 'k', fetch: fakeOpenAI(() => message({ outcome: 'rule', rule, message: '' })).f }), { text: 'every time my buffer drops below 2x, alert me', policy, markets });
     expect(ok.kind === 'draft' && ok.check.ok).toBe(true);
-    expect(ok.kind === 'draft' && ok.check.rule?.source?.compiler).toBe('openai:gpt-6.1-sol/v2');
+    expect(ok.kind === 'draft' && ok.check.rule?.source?.compiler).toBe('openai:gpt-6.1-sol/v3');
     expect(ok.usage).toEqual({ inputTokens: 1800, outputTokens: 400, cachedInputTokens: 1200 });
     const unsaid = await compileRule(openAIProvider({ apiKey: 'k', fetch: fakeOpenAI(() => message({ outcome: 'rule', rule, message: '' })).f }), { text: 'when my buffer drops below 2x, alert me', policy, markets });
     expect(unsaid.kind).toBe('clarify');
