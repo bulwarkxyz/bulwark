@@ -10,3 +10,4 @@ export * from './evaluate.js';
 export * from './invariants.js';
 export * from './compiler-check.js';
 export * from './backstop.js';
+export * from './simulate.js';

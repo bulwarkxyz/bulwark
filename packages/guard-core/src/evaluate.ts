@@ -216,10 +216,14 @@ function reduceToLeverage(pool: PoolRisk, coin: string, cap: number, slipPct: nu
   return order ? [order] : [];
 }
 
-/** Top-up into a pool from the user's own idle balances. Never drains a source pool below the policy's highest line. */
-function topUp(pool: PoolRisk, maxUsdc: number, line: number | null, risk: AccountRisk, highestLine: number, rule: Rule, reason: string): GuardAction[] {
-  const needed = line !== null ? Math.max(0, line * pool.maintenance - pool.equity) : maxUsdc;
-  let want = Math.min(maxUsdc, needed);
+/**
+ * Top-up into a pool from the user's own idle balances: the amount the user set (or what is
+ * available), once per breach. Topping up only to the line left the pool sitting on the line while
+ * latched, so a continuing fall went unanswered (found by the simulator). Never drains a source pool
+ * below the policy's highest line.
+ */
+function topUp(pool: PoolRisk, maxUsdc: number, risk: AccountRisk, highestLine: number, rule: Rule, reason: string): GuardAction[] {
+  let want = maxUsdc;
   if (!(want > 0)) return [];
   const out: GuardAction[] = [];
 
@@ -287,7 +291,7 @@ function translate(action: Action, rule: Rule, scope: Scope, reason: string, ris
     case 'reduceToLeverage':
       return scope.pools.flatMap((p) => reduceToLeverage(p, action.market, action.leverage, slip, rule, reason));
     case 'topUp':
-      return scope.pools.flatMap((p) => topUp(p, action.maxUsdc, line, risk, highestLine, rule, reason));
+      return scope.pools.flatMap((p) => topUp(p, action.maxUsdc, risk, highestLine, rule, reason));
     case 'cancelOpeningOrders': {
       const coins = new Set(scope.pools.flatMap((p) => p.positions.map((r) => r.position.coin)));
       const dexOf = (coin: string) => (coin.includes(':') ? (coin.split(':')[0] as string) : '');

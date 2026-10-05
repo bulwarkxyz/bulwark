@@ -57,12 +57,15 @@ describe('buffer stage', () => {
 describe('top-up', () => {
   const p = policy([{ id: 'stage-2', when: { kind: 'buffer', below: LINE }, then: [{ kind: 'topUp', maxUsdc: 100 }] }]);
 
-  it('standard: moves USDC from spot into the dex that needs it, only as much as the line needs', () => {
+  it('standard: moves the amount the user set from spot into the dex that needs it', () => {
     const snap = standardAccount({ xyz: { positions: [{ coin: 'xyz:CL', size: 10, mark: 100 }], crossEquity: 40 } }, 500);
-    // maintenance 25, equity 40 → buffer 1.6; line 2 needs 50 → 10 USDC
+    // maintenance 25, equity 40 → buffer 1.6, below line 2 → the rule's 100 USDC
     const d = evaluate(p, snap, undefined, ctx());
     const t = d.actions.find((a) => a.type === 'transfer');
-    expect(t).toMatchObject({ type: 'transfer', source: 'spot', toDex: 'xyz', amount: 10 });
+    expect(t).toMatchObject({ type: 'transfer', source: 'spot', toDex: 'xyz', amount: 100 });
+    // only what is there
+    const thin = standardAccount({ xyz: { positions: [{ coin: 'xyz:CL', size: 10, mark: 100 }], crossEquity: 40 } }, 30);
+    expect(evaluate(p, thin, undefined, ctx()).actions.find((a) => a.type === 'transfer')).toMatchObject({ amount: 30 });
     expect(gate(d.actions, p, snap, undefined, execCtx(p)).rejected).toEqual([]);
   });
 
@@ -91,7 +94,8 @@ describe('top-up', () => {
     const snap = unifiedAccount([{ coin: 'xyz:COIN', size: 0.1, mark: 200, isolatedMargin: 1.5 }], 100);
     const d = evaluate(p, snap, undefined, ctx());
     const iso = d.actions.find((a) => a.type === 'isolatedMargin');
-    expect(iso).toMatchObject({ coin: 'xyz:COIN', amount: 0.5 });
+    // the rule's 100 USDC, limited to the free shared balance: 100 − 1.5 already in the isolated margin
+    expect(iso).toMatchObject({ coin: 'xyz:COIN', amount: 98.5 });
     expect(gate(d.actions, p, snap, undefined, execCtx(p)).rejected).toEqual([]);
   });
 });
