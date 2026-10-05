@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useAccount, useChainId, useSignTypedData } from 'wagmi';
 import { api } from '@/lib/api';
-import { useCommand } from '@/lib/commands';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { info } from '@/lib/hl';
 import { useMe, type Me } from '@/lib/me';
@@ -17,6 +16,7 @@ import { approveAgentFor, approveBuilderFor, forgetTradingKey, sendUserSigned, t
 import { shortAddr } from './format';
 import { Icon } from './icons';
 import { useTimes } from '@/lib/time';
+import { describeResult, useCommand, waitForCommand, type CommandRecord } from '@/lib/commands';
 
 type Msg = { ok: boolean; text: string } | null;
 
@@ -192,6 +192,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
           send: () => command('wipe'),
           me: () => qc.fetchQuery({ queryKey: ['me'], queryFn: () => api<Me>('/v1/me'), staleTime: 0 }),
           audit: () => api<AuditEntry[]>('/v1/audit?limit=20'),
+          result: (id) => api<CommandRecord>(`/v1/commands/${id}`),
           now: () => Date.now(),
           sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
         },
@@ -451,8 +452,14 @@ export function KillSwitchCard({ preview }: { preview?: 'busy' | 'error' } = {})
     setMsg(null);
     setLast(c);
     try {
-      await command(c);
-      setMsg({ ok: true, text: c === 'stop' ? 'Guard stopped. Its resting orders are being cancelled.' : 'Guard resumed. It re-plans its backstops within 60 s.' });
+      const res = await command(c);
+      if (c === 'resume' || res.id === null) {
+        setMsg({ ok: true, text: 'Guard resumed. It re-plans its backstops within 60 s.' });
+      } else {
+        setMsg({ ok: true, text: 'Guard stopped. Waiting for it to cancel its own resting orders…' });
+        const rec = await waitForCommand(res.id);
+        setMsg({ ok: true, text: `Guard stopped. ${rec ? describeResult('stop', rec.result) : 'It hasn’t reported back yet; its resting orders are being cancelled. Check the audit log in a minute.'}` });
+      }
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {

@@ -11,6 +11,7 @@ import { ConnectButton } from './connect';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { BrandMark, Icon } from './icons';
 import { TopLayer } from './layer';
+import { useUnseenAlerts } from '@/lib/alerts';
 import { useTimes } from '@/lib/time';
 
 const NAV = [
@@ -53,6 +54,18 @@ function phoneTitle(path: string): string {
   return 'Markets';
 }
 
+/** New in-app alerts since the user last looked (only when in-app alerts are on). */
+function AlertBell() {
+  const { on, unseen } = useUnseenAlerts();
+  if (!on || !unseen) return null;
+  return (
+    <Link className="btn btn-sm btn-ghost row nw" href="/app/settings#alerts" aria-label={`${unseen} new alert${unseen === 1 ? '' : 's'}`} style={{ gap: 6 }}>
+      {Icon.bell(16)}
+      <span className="dotcount">{unseen}</span>
+    </Link>
+  );
+}
+
 function TopNav({ focused }: { focused: boolean }) {
   const path = usePathname();
   return (
@@ -78,6 +91,7 @@ function TopNav({ focused }: { focused: boolean }) {
       <span className="sp" />
       {/* Testnet label, part 2 of 3. */}
       {NETWORK === 'testnet' ? <span className="chip chip-net chip-sm">TESTNET</span> : null}
+      {focused ? null : <AlertBell />}
       <ConnectButton />
       {focused ? (
         <Link className="btn btn-sm btn-ghost" href="/app">

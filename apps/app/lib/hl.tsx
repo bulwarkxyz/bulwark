@@ -4,6 +4,7 @@ import { assessRisk, buildAssetIndex, buildSnapshot, dexCollateral, type Account
 import { InfoClient, type Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { api } from './api';
 import { NETWORK } from './env';
 import { MARKETS, type MarketActivity } from './markets';
 import { stream } from './ws';
@@ -256,8 +257,22 @@ export function realisedFeeBps(fills: readonly Fill[] | undefined, coin: string)
  */
 export function useMarketActivity() {
   const markets = useXyzMarkets();
+  // Preferred: the API's cached answer (one round of Hyperliquid requests per 2 minutes for everyone).
+  const fromApi = useQuery({
+    queryKey: ['market-activity-api', NETWORK],
+    queryFn: async () => {
+      const r = await api<{ network: string; markets: Array<{ coin: string; delisted: boolean; listed: boolean; hasRecentData: boolean; lastTradeAt: number | null; trades24h: number; dayNtlVlm: number }> }>(`/markets/activity?coins=${MARKETS.map((m) => m.coin).join(',')}`);
+      if (r.network !== NETWORK) throw new Error(`activity is for ${r.network}`);
+      return Object.fromEntries(r.markets.map((m) => [m.coin, { lastTradeAt: m.lastTradeAt, dayVolumeUsd: m.dayNtlVlm, delisted: m.delisted || !m.listed, hasRecentData: m.hasRecentData, trades24h: m.trades24h }])) as Record<string, MarketActivity>;
+    },
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: 0,
+  });
+  // Fallback when the API can't answer: each market's latest trade, read from Hyperliquid directly.
   const trades = useQuery({
     queryKey: ['market-activity', NETWORK],
+    enabled: fromApi.isError,
     queryFn: async () => {
       const rows = await Promise.all(
         MARKETS.map(async (m) => {
@@ -270,11 +285,12 @@ export function useMarketActivity() {
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
-  if (!trades.data || !markets.data) return { data: null as Record<string, MarketActivity> | null, isLoading: trades.isLoading || markets.isLoading };
+  if (fromApi.data) return { data: fromApi.data, isLoading: false, source: 'api' as const };
+  if (!trades.data || !markets.data) return { data: null as Record<string, MarketActivity> | null, isLoading: fromApi.isLoading || trades.isLoading || markets.isLoading, source: 'direct' as const };
   const data: Record<string, MarketActivity> = {};
   for (const m of MARKETS) {
     const c = markets.data.get(m.coin);
     data[m.coin] = { lastTradeAt: trades.data[m.coin] ?? null, dayVolumeUsd: c?.dayVolumeUsd ?? 0, delisted: c ? c.delisted : true };
   }
-  return { data, isLoading: false };
+  return { data, isLoading: false, source: 'direct' as const };
 }

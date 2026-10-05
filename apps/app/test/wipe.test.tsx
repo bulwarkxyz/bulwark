@@ -128,6 +128,23 @@ describe('wipe: the flow against the API', () => {
     expect(html).toContain('Guard key wiped (1 encrypted key destroyed).');
   });
 
+  it('reads the command’s own result when the API has it, before any audit entry arrives', async () => {
+    const { deps } = fakeApi({ afterPolls: 99 });
+    let polls = 0;
+    deps.result = async () => (++polls >= 2 ? { doneAt: T0 + 2500, result: { cancelled: { cancelled: 2, error: null }, wiped: 1 } } : { doneAt: null, result: null });
+    deps.me = async () => ({ keyStatus: polls >= 2 ? 'wiped' : 'ready' });
+    const steps: WipeStep[] = [];
+    const out = await wipeGuardKey(deps, (s) => steps.push(s), { timeoutMs: 20_000 });
+    expect(out).toMatchObject({ id: 41, cancelled: 'Cancelled 2 guard order(s)', wiped: 'Guard key wiped (1 key)', done: true });
+    expect(steps.map((x) => x.step)).toEqual(['accepted', 'cancelled', 'wiped']);
+  });
+  it('a failed cancel is reported as the worker reported it', async () => {
+    const { deps } = fakeApi({ afterPolls: 99 });
+    deps.result = async () => ({ doneAt: T0 + 2500, result: { cancelled: { cancelled: 0, error: 'exchange unreachable' }, wiped: 1 } });
+    deps.me = async () => ({ keyStatus: 'wiped' });
+    const out = await wipeGuardKey(deps, () => {}, { timeoutMs: 10_000 });
+    expect(out.cancelled).toBe('Cancelled 0 guard order(s): exchange unreachable');
+  });
   it('throws when the command is refused, and follows nothing', async () => {
     const { deps } = fakeApi({ refuse: 'signature does not match' });
     await expect(wipeGuardKey(deps)).rejects.toThrow('signature does not match');
