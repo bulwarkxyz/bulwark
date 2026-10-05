@@ -113,8 +113,8 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
 
   const set = (i: number, patch: Partial<Stage>) => setStages((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   return (
-    <div className="stack" style={{ gap: 16 }}>
-      <span className="muted" style={{ fontSize: 13 }}>
+    <div className="col" style={{ gap: 16 }}>
+      <span className="t2" style={{ fontSize: 13 }}>
         Buffer is pool equity divided by maintenance margin. Liquidation happens at 1×. Pick the lines where the guard steps in and what it does at each.
       </span>
       {stages.map((s, i) => {
@@ -127,7 +127,7 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
                 <label htmlFor={`line-${i}`}>When buffer is below</label>
                 <div className="input">
                   <input id={`line-${i}`} inputMode="decimal" placeholder="Your line" value={s.line} onChange={(e) => set(i, { line: e.target.value })} />
-                  <span className="faint">×</span>
+                  <span className="unit">×</span>
                 </div>
               </div>
               <div className="field" style={{ flex: 1, minWidth: 180 }}>
@@ -147,7 +147,7 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
                   <label htmlFor={`p-${i}`}>{k.param.replace('Your ', '')}</label>
                   <div className="input">
                     <input id={`p-${i}`} inputMode="decimal" placeholder={k.param} value={s.param} onChange={(e) => set(i, { param: e.target.value })} />
-                    <span className="faint">{k.unit}</span>
+                    <span className="unit">{k.unit}</span>
                   </div>
                 </div>
               ) : null}
@@ -169,11 +169,11 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
         <label htmlFor="g-slip">Furthest from the mark the guard may trade</label>
         <div className="input">
           <input id="g-slip" inputMode="decimal" placeholder="Your number" value={slip} onChange={(e) => setSlip(e.target.value)} />
-          <span className="faint">%</span>
+          <span className="unit">%</span>
         </div>
       </div>
       {kept.length ? (
-        <span className="faint" style={{ fontSize: 12 }}>
+        <span className="t3" style={{ fontSize: 12 }}>
           Your {kept.length} other rule{kept.length > 1 ? 's are' : ' is'} kept as {kept.length > 1 ? 'they are' : 'it is'}.
         </span>
       ) : null}
@@ -185,7 +185,7 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
       <button type="button" className="btn btn-ink" disabled={Boolean(problem) || busy} onClick={confirm}>
         {busy ? 'Waiting for signature…' : 'Sign and turn on'}
       </button>
-      {problem ? <span className="faint" style={{ fontSize: 12 }}>{problem}</span> : null}
+      {problem ? <span className="t3" style={{ fontSize: 12 }}>{problem}</span> : null}
       {msg ? <span className={msg.ok ? '' : 'err'} style={{ fontSize: 13 }}>{msg.text}</span> : null}
     </div>
   );

@@ -2,69 +2,107 @@
 
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
-import { useAccount } from 'wagmi';
+import { DisconnectButton } from '@/components/app/connect';
+import { Icon } from '@/components/app/icons';
 import { BuilderCard, GuardKeyCard, KillSwitchCard, TelegramCard, TradingKeyCard } from '@/components/app/keys';
-import { TopBar } from '@/components/app/shell';
-import { useMounted } from '@/lib/api';
-import { NETWORK } from '@/lib/env';
+import { useMounted, useSignedIn } from '@/lib/api';
+import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { useMe } from '@/lib/me';
+import { useReview, useViewer } from '@/lib/review';
 
 export default function SettingsPage() {
-  const { address } = useAccount();
+  const review = useReview();
+  const { connected } = useViewer();
+  const signedIn = useSignedIn() || review.on;
   const me = useMe();
   const { theme, setTheme } = useTheme();
   const mounted = useMounted();
+  const loading = connected && signedIn && !me.isFetched;
+
   return (
-    <>
-      <TopBar title="Settings" />
-      <div className="content">
-        {!address ? <div className="callout">Connect a wallet and sign in to change settings.</div> : null}
-        {address && !me.data ? <div className="callout">Sign in (top right) to load your settings.</div> : null}
-        {me.data && !me.data.user ? (
-          <div className="callout guard">
-            <span>
-              You have not finished setting up.{' '}
-              <Link className="link" href="/app/onboarding">
-                Continue onboarding
-              </Link>
-            </span>
-          </div>
-        ) : null}
-        <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(380px, 100%), 1fr))', alignItems: 'start' }}>
-          <KillSwitchCard />
-          <GuardKeyCard />
-          <TradingKeyCard />
-          <BuilderCard />
-          <TelegramCard />
-          <section className="card" aria-labelledby="pref-h">
-            <div className="card-h">
-              <h2 id="pref-h">Display and network</h2>
-            </div>
-            <div className="card-b stack">
-              <div className="field">
-                <label>Theme</label>
-                <div className="seg" role="radiogroup" aria-label="Theme">
-                  {(['dark', 'light', 'system'] as const).map((t) => (
-                    <button key={t} type="button" className={mounted && theme === t ? 'on' : ''} aria-pressed={mounted && theme === t} onClick={() => setTheme(t)}>
-                      {t[0]!.toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="kv">
-                <span>Network</span>
-                <span className="num">{NETWORK === 'mainnet' ? 'Hyperliquid mainnet' : 'Hyperliquid testnet'}</span>
-              </div>
-              {me.data?.user ? (
-                <div className="kv">
-                  <span>Region status</span>
-                  <span>{me.data.user.region === 'allowed' ? 'Guard available' : 'Trading and alerts only'}</span>
-                </div>
-              ) : null}
-            </div>
-          </section>
-        </div>
+    <div className="pg">
+      <div className="ptitle">
+        <h1 className="h1">Settings</h1>
+        <span className="sp" />
+        <DisconnectButton />
       </div>
-    </>
+
+      {me.isError ? (
+        <div className="banner b-crit">
+          {Icon.alert()}
+          <span>
+            <b>Can’t reach Bulwark’s server.</b> The guard keeps running with your signed rules. Changes here need the server; try again shortly.
+          </span>
+        </div>
+      ) : null}
+      {!connected ? (
+        <div className="banner">
+          <span>Display settings work without a wallet. Guard settings need one: connect and sign in.</span>
+        </div>
+      ) : !signedIn ? (
+        <div className="banner">
+          <span>Sign in (top right) to load your guard settings.</span>
+        </div>
+      ) : me.data && !me.data.user ? (
+        <div className="banner">
+          <span>
+            You have not finished setting up. <Link href="/app/onboarding" style={{ textDecoration: 'underline' }}>Continue setup</Link>
+          </span>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="panel pb col" style={{ gap: 12 }}>
+          <span className="sk" style={{ width: '40%' }} />
+          <span className="sk" style={{ width: '80%' }} />
+        </div>
+      ) : connected ? (
+        <KillSwitchCard preview={review.state === 'loading' ? 'busy' : review.state === 'error' ? 'error' : undefined} />
+      ) : null}
+
+      <div className="grid2 even">
+        {connected ? (
+          <>
+            <GuardKeyCard />
+            <TradingKeyCard />
+            {BUILDER_ON ? <BuilderCard /> : null}
+            <TelegramCard />
+          </>
+        ) : null}
+        <section className="panel" aria-labelledby="pref-h">
+          <div className="ph">
+            <h2 id="pref-h">Display and network</h2>
+          </div>
+          <div className="pb col" style={{ gap: 12 }}>
+            <div className="field">
+              <label>Theme</label>
+              <div className="seg" role="radiogroup" aria-label="Theme">
+                {(['dark', 'light', 'system'] as const).map((t) => (
+                  <button key={t} type="button" className={mounted && theme === t ? 'on' : ''} aria-pressed={mounted && theme === t} onClick={() => setTheme(t)}>
+                    {t[0]!.toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="kv line">
+              <span className="small">Times</span>
+              <span className="small">UTC everywhere</span>
+            </div>
+            <div className="kv line">
+              <span className="small">Network</span>
+              <span className="small">
+                {NETWORK === 'mainnet' ? 'Hyperliquid mainnet' : 'Hyperliquid testnet'} {NETWORK === 'testnet' ? <span className="tag tag-net">testnet</span> : null}
+              </span>
+            </div>
+            {me.data?.user ? (
+              <div className="kv">
+                <span className="small">Region</span>
+                <span className="small">{me.data.user.region === 'allowed' ? 'Trading and the guard' : 'Trading and alerts only'}</span>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }

@@ -22,8 +22,8 @@ class Stream {
   private retry = 0;
   private ping: ReturnType<typeof setInterval> | null = null;
   private statusListeners = new Set<() => void>();
-  /** Whether the socket is open, and when the last data message arrived (ms). */
-  status = { open: false, lastMessageAt: 0 };
+  /** Whether the socket is open, how many subscriptions are active, and when the last data message arrived (ms). */
+  status = { open: false, active: 0, lastMessageAt: 0 };
 
   subscribe(sub: Sub, fn: Listener): () => void {
     const k = keyOf(sub);
@@ -34,6 +34,7 @@ class Stream {
       this.send({ method: 'subscribe', subscription: sub });
     }
     entry.listeners.add(fn);
+    this.setStatus({ active: this.subs.size });
     this.ensure();
     return () => {
       const e = this.subs.get(k);
@@ -42,6 +43,7 @@ class Stream {
       if (e.listeners.size === 0) {
         this.subs.delete(k);
         this.send({ method: 'unsubscribe', subscription: sub });
+        this.setStatus({ active: this.subs.size });
       }
     };
   }

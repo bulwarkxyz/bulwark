@@ -46,8 +46,14 @@ for (const theme of ['dark', 'light']) {
         if (watch && state !== 'empty') q.set('watch', watch);
         if (watch && state !== 'empty') q.set('rules', 'example');
         if (state !== 'live') q.set('state', state);
-        await page.goto(`${base}${route}${route.includes('?') ? '&' : '?'}${q}`, { waitUntil: 'networkidle', timeout: 90_000 });
-        await page.waitForTimeout(2500);
+        try {
+          // Not networkidle: the order book and trades stream over a WebSocket that never goes idle.
+          await page.goto(`${base}${route}${route.includes('?') ? '&' : '?'}${q}`, { waitUntil: 'load', timeout: 90_000 });
+          await page.waitForTimeout(4000);
+        } catch (e) {
+          console.log(`FAILED ${route} ${state} ${size.name} ${theme}: ${e.message.split('\n')[0]}`);
+          continue;
+        }
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         if (overflow > 0) errors.push(`horizontal overflow ${overflow}px`);
         const name = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replace('=', '')}-${state}-${size.name}-${theme}.png`;

@@ -262,7 +262,7 @@ function StatusBar() {
         <span className={`dot ${markets.isError ? 'dot-crit' : 'dot-ok'}`} />
         {markets.isError ? 'Prices · can’t reach Hyperliquid' : marketsAge ? `Prices · ${marketsAge} old` : 'Prices · connecting'}
       </span>
-      {live.lastMessageAt || !live.open ? (
+      {live.active > 0 ? (
         <span className="row nw" style={{ gap: 6 }}>
           <span className={`dot ${live.open ? 'dot-ok' : 'dot-crit'}`} />
           {live.open ? `Book and trades · streaming · last update ${age(live.lastMessageAt)} ago` : 'Book and trades · stream down, polling'}
@@ -324,15 +324,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <StatusBar />
       {focused ? null : <MobileTabBar />}
     </div>
-  );
-}
-
-/** Page title row for screens still on the previous layout (the wallet lives in the top nav now). */
-export function TopBar({ title, children }: { title: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <header className="topbar">
-      <h1>{title}</h1>
-      {children}
-    </header>
   );
 }

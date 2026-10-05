@@ -30,9 +30,9 @@ export interface Me {
 export function useMe() {
   const review = useReview();
   return useQuery({
-    queryKey: ['me', review.on ? `${review.watch ?? ''}|${review.exampleRules}|${review.state}` : 'live'],
+    queryKey: ['me', review.on ? `${review.watch ?? ''}|${review.exampleRules}|${review.state}|${review.guard ?? ''}` : 'live'],
     queryFn: async (): Promise<Me | null> => {
-      if (review.on && review.state !== 'empty' && review.watch) return reviewMe(review.watch, review.exampleRules);
+      if (review.on && review.state !== 'empty' && review.watch) return reviewMe(review.watch, review.exampleRules, review.guard === 'stopped');
       return sessionToken() ? api<Me>('/v1/me') : null;
     },
     refetchInterval: 30_000,
@@ -40,10 +40,10 @@ export function useMe() {
 }
 
 /** Review builds only: a watched account as if it had finished onboarding (see lib/review.tsx). */
-function reviewMe(account: Hex, exampleRules: boolean): Me {
+function reviewMe(account: Hex, exampleRules: boolean, stopped: boolean): Me {
   return {
     account,
-    user: { account, agentKeyRef: 'review', agentAddress: null, region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false },
+    user: { account, agentKeyRef: 'review', agentAddress: null, region: 'allowed', telegramChatId: null, killSwitch: stopped, builderApproved: false },
     agent: { address: account, approved: true, validUntil: null },
     builder: { address: account, feeTenthsBps: 30, approvedMaxTenthsBps: 0 },
     keyCustody: 'sealed',

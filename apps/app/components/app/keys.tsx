@@ -17,7 +17,7 @@ type Msg = { ok: boolean; text: string } | null;
 
 function Status({ msg }: { msg: Msg }) {
   return msg ? (
-    <span className={msg.ok ? 'ok-text' : 'err'} style={{ fontSize: 13 }}>
+    <span className={msg.ok ? '' : 'err'} style={{ fontSize: 13 }}>
       {msg.text}
     </span>
   ) : null;
@@ -39,7 +39,7 @@ function useWalletSigner() {
  * The guard key, one per user, approved by the user as a named agent on Hyperliquid. Its description
  * follows where the key actually lives (the API reports `keyCustody`), so the app never overstates it.
  */
-const KEY_TEXT = {
+export const KEY_TEXT = {
   sealed:
     'A key made for you on Bulwark’s server and stored there encrypted (AES-256-GCM). Hyperliquid lets it trade for you but never withdraw. If our server were compromised, someone could place trades with it, but could not withdraw your funds. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule. Hardware-backed key storage is planned.',
   kms: 'A key held in AWS KMS, created for you and never exported. Hyperliquid lets it trade for you but never withdraw. Bulwark only signs reduce-only orders and moves of your own margin with it, after re-checking every rule.',
@@ -94,19 +94,18 @@ export function GuardKeyCard() {
   }
 
   return (
-    <section className="card" aria-labelledby="gk-h">
-      <div className="card-h">
+    <section className="panel" aria-labelledby="gk-h">
+      <div className="ph">
         <h2 id="gk-h">Guard key</h2>
-        <span className="chip" style={{ marginLeft: 'auto' }}>
-          <i />
+        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
           {agent?.approved ? 'Approved' : agent ? 'Created, not approved' : 'Not created'}
         </span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
+      <div className="pb col" style={{ gap: 10 }}>
+        <span className="small t2">
           {KEY_TEXT[me.data?.keyCustody ?? 'sealed']}
         </span>
-        {region === 'guardOff' ? <div className="callout warn">In your region the guard is off: trading and alerts only.</div> : null}
+        {region === 'guardOff' ? <div className="banner b-warn">In your region the guard is off: trading and alerts only.</div> : null}
         {agent ? (
           <div className="kv">
             <span>Address</span>
@@ -129,7 +128,7 @@ export function GuardKeyCard() {
               <label htmlFor="gk-days">Approval lasts (days, leave empty for no expiry)</label>
               <div className="input">
                 <input id="gk-days" inputMode="numeric" placeholder="Your number" value={days} onChange={(e) => setDays(e.target.value)} />
-                <span className="faint">days</span>
+                <span className="unit">days</span>
               </div>
             </div>
             <button type="button" className="btn btn-ink" disabled={busy} onClick={approve}>
@@ -177,16 +176,15 @@ export function TradingKeyCard() {
   }
 
   return (
-    <section className="card" aria-labelledby="tk-h">
-      <div className="card-h">
+    <section className="panel" aria-labelledby="tk-h">
+      <div className="ph">
         <h2 id="tk-h">Trading key (this browser)</h2>
-        <span className="chip" style={{ marginLeft: 'auto' }}>
-          <i />
+        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
           {approved ? 'Approved' : key ? 'Not approved' : 'None'}
         </span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
+      <div className="pb col" style={{ gap: 10 }}>
+        <span className="small t2">
           A key made in this browser and kept here, so your own orders are signed without a wallet prompt each time. Like every Hyperliquid agent it cannot withdraw.
         </span>
         {key ? (
@@ -201,7 +199,7 @@ export function TradingKeyCard() {
               <label htmlFor="tk-days">Approval lasts (days, leave empty for no expiry)</label>
               <div className="input">
                 <input id="tk-days" inputMode="numeric" placeholder="Your number" value={days} onChange={(e) => setDays(e.target.value)} />
-                <span className="faint">days</span>
+                <span className="unit">days</span>
               </div>
             </div>
             <button type="button" className="btn btn-ink" disabled={busy || !address} onClick={approve}>
@@ -252,16 +250,15 @@ export function BuilderCard() {
     }
   }
   return (
-    <section className="card" aria-labelledby="bf-h">
-      <div className="card-h">
+    <section className="panel" aria-labelledby="bf-h">
+      <div className="ph">
         <h2 id="bf-h">Bulwark fee</h2>
-        <span className="chip" style={{ marginLeft: 'auto' }}>
-          <i />
+        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
           {ok ? `Approved up to ${(approvedMax / 1000).toFixed(3)}%` : 'Not approved'}
         </span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
+      <div className="pb col" style={{ gap: 10 }}>
+        <span className="small t2">
           Bulwark charges 3 bps (0.03%) on orders placed through it, through Hyperliquid's builder code. You approve a cap of {BUILDER_APPROVE_MAX_RATE} ({BUILDER_APPROVE_MAX_TENTHS_BPS / 10} bps) and can lower it to zero at any time. {NETWORK === 'testnet' ? 'This is testnet.' : ''}
         </span>
         {!ok ? (
@@ -281,21 +278,20 @@ export function TelegramCard() {
   const [msg, setMsg] = useState<Msg>(null);
   const linked = Boolean(me.data?.user?.telegramChatId);
   return (
-    <section className="card" aria-labelledby="tg-h">
-      <div className="card-h">
+    <section className="panel" aria-labelledby="tg-h">
+      <div className="ph">
         <h2 id="tg-h">Telegram alerts</h2>
-        <span className="chip" style={{ marginLeft: 'auto' }}>
-          <i />
+        <span className="chip chip-sm" style={{ marginLeft: 'auto' }}>
           {linked ? 'Linked' : 'Not linked'}
         </span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
+      <div className="pb col" style={{ gap: 10 }}>
+        <span className="small t2">
           Every guard action and alert is sent to Telegram. Get a one-time code, then send <span className="num">/link CODE</span> to the Bulwark bot.
         </span>
         {code ? (
           <div className="code">
-            <b>/link {code}</b> <span className="faint">· valid 15 minutes</span>
+            <b>/link {code}</b> <span className="t3">· valid 15 minutes</span>
           </div>
         ) : null}
         <button
@@ -316,18 +312,20 @@ export function TelegramCard() {
   );
 }
 
-export function KillSwitchCard() {
+/** The kill switch. `preview` is for review builds only: shows the waiting or failed state without signing. */
+export function KillSwitchCard({ preview }: { preview?: 'busy' | 'error' } = {}) {
   const me = useMe();
   const command = useCommand();
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<Msg>(null);
+  const [msg, setMsg] = useState<Msg>(preview === 'error' ? { ok: false, text: 'The guard was not stopped: the signature arrived after it expired (commands are valid for 60 s). Sign again.' } : null);
   const stopped = Boolean(me.data?.user?.killSwitch);
+  const waiting = busy || preview === 'busy';
   async function run(c: 'stop' | 'resume') {
     setBusy(true);
     setMsg(null);
     try {
       await command(c);
-      setMsg({ ok: true, text: c === 'stop' ? 'Guard stopped. Its resting orders are being cancelled.' : 'Guard resumed.' });
+      setMsg({ ok: true, text: c === 'stop' ? 'Guard stopped. Its resting orders are being cancelled.' : 'Guard resumed. It re-plans its backstops within 60 s.' });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {
@@ -335,22 +333,32 @@ export function KillSwitchCard() {
     }
   }
   return (
-    <section className="card" id="kill-switch" aria-labelledby="ks-h">
-      <div className="card-h">
+    <section className="panel" id="kill-switch" aria-labelledby="ks-h" style={{ borderColor: 'var(--line-2)' }}>
+      <div className="ph">
         <h2 id="ks-h">Kill switch</h2>
-        <span className={`chip ${me.data?.user && stopped ? 'chip-crit' : ''}`} style={{ marginLeft: 'auto' }}>
-          <i />
-          {!me.data?.user ? 'Not set up' : stopped ? 'Guard stopped' : 'Guard running'}
-        </span>
+        <span className="tiny t3">stops the guard for this account</span>
+        <span className="sp" />
+        <span className={`chip chip-sm ${me.data?.user && stopped ? 'chip-risk' : ''}`}>{!me.data?.user ? 'Not set up' : stopped ? 'Guard stopped' : 'Guard running'}</span>
       </div>
-      <div className="card-b stack">
-        <span className="muted" style={{ fontSize: 13 }}>
-          Stopping takes effect at once: the guard sends nothing more and cancels its own resting orders. Your positions and your own orders are left as they are. You sign the command in your wallet.
-        </span>
-        <button type="button" className={`btn ${stopped ? 'btn-ink' : 'btn-crit'}`} disabled={busy || !me.data?.user} onClick={() => run(stopped ? 'resume' : 'stop')}>
-          {busy ? 'Waiting for signature…' : stopped ? 'Sign and resume guard' : 'Sign and stop guard'}
-        </button>
-        <Status msg={msg} />
+      <div className="pb col" style={{ gap: 10 }}>
+        {stopped ? (
+          <div className="banner b-crit">
+            <span>
+              <b>The guard is stopped. Your positions are not protected.</b> It sends nothing and has cancelled its own resting orders. Resuming re-plans the backstops within 60 s.
+            </span>
+          </div>
+        ) : (
+          <span className="small t2">
+            Stopping takes effect at once: the guard sends nothing more and cancels only its own resting orders. Your positions and your own orders stay as they are, with no protection until you resume. You sign the command in your wallet; it is valid for 60 s.
+          </span>
+        )}
+        <div className="row">
+          <button type="button" className={`btn btn-lg ${stopped ? 'btn-ink' : 'btn-crit'}`} disabled={waiting || !me.data?.user} onClick={() => run(stopped ? 'resume' : 'stop')}>
+            {waiting ? 'Waiting for your signature…' : stopped ? 'Resume the guard' : 'Stop the guard'}
+          </button>
+          {waiting ? <span className="small t2">Confirm in your wallet. Nothing has changed yet.</span> : null}
+        </div>
+        {msg ? <span className={`small ${msg.ok ? '' : 'ct'}`}>{msg.text}</span> : null}
       </div>
     </section>
   );
