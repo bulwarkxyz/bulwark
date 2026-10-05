@@ -2,8 +2,9 @@
 
 import type { AccountRisk, PoolRisk, PositionRisk } from '@bulwarkxyz/guard-core';
 import Link from 'next/link';
-import { describeAction, tickerOf, type GuardState, type GuardView } from '@/lib/guard';
+import { describeAction, orderKindLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
 import { homeOpen, marketByCoin } from '@/lib/markets';
+import { useViewer } from '@/lib/review';
 import { BufferMeter, GuardChip } from './guard-ui';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 
@@ -22,6 +23,8 @@ export function GuardCell({ g, pool, row }: { g: GuardView; pool: PoolRisk; row:
   const lvl = armed ? g.levelFor(pool, row) : null;
   const rule = lvl ? g.rules.find((r) => r.when.kind === 'buffer' && r.when.below === lvl.line) : null;
   const what = rule ? rule.then.map(describeAction).join(', then ') : 'act';
+  // What the guard has resting on Hyperliquid for this market, as the API reports it.
+  const resting = useGuardOrders(useViewer().address).forCoin(row.position.coin);
   return (
     <div className="gs">
       <GuardChip state={st} sm label={st === 'stopped' ? 'Not protected' : st === 'paused' ? 'Paused' : undefined} />
@@ -44,6 +47,11 @@ export function GuardCell({ g, pool, row }: { g: GuardView; pool: PoolRisk; row:
         ) : armed ? (
           <span className="tiny t3">{g.lines.length ? 'No line in reach' : 'No buffer lines'}</span>
         ) : null}
+        {resting.map((o) => (
+          <span key={o.oid} className="tiny t2">
+            {orderKindLabel(o.kind)} resting at <span className="num">{fmtPx(o.triggerPx)}</span>
+          </span>
+        ))}
       </div>
     </div>
   );

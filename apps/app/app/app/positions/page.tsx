@@ -1,16 +1,14 @@
 'use client';
 
-import type { GuardOrder } from '@bulwarkxyz/store';
-import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, upDown } from '@/components/app/format';
 import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
 import { PositionCards, PositionsTable, poolState } from '@/components/app/positions-table';
-import { api, useSignedIn } from '@/lib/api';
+import { useSignedIn } from '@/lib/api';
 import { useCommand } from '@/lib/commands';
-import { PAUSE_TEXT, STATE_STALE_MS, describeAction, tickerOf, useGuardView, useNow } from '@/lib/guard';
+import { PAUSE_TEXT, STATE_STALE_MS, describeAction, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
@@ -24,12 +22,7 @@ export default function PositionsPage() {
   const me = useMe();
   const g = useGuardView();
   const now = useNow();
-  const orders = useQuery({
-    queryKey: ['guard-orders', address],
-    enabled: Boolean(address && signedIn && !review.on),
-    queryFn: () => api<GuardOrder[]>('/v1/guard-orders'),
-    refetchInterval: 15_000,
-  });
+  const orders = useGuardOrders(address);
   const command = useCommand();
   const [minutes, setMinutes] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -220,13 +213,11 @@ export default function PositionsPage() {
             <section className="panel" aria-label="The guard's resting orders">
               <div className="ph">
                 <h2>The guard’s resting orders</h2>
-                <span className="tiny t3">reduce-only backstops on Hyperliquid</span>
+                <span className="tiny t3">{orders.example ? 'example, from the example rules' : 'reduce-only, on Hyperliquid'}</span>
               </div>
-              {review.on ? (
-                <div className="pb small t2">Shown for signed-in accounts. The guard places one reduce-only stop per position at your lowest line.</div>
-              ) : !signedIn ? (
+              {!signedIn && !review.on ? (
                 <div className="pb small t2">Sign in to see the guard’s orders.</div>
-              ) : orders.data?.length ? (
+              ) : orders.orders.length ? (
                 <div className="tblw">
                   <table className="tbl">
                     <thead>
@@ -239,12 +230,12 @@ export default function PositionsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.data.map((o) => (
+                      {orders.orders.map((o) => (
                         <tr key={o.oid}>
                           <td>
                             <b>{tickerOf(o.coin)}</b>
                           </td>
-                          <td>Stop · reduce-only</td>
+                          <td>{orderKindLabel(o.kind)} · reduce-only</td>
                           <td className="r num">{fmtPx(o.triggerPx)}</td>
                           <td className="r num">{Math.abs(o.size)}</td>
                           <td className="r num">{new Date(o.placedAt).toISOString().slice(5, 16).replace('T', ' ')}</td>
@@ -254,10 +245,10 @@ export default function PositionsPage() {
                   </table>
                 </div>
               ) : (
-                <div className="pb small t2">{me.data?.policy ? 'None resting right now.' : 'No rules yet, so no backstops.'}</div>
+                <div className="pb small t2">{orders.error ? `Can’t load the guard’s orders: ${orders.error.message}` : me.data?.policy ? 'None resting right now.' : 'No rules yet, so no backstops.'}</div>
               )}
               <div className="pb tiny t3" style={{ borderTop: '1px solid var(--line)' }}>
-                They rest on Hyperliquid, so they fill even if Bulwark’s engine is offline. Re-planned every 60 s.
+                They rest on Hyperliquid, so they fill even if Bulwark’s engine is offline.
               </div>
             </section>
 

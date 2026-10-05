@@ -310,6 +310,18 @@ export default function RulesPage() {
             </div>
             <div className="pb">{loading ? <div className="skb" style={{ height: 160 }} /> : <StageForm key={policy?.version ?? 0} />}</div>
           </section>
+
+          <section className="panel" aria-labelledby="retry-h">
+            <div className="ph">
+              <h2 id="retry-h">If an order doesn’t fill</h2>
+            </div>
+            <div className="pb small t2" style={{ lineHeight: 1.55 }}>
+              In a fast market an order can miss or fill only partly. The guard then sends the rest again on the next price update, while this stage’s line is still crossed. Each retry is priced from the price at that moment, never beyond your slippage limit, and never larger than what is left. After 3 attempts that don’t fully fill, you get an alert. The guard keeps trying until the line is no longer crossed.{' '}
+              <Link href="/app/audit" style={{ textDecoration: 'underline' }}>
+                Each attempt is in the audit log.
+              </Link>
+            </div>
+          </section>
         </div>
       </div>
     </div>

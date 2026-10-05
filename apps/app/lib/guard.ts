@@ -1,6 +1,7 @@
 'use client';
 
-import { bufferLines, guardActsAt, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
+import { bufferLines, guardActsAt, priceAtLine, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
+import type { GuardOrder } from '@bulwarkxyz/store';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, useSignedIn } from './api';
@@ -50,17 +51,19 @@ export const GUARD_CHIP: Record<GuardState, string> = {
 };
 
 /**
- * The guard's own reading, from the API (contract agreed 5 Oct 2026; the endpoint is the other
- * session's). Path assumed: GET /v1/guard/status. Until it answers, the app falls back to its own
- * data-age check below.
+ * The guard's own reading: GET /v1/guard/status (main, 8a4d0c9). It is the source of truth; the API
+ * already reports a silent worker (no status for 60 s, or one older than the user's latest change) as
+ * paused / stale_data. The app's own data-age check below is used only when this endpoint can't be reached.
  */
 export type ApiGuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
 export type PauseReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired';
 export interface GuardStatus {
   state: ApiGuardState;
   reason?: PauseReason | null;
-  /** Last successful evaluation, ms since epoch. */
+  /** Last evaluation on fresh data, ms since epoch (null if never). */
   lastEvaluatedAt: number | null;
+  /** When the worker last wrote this status, ms since epoch. */
+  updatedAt: number | null;
 }
 const FROM_API: Record<ApiGuardState, GuardState> = {
   protected: 'protected',
@@ -78,6 +81,52 @@ export const PAUSE_TEXT: Record<PauseReason, string> = {
   agent_expired: 'Your guard key’s approval on Hyperliquid has expired. Approve it again in setup.',
 };
 
+/**
+ * The guard's own orders resting on the exchange (GET /v1/guard-orders). This is what the positions
+ * table, the chart and the guard actions panel draw for "resting on Hyperliquid": they take whatever
+ * the API returns, of whatever kind, so a change in how the guard places orders needs no screen change.
+ * The solver (guardActsAt) is only used for lines with no resting order: the price at which the engine
+ * itself would act.
+ */
+export interface RestingOrders {
+  orders: GuardOrder[];
+  /** True for review builds, where the orders are worked out from the example rules, not read. */
+  example: boolean;
+  forCoin(coin: string): GuardOrder[];
+  isLoading: boolean;
+  error: Error | null;
+}
+const ORDER_KIND_LABEL: Record<string, string> = { backstop: 'Backstop stop' };
+export const orderKindLabel = (kind: string) => ORDER_KIND_LABEL[kind] ?? kind.replace(/_/g, ' ');
+export function useGuardOrders(address: `0x${string}` | undefined): RestingOrders {
+  const review = useReview();
+  const signedIn = useSignedIn();
+  const me = useMe();
+  const view = useAccountView(address);
+  const q = useQuery({
+    queryKey: ['guard-orders', address],
+    enabled: Boolean(address && signedIn && !review.on),
+    queryFn: () => api<GuardOrder[]>('/v1/guard-orders'),
+    refetchInterval: 15_000,
+  });
+  let orders = q.data ?? [];
+  const example = review.on;
+  if (review.on) {
+    // Review only: one reduce-only stop per position at the lowest example line, as the engine places them.
+    const lines = bufferLines(me.data?.policy?.policy.rules ?? []);
+    const low = lines.length ? Math.min(...lines) : null;
+    orders = [];
+    if (low !== null && review.state !== 'empty')
+      for (const pool of view.data?.risk?.pools ?? [])
+        for (const row of pool.positions) {
+          const lvl = priceAtLine(pool, row, low);
+          if (lvl) orders.push({ oid: -orders.length - 1, coin: row.position.coin, kind: 'backstop', triggerPx: lvl.price, size: -row.position.size, placedAt: REVIEW_PLACED_AT });
+        }
+  }
+  return { orders, example, forCoin: (coin) => orders.filter((o) => o.coin === coin), isLoading: q.isLoading, error: (q.error as Error | null) ?? null };
+}
+const REVIEW_PLACED_AT = Date.UTC(2026, 9, 5, 7, 29);
+
 export function useGuardStatus(enabled: boolean) {
   const review = useReview();
   return useQuery({
@@ -86,7 +135,7 @@ export function useGuardStatus(enabled: boolean) {
     queryFn: async (): Promise<GuardStatus> => {
       if (review.on && review.guard) {
         const [state, reason] = review.guard.split(':') as [ApiGuardState, PauseReason | undefined];
-        return { state, reason: reason ?? null, lastEvaluatedAt: Date.now() - 2_000 };
+        return { state, reason: reason ?? null, lastEvaluatedAt: Date.now() - 2_000, updatedAt: Date.now() - 1_000 };
       }
       return api<GuardStatus>('/v1/guard/status');
     },
@@ -117,8 +166,9 @@ export interface GuardView {
   /** Where the state came from: the guard's own report, or the app's fallback data-age check. */
   source: 'guard' | 'fallback';
   reason: PauseReason | null;
-  /** The guard's last successful evaluation (from the API), ms since epoch. */
+  /** The guard's last evaluation and last status write (from the API), ms since epoch. */
   lastEvaluatedAt: number | null;
+  statusUpdatedAt: number | null;
   /** The worst pool's highest crossed line, when it is below any line. */
   crossed: Crossed | null;
   lines: number[];
@@ -226,7 +276,7 @@ export function useGuardView(): GuardView {
   const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
   if (reported && !clientOnly) state = FROM_API[reported.state];
 
-  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */

@@ -11,7 +11,7 @@ import { OrderBook } from '@/components/app/order-book';
 import { GuardCell } from '@/components/app/positions-table';
 import { Ticket } from '@/components/app/ticket';
 import { NETWORK } from '@/lib/env';
-import { describeAction, useGuardView, useNow } from '@/lib/guard';
+import { describeAction, orderKindLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView, useCandles, useXyzMarkets, type MarketCtx } from '@/lib/hl';
 import { MARKETS, homeOpen, marketByTicker, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
@@ -88,6 +88,7 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   const candles = useCandles(m.coin, tf.id, tf.hours);
   const view = useAccountView(address);
   const g = useGuardView();
+  const guardOrders = useGuardOrders(address);
   const now = useNow();
   const [phoneTab, setPhoneTab] = useState<'chart' | 'book' | 'info'>('chart');
   const [sheet, setSheet] = useState<null | 'long' | 'short'>(null);
@@ -104,10 +105,15 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   if (ctx) lines.push({ px: ctx.mark, kind: 'mark', label: 'Mark' });
   if (mine && !loading) {
     lines.push({ px: mine.row.position.entryPx, kind: 'entry', label: `Entry · ${mine.row.position.size > 0 ? 'Long' : 'Short'} ${Math.abs(mine.row.position.size)}` });
+    // Orders the guard has resting on Hyperliquid come from the API and are drawn as they are; each line
+    // the engine acts on by itself is priced by the solver, unless a resting order already sits there.
+    const resting = guardOrders.forCoin(m.coin);
+    for (const o of resting) lines.push({ px: o.triggerPx, kind: 'guard', label: `${orderKindLabel(o.kind)} · resting on Hyperliquid` });
     for (const line of g.lines) {
       const lvl = priceAtLine(mine.pool, mine.row, line);
+      if (!lvl || resting.some((o) => Math.abs(o.triggerPx - lvl.price) / lvl.price < 0.001)) continue;
       const rule = g.rules.find((r) => r.when.kind === 'buffer' && r.when.below === line);
-      if (lvl) lines.push({ px: lvl.price, kind: 'guard', label: `Guard · ${rule ? rule.then.map(describeAction).join(', ') : 'acts'} at ${line}×` });
+      lines.push({ px: lvl.price, kind: 'guard', label: `Guard · ${rule ? rule.then.map(describeAction).join(', ') : 'acts'} at ${line}×` });
     }
     if (mine.row.liquidationPx) lines.push({ px: mine.row.liquidationPx, kind: 'liq', label: 'Liquidation without the guard' });
   }

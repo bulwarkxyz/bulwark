@@ -2,13 +2,13 @@
 
 import type { AccountRisk } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
-import type { GuardOrder } from '@bulwarkxyz/store';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
-import { api, useSignedIn } from '@/lib/api';
+import { useSignedIn } from '@/lib/api';
+import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { NETWORK } from '@/lib/env';
-import { tickerOf, type GuardView } from '@/lib/guard';
+import { orderKindLabel, tickerOf, useGuardOrders, type GuardView } from '@/lib/guard';
 import { info, useFills } from '@/lib/hl';
 import { useReview } from '@/lib/review';
 import { fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
@@ -61,7 +61,9 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
   const fills = useFills(address);
   const funding = useFunding(address);
   const history = useHistory(address);
-  const guardOrders = useQuery({ queryKey: ['guard-orders', address], enabled: Boolean(address && signedIn && !review.on), queryFn: () => api<GuardOrder[]>('/v1/guard-orders'), refetchInterval: 15_000 });
+  const guardOrders = useGuardOrders(address);
+  const audit = useAudit();
+  const acted = (audit.data ?? []).filter((e) => GUARD_KINDS.includes(e.kind)).sort((a, b) => b.seq - a.seq).slice(0, 20);
   const nPos = risk ? risk.pools.reduce((s, p) => s + p.positions.length, 0) : null;
   const tabs: Array<{ id: Tab; label: string; n?: number | null }> = [
     { id: 'positions', label: 'Positions', n: nPos },
@@ -119,29 +121,68 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       <Empty>No open orders.</Empty>
     );
   } else if (tab === 'guard') {
-    body = review.on ? (
-      <Empty>The guard’s resting orders appear here for signed-in users. <Link href="/app/audit" style={{ textDecoration: 'underline' }}>Audit log</Link></Empty>
-    ) : guardOrders.data?.length ? (
-      <div className="tblw">
-        <table className="tbl">
-          <thead>
-            <tr><th>Market</th><th>Order</th><th className="r">Trigger</th><th className="r">Size</th><th className="r">Placed (UTC)</th></tr>
-          </thead>
-          <tbody>
-            {guardOrders.data.map((o) => (
-              <tr key={o.oid}>
-                <td><b>{tickerOf(o.coin)}</b></td>
-                <td>Stop · reduce-only</td>
-                <td className="r num">{fmtPx(o.triggerPx)}</td>
-                <td className="r num">{Math.abs(o.size)}</td>
-                <td className="r num">{ts(o.placedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    body = !signedIn ? (
+      <Empty>Sign in to see what the guard has resting on Hyperliquid and what it has done.</Empty>
     ) : (
-      <Empty>{g.lines.length ? 'No guard orders resting right now. Every action the guard takes is in the audit log.' : 'No rules yet, so the guard has placed nothing.'}</Empty>
+      <div className="col" style={{ gap: 0 }}>
+        <div className="ph sub">
+          <b className="small">Resting on Hyperliquid</b>
+          <span className="tiny t3">{guardOrders.example ? 'example, from the example rules' : 'the guard’s own orders · they fill even if our engine is offline'}</span>
+        </div>
+        {guardOrders.orders.length ? (
+          <div className="tblw">
+            <table className="tbl">
+              <thead>
+                <tr><th>Market</th><th>Order</th><th className="r">Trigger</th><th className="r">Size</th><th className="r">Placed (UTC)</th></tr>
+              </thead>
+              <tbody>
+                {guardOrders.orders.map((o) => (
+                  <tr key={o.oid}>
+                    <td><b>{tickerOf(o.coin)}</b></td>
+                    <td>{orderKindLabel(o.kind)} · reduce-only</td>
+                    <td className="r num">{fmtPx(o.triggerPx)}</td>
+                    <td className="r num">{Math.abs(o.size)}</td>
+                    <td className="r num">{ts(o.placedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="pb small t2">{guardOrders.error ? `Can’t load the guard’s orders: ${guardOrders.error.message}` : g.lines.length ? 'Nothing resting right now.' : 'No rules yet, so the guard has placed nothing.'}</div>
+        )}
+        <div className="ph sub">
+          <b className="small">Recent guard actions</b>
+          <span className="tiny t3">{review.on ? 'example entries' : 'from your audit log'} · a retry is its own row</span>
+          <span className="sp" />
+          <Link className="tiny" href="/app/audit" style={{ textDecoration: 'underline' }}>Audit log</Link>
+        </div>
+        {acted.length ? (
+          <div className="tblw">
+            <table className="tbl">
+              <thead>
+                <tr><th>Time (UTC)</th><th>What happened</th><th className="r">Attempt</th><th className="r">Filled</th><th className="hide-sm">Why</th></tr>
+              </thead>
+              <tbody>
+                {acted.map((e) => {
+                  const at = attemptOf(e);
+                  return (
+                    <tr key={e.seq}>
+                      <td className="num">{ts(e.at)}</td>
+                      <td style={{ whiteSpace: 'normal', minWidth: 220 }}>{e.what}</td>
+                      <td className={`r num ${at && at.n > 1 ? 'wt' : ''}`}>{at ? at.n : <span className="t3">—</span>}</td>
+                      <td className="r num">{at?.filled ?? <span className="t3">—</span>}</td>
+                      <td className="hide-sm t2" style={{ whiteSpace: 'normal' }}>{e.why}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="pb small t2">{audit.error ? `Can’t load the audit log: ${(audit.error as Error).message}` : 'The guard hasn’t acted yet.'}</div>
+        )}
+      </div>
     );
   } else if (tab === 'fills') {
     body = fills.data?.length ? (
