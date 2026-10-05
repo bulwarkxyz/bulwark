@@ -57,6 +57,8 @@ const sweepPolicy = (lines: readonly number[], f: number): Policy => ({
   ],
   execution: { maxSlippagePct: SLIPPAGE_PCT },
 });
+/** The example settings with each repeat choice on every stage. */
+const withRepeat = (mode: 'oncePerBreach' | 'everyCrossing'): Policy => ({ ...POLICY, rules: POLICY.rules.map((r) => ({ ...r, repeat: { mode } })) });
 const sweepText = (lines: readonly number[], f: number) => `below ${lines[0]}× → back to ${+(lines[0]! * f).toFixed(2)}×; below ${lines[1]}× → back to ${+(lines[1]! * f).toFixed(2)}×; below ${lines[2]}× → close`;
 
 type Outcome = { liquidated: boolean; liquidatedAt: string | null; allLost: boolean; equityAtEnd: number | null; keptPct: number | null; orders: number; triggerFills: number; triggerMisses: number; missed: number; fees: number };
@@ -130,12 +132,18 @@ async function main() {
             })),
           )
         : [];
+      // Repeat choice, side by side: current guard (server + backstop), on time and 5 minutes late.
+      const repeatCompare = levs.map((lev) => ({
+        leverage: lev,
+        every: [run(c, d, lev, withRepeat('everyCrossing'), 'current', 0), run(c, d, lev, withRepeat('everyCrossing'), 'current', 5)],
+        once: [run(c, d, lev, withRepeat('oncePerBreach'), 'current', 0), run(c, d, lev, withRepeat('oncePerBreach'), 'current', 5)],
+      }));
       const pts = d.series.points;
       out.push({
         case: c.id, title: c.title, coin: c.coin, window: `${c.start} → ${c.end}`, resolution: d.series.resolution, points: pts.length,
         entryPrice: pts[0]!.px, lowestPrice: Math.min(...pts.map((p) => p.px)), endPrice: pts[pts.length - 1]!.px,
         largestHourDrop: largestHourDrop(pts), ...(c.fall ? { selectedFor: `fall of ${c.fall} on hourly trade prices` } : {}),
-        rows, sweep,
+        rows, sweep, repeatCompare,
       });
     }
     return out;
@@ -147,7 +155,8 @@ async function main() {
   const ranAt = new Date().toISOString();
   const assumptions = {
     account: `A cross long on the xyz dex, opened at the first mark of each window, with ${EQUITY.toLocaleString('en-US')} USDC of equity and nothing else in the account`,
-    exampleSettings: `Example settings chosen for the test (not product defaults): ${STAGE_TEXT.join('; ')}`,
+    exampleSettings: `Example settings chosen for the test (not product defaults): ${STAGE_TEXT.join('; ')}. Except in the repeat comparison, stages act every time the line is crossed (how policies behaved before the choice existed)`,
+    repeat: 'Repeat comparison: every stage set to "every crossing" or to "once per breach" (acts again only after the market recovers to where it was when the stage acted)',
     sweep: 'Every combination of three line sets and three trim sizes; each is an example chosen for the test',
     setups: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])),
     serverLate: `The server's orders and its re-placing of resting orders reach the exchange ${DELAYS.join(', ')} minutes after the decision; resting orders already on the exchange fire on the mark regardless`,
@@ -203,6 +212,15 @@ async function main() {
         ...sweep.map((s) => `| ${s.lines} | ${s.trim} | ${s.settings} | ${s.byLeverage.map((b) => [b.currentOnTime, b.currentServer5Late, b.restingServer5Late, b.restingSafeServer5Late].map(cell).join(' / ')).join(' | ')} |`),
         '',
       ];
+    }),
+    '## Repeat choice, side by side (example settings, current guard)',
+    '',
+    'Cells: every crossing / once per breach; on time, then server 5 min late.',
+    '',
+    ...[...crash, ...ordinary].flatMap((c) => {
+      const rc = c.repeatCompare as Array<{ leverage: number; every: Outcome[]; once: Outcome[] }> | undefined;
+      if (!rc) return [];
+      return [`### ${c.title}`, '', '| Leverage | On time: every / once | Server 5 min late: every / once | Orders on time: every / once |', '|---|---|---|---|', ...rc.map((r) => `| ${r.leverage}× | ${cell(r.every[0]!)} / ${cell(r.once[0]!)} | ${cell(r.every[1]!)} / ${cell(r.once[1]!)} | ${r.every[0]!.orders} / ${r.once[0]!.orders} |`), ''];
     }),
     '## Ordinary bad days, example settings',
     '',

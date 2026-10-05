@@ -1,5 +1,5 @@
 import { planBackstops } from './backstop.js';
-import { evaluate, type GuardAction } from './evaluate.js';
+import { evaluate, type Decision, type GuardAction } from './evaluate.js';
 import { MAX_ACTIONS_PER_MINUTE } from './invariants.js';
 import type { Policy } from './policy.js';
 import { planRetries, positionKey, recordFill, type RetryChain } from './retry.js';
@@ -145,6 +145,8 @@ export function simulate(input: SimInput): SimResult {
   const baselineValue = assessRisk(s, start).accountValue;
   const baselines = Object.fromEntries(policy.rules.map((r) => [r.id, { accountValue: baselineValue, prices: { ...start } }]));
   let latched = new Set<string>();
+  let breaches: Decision['breaches'] = {};
+  let fires: Decision['fires'] = {};
   const resting: GuardAction[] = [];
   const steps: SimStep[] = [];
   let liquidatedAt: number | null = null;
@@ -278,7 +280,11 @@ export function simulate(input: SimInput): SimResult {
       steps.push({ step: i, marks, buffer: now_.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: now_.accountValue, fired: [], actions: [], liquidated: false });
       continue;
     }
-    const d = evaluate(policy, s, marks, { now, baselines, openOrders: [], latched, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
+    // Rule time advances with the path (for "at most N times in H hours" limits).
+    const t = now + (input.stepMs ? i * input.stepMs : 0);
+    const d = evaluate(policy, s, marks, { now: t, baselines, openOrders: [], latched, breaches, fires, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
+    breaches = d.breaches;
+    fires = d.fires;
     if ([...d.latched].sort().join() !== [...latched].sort().join()) scheduleResync(i);
     latched = d.latched;
     let actions = d.actions;

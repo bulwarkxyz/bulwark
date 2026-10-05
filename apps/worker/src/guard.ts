@@ -4,6 +4,7 @@ import {
   buildSnapshot,
   evaluate,
   planBackstops,
+  needsRepeatChoice,
   planRetries,
   recordFill,
   windowContains,
@@ -94,6 +95,8 @@ interface AccountCache {
   keyCheckedAt: number;
   /** Hash of the signed policy the backstops were last priced for. */
   policyHash?: string;
+  /** Policy hash we last asked the user to make the repeat choice for. */
+  choiceNoticeFor?: string;
 }
 
 const coinsOf = (c: AccountCache) => new Set(Object.values(c.dexStates).flatMap((s) => s.assetPositions.map((p) => p.position.coin)));
@@ -287,16 +290,29 @@ export class GuardEngine {
 
     const guardOrders = await store.guardOrders(account);
     const needsOrders = policy.rules.some((r) => r.then.some((a) => a.kind === 'cancelOpeningOrders'));
+    const memory = await store.ruleMemory(account);
     const ctx: GuardContext = {
       now,
       baselines,
       openOrders: needsOrders ? await this.openOrders(account, c) : [],
       latched: await store.latched(account),
+      breaches: memory.breaches,
+      fires: memory.fires,
       automationAllowed: user.region === 'allowed',
       guardOwnedOids: new Set(guardOrders.map((o) => o.oid)),
     };
     const decision = evaluate(policy, snapshot, marks, ctx);
     await store.saveLatched(account, decision.latched);
+    if (JSON.stringify({ b: decision.breaches, f: decision.fires }) !== JSON.stringify({ b: memory.breaches, f: memory.fires }))
+      await store.saveRuleMemory(account, { breaches: decision.breaches, fires: decision.fires });
+    // Rules signed before the repeat choice existed keep running as they did (every crossing); ask once per version.
+    const unchosen = needsRepeatChoice(policy);
+    if (unchosen.length && c.choiceNoticeFor !== confirmed.hash) {
+      c.choiceNoticeFor = confirmed.hash;
+      const what = `${unchosen.length} of your stages (${unchosen.join(', ')}) need a choice: act once per fall and then leave the rest to the backstop, or act every time the line is crossed. Until you choose and sign, they act every time the line is crossed, as before.`;
+      await this.audit({ account, at: now, kind: 'alert', why: 'A new setting needs your choice', what, proof: { ruleIds: unchosen, policyVersion: policy.version } });
+      if (user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, `Bulwark: ${what} Open Guard rules to choose.`).catch(() => undefined);
+    }
     c.lastEvaluatedAt = now;
     await this.checkKey(account, user, c, now);
 

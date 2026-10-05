@@ -25,6 +25,10 @@ export interface GuardContext {
   openOrders: readonly OpenOrder[];
   /** Fire keys (`ruleId@scope`) that already fired and have not re-armed. */
   latched: ReadonlySet<string>;
+  /** For "once per breach" stages: the prices when each fire key acted (to tell a market recovery). */
+  breaches?: Readonly<Record<string, Breach>>;
+  /** When each rule acted (ms), for the user's "at most N times in H hours" limit. */
+  fires?: Readonly<Record<string, readonly number[]>>;
   /** False for regions where automatic action is off (EU, decision D4): actions become alerts. */
   automationAllowed: boolean;
   /**
@@ -79,6 +83,12 @@ export type GuardAction =
   | (Base & { type: 'isolatedMargin'; dex: string; coin: string; assetId: number; amount: number })
   | (Base & { type: 'alert'; level: 'info' | 'warn' | 'critical' });
 
+/** Where the market was when a stage acted: per coin, the mark and whether the position was long. */
+export interface Breach {
+  at: number;
+  marks: Record<string, { px: number; long: boolean }>;
+}
+
 export interface Decision {
   risk: AccountRisk;
   fired: Array<{ key: string; ruleId: string; reason: string }>;
@@ -87,6 +97,10 @@ export interface Decision {
   latched: Set<string>;
   /** Fire keys whose condition holds at this evaluation (latched or not). */
   active: Set<string>;
+  /** Breach prices to carry into the next evaluation. */
+  breaches: Record<string, Breach>;
+  /** Action times per rule to carry into the next evaluation (trimmed to what a limit needs). */
+  fires: Record<string, number[]>;
 }
 
 interface Scope {
@@ -355,9 +369,20 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
   const risk = assessRisk(snapshot, marks);
   const latched = new Set(ctx.latched);
   const active = new Set<string>();
+  const breaches: Record<string, Breach> = { ...(ctx.breaches ?? {}) };
+  const fires: Record<string, number[]> = Object.fromEntries(Object.entries(ctx.fires ?? {}).map(([k, v]) => [k, [...v]]));
   const fired: Decision['fired'] = [];
   const raw: GuardAction[] = [];
-  if (!risk.supported) return { risk, fired, actions: [], latched, active };
+  if (!risk.supported) return { risk, fired, actions: [], latched, active, breaches, fires };
+  const held = new Map(risk.pools.flatMap((p) => p.positions.map((r) => [r.position.coin, r] as const)));
+  /** "Once per breach": over when every position the stage acted on is gone or back at or past its price then. */
+  const recovered = (b: Breach | undefined) =>
+    !b ||
+    Object.entries(b.marks).every(([coin, then]) => {
+      const row = held.get(coin);
+      if (!row || row.position.size > 0 !== then.long) return true;
+      return then.long ? row.mark >= then.px : row.mark <= then.px;
+    });
 
   const lines = policy.rules.filter((r) => r.when.kind === 'buffer').map((r) => (r.when as { below: number }).below);
   const highestLine = lines.length ? Math.max(...lines) : 1;
@@ -366,14 +391,36 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
     const inWindow = rule.window === undefined || windowContains(rule.window, ctx.now);
     const hits = inWindow ? firing(rule.when, rule, risk, ctx) : [];
     const hitKeys = new Set(hits.map((h) => `${rule.id}@${h.scope.id}`));
-    // Re-arm keys whose condition has cleared.
-    for (const key of [...latched]) if (key.startsWith(`${rule.id}@`) && !hitKeys.has(key)) latched.delete(key);
+    const once = rule.repeat?.mode === 'oncePerBreach';
+    // Re-arm keys whose condition has cleared. Policies signed before the choice existed act as
+    // "every crossing", as they always have.
+    for (const key of [...latched]) {
+      if (!key.startsWith(`${rule.id}@`)) continue;
+      if (once) {
+        // Once per breach: the guard's own trim lifting the buffer is not the end of the breach.
+        if (recovered(breaches[key])) {
+          latched.delete(key);
+          delete breaches[key];
+        }
+      } else if (!hitKeys.has(key)) latched.delete(key);
+    }
+    const limit = rule.repeat?.limit;
+    if (limit) fires[rule.id] = (fires[rule.id] ?? []).filter((t) => t > ctx.now - limit.perHours * 3_600_000);
     for (const hit of hits) {
       const key = `${rule.id}@${hit.scope.id}`;
       active.add(key);
       if (latched.has(key)) continue;
       latched.add(key);
+      const breach = (): Breach => ({ at: ctx.now, marks: Object.fromEntries(hit.scope.pools.flatMap((p) => p.positions.map((r) => [r.position.coin, { px: r.mark, long: r.position.size > 0 }]))) });
+      if (limit && (fires[rule.id] ?? []).length >= limit.times) {
+        if (once) breaches[key] = breach();
+        // The user's limit is reached: hold, say so once for this crossing; the backstop still stands.
+        raw.push({ type: 'alert', ruleId: rule.id, level: 'warn', reason: `${hit.reason}; this stage has acted ${limit.times} time${limit.times > 1 ? 's' : ''} in the last ${limit.perHours} h, your limit, so it holds. Your backstop still stands.` });
+        continue;
+      }
       fired.push({ key, ruleId: rule.id, reason: hit.reason });
+      if (limit) fires[rule.id] = [...(fires[rule.id] ?? []), ctx.now];
+      if (once) breaches[key] = breach();
       for (const action of rule.then)
         for (const a of translate(action, rule, hit.scope, hit.reason, risk, policy, ctx, highestLine)) raw.push(a.type === 'order' ? { ...a, keys: [key], attempt: 1 } : a);
     }
@@ -390,7 +437,7 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
       return [{ type: 'alert', ruleId: a.ruleId, reason: `${a.reason} — automatic action is off in your region; act manually`, level: 'critical' }];
     });
   }
-  return { risk, fired, actions, latched, active };
+  return { risk, fired, actions, latched, active, breaches, fires };
 }
 
 export { markOf };

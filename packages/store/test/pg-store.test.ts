@@ -74,6 +74,15 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.wipeAgentKeys(A, 'testnet', 7, '0x00000000000000000000000000000000000000a1')).toBe(0);
   });
 
+  it('round-trips rule memory next to the latches, without touching them', async () => {
+    await store.saveLatched(A, new Set(['stage-1@dex:xyz']));
+    const m = { breaches: { 'stage-1@dex:xyz': { at: 5, marks: { 'xyz:CL': { px: 86.3, long: true } } } }, fires: { 'stage-1': [5, 9] } };
+    await store.saveRuleMemory(A, m);
+    expect(await store.ruleMemory(A)).toEqual(m);
+    expect([...(await store.latched(A))]).toEqual(['stage-1@dex:xyz']);
+    expect(await store.ruleMemory('0x0000000000000000000000000000000000000002')).toEqual({ breaches: {}, fires: {} });
+  });
+
   it('round-trips the guard status; a reason only with paused', async () => {
     expect(await store.guardStatus(A)).toBeNull();
     await store.setGuardStatus(A, { state: 'paused', reason: 'stale_data', lastEvaluatedAt: 10, updatedAt: 20 });

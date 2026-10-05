@@ -3,7 +3,7 @@ import { Policy, type CommandName, type RetryChain } from '@bulwarkxyz/guard-cor
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, KmsKeyToRetire, PendingCommand } from './store.js';
+import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, KmsKeyToRetire, PendingCommand, RuleMemory } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -87,6 +87,14 @@ export class PgStore implements ApiStore, KeyVault {
   async saveLatched(account: string, keys: ReadonlySet<string>) {
     await this.sql`insert into latches (account, keys) values (${this.k(account)}, ${this.sql.json([...keys])})
       on conflict (account) do update set keys = excluded.keys`;
+  }
+  async ruleMemory(account: string): Promise<RuleMemory> {
+    const [r] = await this.sql`select breaches, fires from latches where account = ${this.k(account)}`;
+    return { breaches: (r?.breaches as RuleMemory['breaches'] | undefined) ?? {}, fires: (r?.fires as RuleMemory['fires'] | undefined) ?? {} };
+  }
+  async saveRuleMemory(account: string, m: RuleMemory) {
+    await this.sql`insert into latches (account, keys, breaches, fires) values (${this.k(account)}, ${this.sql.json([])}, ${this.sql.json(m.breaches as never)}, ${this.sql.json(m.fires as never)})
+      on conflict (account) do update set breaches = excluded.breaches, fires = excluded.fires`;
   }
   async retries(account: string) {
     const [r] = await this.sql`select retries from latches where account = ${this.k(account)}`;

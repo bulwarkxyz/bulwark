@@ -46,7 +46,23 @@ Markets: use the exact coin names from the market list in the message. If a mark
 
 A top-up moves exactly the amount the user names, once each time its trigger is crossed; "up to 500 USDC" means 500.
 
-Targets: "my biggest position" or "the position using the most margin" is first_position; "my worst position" is worst_pnl; "everything" is all.`;
+Targets: "my biggest position" or "the position using the most margin" is first_position; "my worst position" is worst_pnl; "everything" is all.
+
+Repeat (required, the user's choice only): set repeat.mode to "oncePerBreach" only if the sentence says the rule should act just once per fall (for example "only once", "just the first time"), or to "everyCrossing" only if it says to act every time (for example "every time", "each time"). "When", "once the buffer drops" and "whenever" do not say which. If the sentence does not say, use outcome "clarify" and ask whether it should act once per fall and then leave the rest to the backstop, or every time the line is crossed. Never choose for the user. Set repeat.limit only from the user's own numbers ("at most 3 times in 24 hours").`;
+
+/** The question when a sentence does not say whether a stage repeats. Fixed text, no numbers. */
+export const REPEAT_QUESTION = 'Should this act once per fall and then leave the rest to the backstop, or every time the line is crossed? Add "only once" or "every time" to your sentence.';
+
+/**
+ * What the user's own words say about repeating: a mode, or null when they do not say (or say both).
+ * Bare "once" and "whenever" are not counted: in rules they usually mean "when".
+ */
+export function repeatInText(text: string): 'oncePerBreach' | 'everyCrossing' | null {
+  const t = text.toLowerCase();
+  const once = /\b(only once|just once|once only|once per|once each|once a fall|one time only|only one time|a single time|only the first time|just the first time|the first time only|not again)\b/.test(t);
+  const every = /\b(every time|each time|every single time|each crossing|every crossing|every breach|each breach|each fall|every fall|repeatedly|again and again)\b/.test(t);
+  return once === every ? null : once ? 'oncePerBreach' : 'everyCrossing';
+}
 
 export interface MarketRef {
   coin: string;
@@ -169,7 +185,12 @@ export async function compileRule(client: MessagesClient, input: CompileInput): 
 
   const body = out.rule;
   const draft = { ...body, id: nextRuleId(input.policy), source: { text, compiler: COMPILER_ID } };
-  return { kind: 'draft', check: checkDraft(text, input.policy, draft), usage };
+  const check = checkDraft(text, input.policy, draft);
+  // The repeat choice must come from the user's own words, whatever the model returned: if the sentence
+  // does not say, or says something else, ask. (Other violations are shown as they are.)
+  const said = repeatInText(text);
+  if (check.ok && (!check.rule?.repeat || check.rule.repeat.mode !== said)) return { kind: 'clarify', question: REPEAT_QUESTION, usage };
+  return { kind: 'draft', check, usage };
 }
 
 export * from './describe.js';

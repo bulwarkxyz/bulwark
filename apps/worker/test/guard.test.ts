@@ -430,3 +430,24 @@ describe('backstops priced as if the pool moves together', () => {
     expect(gone).toEqual([ACCOUNT]);
   });
 });
+
+describe('repeat choice for policies signed before it existed', () => {
+  beforeEach(() => setup());
+
+  it('keeps running as before, and asks the user once per policy version', async () => {
+    await feed(91.5);
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 91.4]]), t);
+    const asks = store.audit.raw(ACCOUNT).filter((e) => e.why === 'A new setting needs your choice');
+    expect(asks).toHaveLength(1);
+    expect(asks[0]!.what).toMatch(/stage-1, stage-3\) need a choice: act once per fall and then leave the rest to the backstop, or act every time the line is crossed\. Until you choose and sign, they act every time the line is crossed, as before\./);
+    expect(notifier.sent.filter((m) => /need a choice/.test(m.text))).toHaveLength(1);
+  });
+
+  it('says nothing once every stage has a choice', async () => {
+    const chosen: Policy = { ...policy, version: 2, rules: policy.rules.map((r) => ({ ...r, repeat: { mode: 'everyCrossing' as const } })) };
+    store.putPolicy(ACCOUNT, { policy: chosen, hash: policyHash(chosen), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    await feed(91.5);
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.why === 'A new setting needs your choice')).toEqual([]);
+  });
+});

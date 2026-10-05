@@ -8,6 +8,7 @@ import {
   buildAssetIndex,
   buildSnapshot,
   dexCollateral,
+  needsRepeatChoice,
   policyConfirmationDomain,
   policyHash,
   type CommandName,
@@ -133,7 +134,7 @@ export function createApp(deps: ApiDeps) {
       keyStatus: user?.agentKeyRef === 'wiped' ? 'wiped' : user?.agentAddress ? 'ready' : keyMeta.length || user?.agentKeyRef === 'requested' ? 'creating' : 'none',
       pendingAgent: pending ? { address: pending.address } : null,
       builder: { address: BUILDER_ADDRESS, feeTenthsBps: BUILDER_FEE_TENTHS_BPS, approvedMaxTenthsBps: maxFee },
-      policy: confirmed ? { version: confirmed.policy.version, hash: confirmed.hash, confirmedAt: confirmed.confirmedAt, policy: confirmed.policy } : null,
+      policy: confirmed ? { version: confirmed.policy.version, hash: confirmed.hash, confirmedAt: confirmed.confirmedAt, policy: confirmed.policy, needsRepeatChoice: needsRepeatChoice(confirmed.policy) } : null,
     });
   });
 
@@ -225,6 +226,9 @@ export function createApp(deps: ApiDeps) {
     if (!parsed.success) return c.json({ error: 'invalid policy', issues: parsed.error.issues }, 400);
     const policy = parsed.data;
     if (policy.account.toLowerCase() !== account) return c.json({ error: 'policy is for another account' }, 403);
+    // Every stage carries the user's own repeat choice; there is no default.
+    const unchosen = needsRepeatChoice(policy);
+    if (unchosen.length) return c.json({ error: 'choose for each stage: act once per fall, or every time the line is crossed', needsChoice: unchosen }, 400);
     const current = await deps.store.policy(account);
     if (policy.version !== (current?.policy.version ?? 0) + 1) return c.json({ error: 'stale version' }, 409);
     const hash = policyHash(policy);

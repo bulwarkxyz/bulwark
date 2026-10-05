@@ -89,7 +89,24 @@ describe('region gate', () => {
 });
 
 describe('policy confirmation', () => {
-  const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
+  const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }], execution: { maxSlippagePct: 1 } };
+
+  it('refuses a policy until every stage has the repeat choice, and says which stages need it', async () => {
+    const token = await signIn();
+    const unchosen: Policy = { ...policy, rules: [...policy.rules, { id: 'stage-2', when: { kind: 'buffer', below: 1.5 }, then: [{ kind: 'alert' }] }] };
+    const res = await app.request('/v1/policy', { method: 'POST', headers: authed(token), body: JSON.stringify({ policy: unchosen, signature: await sign(user, unchosen), chainId: 42161 }) });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ needsChoice: ['stage-2'] });
+  });
+
+  it('lists the stages of an older signed policy that still need the choice', async () => {
+    const token = await signIn();
+    await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    const old: Policy = { ...policy, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }] };
+    store.putPolicy(ACCOUNT, { policy: old, hash: policyHash(old), signature: '0x00', signatureVerified: true, confirmedAt: now });
+    const me = (await (await app.request('/v1/me', { headers: authed(token) })).json()) as { policy: { needsRepeatChoice: string[] } };
+    expect(me.policy.needsRepeatChoice).toEqual(['stage-1']);
+  });
   const sign = (signer = user, p = policy) =>
     signer.signTypedData({ domain: policyConfirmationDomain(42161), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: ACCOUNT, version: BigInt(p.version), policyHash: policyHash(p) } });
 

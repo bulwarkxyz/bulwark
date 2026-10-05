@@ -154,3 +154,7 @@ alter table guard_orders add column if not exists pricing text;
 -- Keys held in AWS KMS: the key id (no key material), and when the API disabled it and scheduled deletion.
 alter table agent_keys add column if not exists kms_key_id text;
 alter table agent_keys add column if not exists kms_retired_at bigint;
+
+-- Per-stage repeat choice: prices when "once per breach" stages acted, and action times for limits.
+alter table latches add column if not exists breaches jsonb not null default '{}'::jsonb;
+alter table latches add column if not exists fires jsonb not null default '{}'::jsonb;

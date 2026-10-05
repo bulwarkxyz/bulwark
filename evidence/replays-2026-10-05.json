@@ -1,9 +1,10 @@
 {
- "ranAt": "2026-10-05T11:29:14.594Z",
+ "ranAt": "2026-10-05T12:03:18.552Z",
  "priceKind": "mark (Hydromancer)",
  "assumptions": {
   "account": "A cross long on the xyz dex, opened at the first mark of each window, with 10,000 USDC of equity and nothing else in the account",
-  "exampleSettings": "Example settings chosen for the test (not product defaults): Stage 1: buffer below 2× → trim until the buffer is back at 3×; Stage 2: buffer below 1.5× → trim until the buffer is back at 2.5×; Stage 3: buffer below 1.2× → close the position",
+  "exampleSettings": "Example settings chosen for the test (not product defaults): Stage 1: buffer below 2× → trim until the buffer is back at 3×; Stage 2: buffer below 1.5× → trim until the buffer is back at 2.5×; Stage 3: buffer below 1.2× → close the position. Except in the repeat comparison, stages act every time the line is crossed (how policies behaved before the choice existed)",
+  "repeat": "Repeat comparison: every stage set to \"every crossing\" or to \"once per breach\" (acts again only after the market recovers to where it was when the stage acted)",
   "sweep": "Every combination of three line sets and three trim sizes; each is an example chosen for the test",
   "setups": {
    "server": "Server only (as first published)",
@@ -2794,6 +2795,228 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 202.53,
+       "keptPct": 2,
+       "orders": 5,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 8.58
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 150.9,
+       "keptPct": 1.5,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 9.07
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 202.53,
+       "keptPct": 2,
+       "orders": 5,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 8.58
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 150.9,
+       "keptPct": 1.5,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 9.07
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 3.83,
+       "keptPct": 0,
+       "orders": 13,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 18
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 555.7,
+       "keptPct": 5.6,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 18.26
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 3.83,
+       "keptPct": 0,
+       "orders": 13,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 18
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 555.7,
+       "keptPct": 5.6,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 18.26
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 0.19,
+       "keptPct": 0,
+       "orders": 16,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 40.52
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1256.26,
+       "keptPct": 12.6,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.08
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 0.19,
+       "keptPct": 0,
+       "orders": 16,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 40.52
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1256.26,
+       "keptPct": 12.6,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.08
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 0.3,
+       "keptPct": 0,
+       "orders": 18,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 85.54
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1549.19,
+       "keptPct": 15.5,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.24
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 0.3,
+       "keptPct": 0,
+       "orders": 18,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 85.54
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1549.19,
+       "keptPct": 15.5,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.24
+      }
+     ]
+    }
    ]
   },
   {
@@ -5571,6 +5794,228 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7224.83,
+       "keptPct": 72.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7224.83,
+       "keptPct": 72.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7224.83,
+       "keptPct": 72.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7224.83,
+       "keptPct": 72.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5374.7,
+       "keptPct": 53.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5374.7,
+       "keptPct": 53.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5374.7,
+       "keptPct": 53.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5374.7,
+       "keptPct": 53.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1134.61,
+       "keptPct": 11.3,
+       "orders": 4,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 36.7
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1814.71,
+       "keptPct": 18.1,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.34
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1497.65,
+       "keptPct": 15,
+       "orders": 3,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 33.98
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1814.71,
+       "keptPct": 18.1,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.34
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 837.83,
+       "keptPct": 8.4,
+       "orders": 6,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 82.72
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2202.43,
+       "keptPct": 22,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.53
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 863.28,
+       "keptPct": 8.6,
+       "orders": 5,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 81.83
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2202.43,
+       "keptPct": 22,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.53
+      }
+     ]
+    }
    ]
   },
   {
@@ -7671,6 +8116,173 @@
         "missed": 0,
         "fees": 41.14
        }
+      }
+     ]
+    }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 6213.63,
+       "keptPct": 62.1,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 6213.63,
+       "keptPct": 62.1,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 6213.63,
+       "keptPct": 62.1,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 6213.63,
+       "keptPct": 62.1,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2480.33,
+       "keptPct": 24.8,
+       "orders": 3,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 14.38
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2112.07,
+       "keptPct": 21.1,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 18.96
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 602.85,
+       "keptPct": 6,
+       "orders": 2,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 18.28
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2112.07,
+       "keptPct": 21.1,
+       "orders": 1,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 18.96
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1964.64,
+       "keptPct": 19.6,
+       "orders": 5,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 37.64
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 1761.33,
+       "keptPct": 17.6,
+       "orders": 4,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 2,
+       "fees": 41.31
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 477.43,
+       "keptPct": 4.8,
+       "orders": 4,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 40.73
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-07-27T23:00:27.675Z",
+       "allLost": false,
+       "equityAtEnd": null,
+       "keptPct": null,
+       "orders": 4,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 25.48
       }
      ]
     }
@@ -10456,6 +11068,228 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9698.26,
+       "keptPct": 97,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9698.26,
+       "keptPct": 97,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9698.26,
+       "keptPct": 97,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9698.26,
+       "keptPct": 97,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9497.09,
+       "keptPct": 95,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9497.09,
+       "keptPct": 95,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9497.09,
+       "keptPct": 95,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9497.09,
+       "keptPct": 95,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8994.18,
+       "keptPct": 89.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8994.18,
+       "keptPct": 89.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8994.18,
+       "keptPct": 89.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8994.18,
+       "keptPct": 89.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7110.01,
+       "keptPct": 71.1,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.6
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7110.01,
+       "keptPct": 71.1,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.6
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7110.01,
+       "keptPct": 71.1,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.6
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7110.01,
+       "keptPct": 71.1,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.6
+      }
+     ]
+    }
    ]
   },
   {
@@ -13232,6 +14066,228 @@
         "missed": 0,
         "fees": 67.43
        }
+      }
+     ]
+    }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8617.26,
+       "keptPct": 86.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8617.26,
+       "keptPct": 86.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8617.26,
+       "keptPct": 86.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8617.26,
+       "keptPct": 86.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7695.41,
+       "keptPct": 77,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7695.41,
+       "keptPct": 77,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7695.41,
+       "keptPct": 77,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7695.41,
+       "keptPct": 77,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5390.83,
+       "keptPct": 53.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5390.83,
+       "keptPct": 53.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5390.83,
+       "keptPct": 53.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5390.83,
+       "keptPct": 53.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 3057.73,
+       "keptPct": 30.6,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 56.11
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 3057.73,
+       "keptPct": 30.6,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 56.11
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 3057.73,
+       "keptPct": 30.6,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 56.11
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 2526.15,
+       "keptPct": 25.3,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 61.02
       }
      ]
     }
@@ -16014,6 +17070,228 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9434.55,
+       "keptPct": 94.3,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9434.55,
+       "keptPct": 94.3,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9434.55,
+       "keptPct": 94.3,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9434.55,
+       "keptPct": 94.3,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9057.59,
+       "keptPct": 90.6,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9057.59,
+       "keptPct": 90.6,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9057.59,
+       "keptPct": 90.6,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9057.59,
+       "keptPct": 90.6,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8115.18,
+       "keptPct": 81.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8115.18,
+       "keptPct": 81.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8115.18,
+       "keptPct": 81.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8115.18,
+       "keptPct": 81.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5809.65,
+       "keptPct": 58.1,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 57.1
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5809.65,
+       "keptPct": 58.1,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 57.1
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5809.65,
+       "keptPct": 58.1,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 57.1
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5809.65,
+       "keptPct": 58.1,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 57.1
+      }
+     ]
+    }
    ]
   },
   {
@@ -18793,6 +20071,228 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8693.08,
+       "keptPct": 86.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8693.08,
+       "keptPct": 86.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8693.08,
+       "keptPct": 86.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8693.08,
+       "keptPct": 86.9,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7821.79,
+       "keptPct": 78.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7821.79,
+       "keptPct": 78.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7821.79,
+       "keptPct": 78.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 7821.79,
+       "keptPct": 78.2,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5643.59,
+       "keptPct": 56.4,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5643.59,
+       "keptPct": 56.4,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5643.59,
+       "keptPct": 56.4,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 5643.59,
+       "keptPct": 56.4,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 4181.05,
+       "keptPct": 41.8,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 54.88
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 4181.05,
+       "keptPct": 41.8,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 54.88
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 4181.05,
+       "keptPct": 41.8,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 54.88
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 4181.05,
+       "keptPct": 41.8,
+       "orders": 2,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 54.88
+      }
+     ]
+    }
    ]
   },
   {
@@ -20899,6 +22399,173 @@
       }
      ]
     }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11070.66,
+       "keptPct": 110.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11070.66,
+       "keptPct": 110.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11070.66,
+       "keptPct": 110.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11070.66,
+       "keptPct": 110.7,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11784.44,
+       "keptPct": 117.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11784.44,
+       "keptPct": 117.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11784.44,
+       "keptPct": 117.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11784.44,
+       "keptPct": 117.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11917.03,
+       "keptPct": 119.2,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.93
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11917.03,
+       "keptPct": 119.2,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.93
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11917.03,
+       "keptPct": 119.2,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.93
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 11917.03,
+       "keptPct": 119.2,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.93
+      }
+     ]
+    }
    ]
   },
   {
@@ -23002,6 +24669,173 @@
         "missed": 0,
         "fees": 0
        }
+      }
+     ]
+    }
+   ],
+   "repeatCompare": [
+    {
+     "leverage": 3,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9582.25,
+       "keptPct": 95.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9582.25,
+       "keptPct": 95.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9582.25,
+       "keptPct": 95.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9582.25,
+       "keptPct": 95.8,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9303.73,
+       "keptPct": 93,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9303.73,
+       "keptPct": 93,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9303.73,
+       "keptPct": 93,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 9303.73,
+       "keptPct": 93,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "every": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8727,
+       "keptPct": 87.3,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.95
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8727,
+       "keptPct": 87.3,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.95
+      }
+     ],
+     "once": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8727,
+       "keptPct": 87.3,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.95
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "equityAtEnd": 8727,
+       "keptPct": 87.3,
+       "orders": 1,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 15.95
       }
      ]
     }

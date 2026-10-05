@@ -1,6 +1,6 @@
 import type { Policy } from '@bulwarkxyz/guard-core';
 import { describe, expect, it } from 'vitest';
-import { compileRule, describeRule, MODEL, nextRuleId, OUTPUT_SCHEMA, type MessagesClient } from '../src/index.js';
+import { compileRule, describeRule, MODEL, nextRuleId, OUTPUT_SCHEMA, REPEAT_QUESTION, repeatInText, type MessagesClient } from '../src/index.js';
 
 const policy: Policy = {
   version: 3,
@@ -38,10 +38,10 @@ describe('compileRule', () => {
   });
 
   it('accepts a draft whose numbers the user typed and builds the next policy version', async () => {
-    const text = 'Over the weekend, if CL drops 8%, cut my CL position by half';
+    const text = 'Over the weekend, if CL drops 8%, cut my CL position by half, only once';
     const c = stub({
       outcome: 'rule',
-      rule: { window: 'weekend', when: { kind: 'priceMove', market: 'xyz:CL', direction: 'down', movePct: 8, from: 'window_start' }, then: [{ kind: 'reduce', target: { kind: 'market', market: 'xyz:CL' }, fraction: 0.5 }] },
+      rule: { window: 'weekend', when: { kind: 'priceMove', market: 'xyz:CL', direction: 'down', movePct: 8, from: 'window_start' }, then: [{ kind: 'reduce', target: { kind: 'market', market: 'xyz:CL' }, fraction: 0.5 }], repeat: { mode: 'oncePerBreach' } },
       message: '',
     });
     const r = await compileRule(c, { text, policy, markets });
@@ -52,7 +52,35 @@ describe('compileRule', () => {
     expect(r.check.policy?.rules).toHaveLength(2);
     expect(r.check.rule?.id).toBe('ai-2');
     expect(r.check.rule?.source).toEqual({ text, compiler: 'claude-opus-5-5/v1' });
-    expect(describeRule(r.check.rule!)).toBe('Fri US close → Mon US open: when CL moves down 8% or more since the window opened, cut the CL position by 50%.');
+    expect(describeRule(r.check.rule!)).toBe('Fri US close → Mon US open: when CL moves down 8% or more since the window opened, cut the CL position by 50%. Acts once per fall, then leaves the rest to the backstop.');
+  });
+
+  it('the repeat choice comes only from the user’s words: if the sentence does not say, it asks, whatever the model returned', async () => {
+    const rule = { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'close', target: { kind: 'all' } }] };
+    const ask = (text: string, repeat?: unknown) => compileRule(stub({ outcome: 'rule', rule: { ...rule, ...(repeat ? { repeat } : {}) }, message: '' }), { text, policy, markets });
+    // Not said: asks, even when the model picked one.
+    expect(await ask('below 2x close everything')).toMatchObject({ kind: 'clarify', question: REPEAT_QUESTION });
+    expect(await ask('below 2x close everything', { mode: 'everyCrossing' })).toMatchObject({ kind: 'clarify', question: REPEAT_QUESTION });
+    expect(await ask('once my buffer is below 2x close everything', { mode: 'oncePerBreach' })).toMatchObject({ kind: 'clarify' });
+    expect(await ask('whenever the buffer is below 2x close everything', { mode: 'everyCrossing' })).toMatchObject({ kind: 'clarify' });
+    // Said: accepted only if the model matched the words.
+    expect(await ask('below 2x close everything, only once', { mode: 'oncePerBreach' })).toMatchObject({ kind: 'draft' });
+    expect(await ask('below 2x close everything, only once', { mode: 'everyCrossing' })).toMatchObject({ kind: 'clarify' });
+    expect(await ask('every time the buffer goes below 2x close everything', { mode: 'everyCrossing' })).toMatchObject({ kind: 'draft' });
+    // A limit's numbers must be ones the user typed.
+    const limited = await ask('every time the buffer goes below 2x close everything, at most 3 times in 24 hours', { mode: 'everyCrossing', limit: { times: 3, perHours: 24 } });
+    expect(limited.kind === 'draft' && limited.check.ok).toBe(true);
+    const invented = await ask('every time the buffer goes below 2x close everything', { mode: 'everyCrossing', limit: { times: 3, perHours: 24 } });
+    expect(invented.kind === 'draft' && invented.check.ok).toBe(false);
+  });
+
+  it('reads the repeat choice from the words, not from "once" meaning "when"', () => {
+    expect(repeatInText('only once')).toBe('oncePerBreach');
+    expect(repeatInText('just the first time it happens')).toBe('oncePerBreach');
+    expect(repeatInText('each time it drops below 2x')).toBe('everyCrossing');
+    expect(repeatInText('once the buffer drops below 2x')).toBeNull();
+    expect(repeatInText('whenever it drops')).toBeNull();
+    expect(repeatInText('only once, every time')).toBeNull();
   });
 
   it('rejects a draft containing a number the user did not type (I5)', async () => {

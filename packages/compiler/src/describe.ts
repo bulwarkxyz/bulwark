@@ -53,9 +53,15 @@ export function describeAction(a: Action): string {
   }
 }
 
-export function describeRule(r: Pick<Rule, 'when' | 'then' | 'window'>): string {
+export function describeRepeat(r: Pick<Rule, 'repeat'>): string {
+  if (!r.repeat) return 'Repeat not chosen yet: acts every time the line is crossed until you choose.';
+  const limit = r.repeat.limit ? ` At most ${r.repeat.limit.times} time${r.repeat.limit.times > 1 ? 's' : ''} in ${r.repeat.limit.perHours} hours.` : '';
+  return (r.repeat.mode === 'oncePerBreach' ? 'Acts once per fall, then leaves the rest to the backstop.' : 'Acts every time the line is crossed.') + limit;
+}
+
+export function describeRule(r: Pick<Rule, 'when' | 'then' | 'window'> & Partial<Pick<Rule, 'repeat'>>): string {
   const during = r.window ? `${FIXED_WINDOWS[r.window].label}: w` : 'W';
   const acts = r.then.map(describeAction);
   const list = acts.length > 1 ? `${acts.slice(0, -1).join(', ')} and ${acts[acts.length - 1]}` : acts[0];
-  return `${during}hen ${describeTrigger(r.when)}, ${list}.`;
+  return `${during}hen ${describeTrigger(r.when)}, ${list}.${'repeat' in r ? ` ${describeRepeat(r)}` : ''}`;
 }

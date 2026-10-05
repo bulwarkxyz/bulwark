@@ -43,6 +43,21 @@ export const Trigger = z.discriminatedUnion('kind', [
 ]);
 export type Trigger = z.infer<typeof Trigger>;
 
+/**
+ * What a stage does after it has acted, chosen by the user for every stage (no default):
+ * - oncePerBreach: act once when the line is crossed, then leave the rest of the fall to the backstop.
+ *   The stage acts again only after the market recovers to where it was when it acted, or the
+ *   positions it acted on are gone. Its own trim lifting the buffer does not count as a recovery.
+ * - everyCrossing: act each time the line is crossed, including when the buffer has only recovered
+ *   because of the guard's own trim.
+ * `limit` (optional, typed by the user): at most `times` actions within any `perHours` hours.
+ */
+export const Repeat = z.object({
+  mode: z.enum(['oncePerBreach', 'everyCrossing']),
+  limit: z.object({ times: z.number().int().positive(), perHours: z.number().gt(0) }).optional(),
+});
+export type Repeat = z.infer<typeof Repeat>;
+
 const windowNames = Object.keys(FIXED_WINDOWS) as [keyof typeof FIXED_WINDOWS, ...Array<keyof typeof FIXED_WINDOWS>];
 
 export const Rule = z.object({
@@ -52,8 +67,19 @@ export const Rule = z.object({
   window: z.enum(windowNames).optional(),
   when: Trigger,
   then: z.array(Action).min(1).max(6),
+  /**
+   * Required for every rule the user signs from now on. Optional here only so policies signed before
+   * the setting existed still load and keep running as they did (every crossing) until the user
+   * chooses: see `needsRepeatChoice`.
+   */
+  repeat: Repeat.optional(),
 });
 export type Rule = z.infer<typeof Rule>;
+
+/** Rules that have no repeat choice yet (policies signed before the setting existed). */
+export function needsRepeatChoice(policy: Pick<Policy, 'rules'>): string[] {
+  return policy.rules.filter((r) => !r.repeat).map((r) => r.id);
+}
 
 export const Execution = z.object({
   /** Max distance from mark for a guard IOC order, in percent. Typed by the user. */

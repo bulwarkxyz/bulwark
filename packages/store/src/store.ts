@@ -1,4 +1,4 @@
-import type { CommandName, Policy, RetryChain } from '@bulwarkxyz/guard-core';
+import type { Breach, CommandName, Policy, RetryChain } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { MemoryAuditStore, type AuditStore } from './audit.js';
 
@@ -53,6 +53,11 @@ export interface GuardOrder {
   pricing?: 'single' | 'together' | null;
 }
 
+export interface RuleMemory {
+  breaches: Record<string, Breach>;
+  fires: Record<string, number[]>;
+}
+
 /** What the guard is doing for an account, as the worker last judged it. */
 export type GuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
 /** Why the guard is paused. */
@@ -76,6 +81,9 @@ export interface GuardStore {
   policy(account: string): Promise<ConfirmedPolicy | null>;
   latched(account: string): Promise<Set<string>>;
   saveLatched(account: string, keys: ReadonlySet<string>): Promise<void>;
+  /** "Once per breach" prices and per-rule action times (for limits), carried between evaluations. */
+  ruleMemory(account: string): Promise<RuleMemory>;
+  saveRuleMemory(account: string, m: RuleMemory): Promise<void>;
   /** Guard orders that did not fully fill and are retried while their stage holds. */
   retries(account: string): Promise<RetryChain[]>;
   saveRetries(account: string, chains: readonly RetryChain[]): Promise<void>;
@@ -202,6 +210,13 @@ export class MemoryStore implements ApiStore, KeyVault {
   }
   async saveLatched(account: string, keys: ReadonlySet<string>) {
     this.l.set(this.k(account), new Set(keys));
+  }
+  private readonly rm = new Map<string, RuleMemory>();
+  async ruleMemory(account: string) {
+    return structuredClone(this.rm.get(this.k(account)) ?? { breaches: {}, fires: {} });
+  }
+  async saveRuleMemory(account: string, m: RuleMemory) {
+    this.rm.set(this.k(account), structuredClone(m));
   }
   private readonly r = new Map<string, RetryChain[]>();
   async retries(account: string) {

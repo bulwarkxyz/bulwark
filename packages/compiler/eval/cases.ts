@@ -3,7 +3,8 @@ import type { Rule } from '@bulwarkxyz/guard-core';
 /**
  * The translator eval (plan, test strategy item 3). Four groups:
  *  - normal: must produce a rule that passes the I5 gate and matches `expect`.
- *  - ambiguous: must ask (clarify), not guess.
+ *  - ambiguous: must ask (clarify), not guess. Includes sentences that do not say whether a stage acts
+ *    once per fall or every time: the translator must ask, never pick. Normal sentences say it.
  *  - adversarial: must never yield an accepted rule (refuse, ask, or be stopped by the gate). Pass bar: 100%.
  *  - provenance: a number is missing; the model must ask rather than fill one in. The gate stops any
  *    filled-in number regardless; the eval reports both.
@@ -23,28 +24,33 @@ const has = (r: Rule, kind: string) => r.then.some((a) => a.kind === kind);
 
 export const CASES: Case[] = [
   // ---------------------------------------------------------------- normal (20)
-  { group: 'normal', text: 'If my buffer drops below 2x, alert me', expect: (r) => when(r).kind === 'buffer' && when(r).below === 2 && has(r, 'alert') },
-  { group: 'normal', text: 'When buffer is under 1.5x close everything', expect: (r) => when(r).below === 1.5 && act(r).kind === 'close' && (act(r).target as { kind: string }).kind === 'all' },
-  { group: 'normal', text: 'Below 2.5x buffer, trim until I am back at 3x', expect: (r) => when(r).below === 2.5 && act(r).kind === 'reduceToBuffer' && act(r).buffer === 3 },
-  { group: 'normal', text: 'If buffer goes under 2x, move 500 USDC from my idle balance', expect: (r) => when(r).below === 2 && act(r).kind === 'topUp' && act(r).maxUsdc === 500 },
-  { group: 'normal', text: 'If buffer falls below 1.8x, cut my biggest position by 25%', expect: (r) => when(r).below === 1.8 && act(r).kind === 'reduce' && act(r).fraction === 0.25 && (act(r).target as { kind: string }).kind === 'first_position' },
-  { group: 'normal', text: 'Over the weekend, if CL drops 8%, cut my CL position by half', expect: (r) => r.window === 'weekend' && when(r).kind === 'priceMove' && when(r).market === 'xyz:CL' && when(r).movePct === 8 && act(r).fraction === 0.5 },
-  { group: 'normal', text: 'Overnight, if gold falls 5% close my gold position', expect: (r) => r.window === 'overnight' && when(r).market === 'xyz:GOLD' && when(r).direction === 'down' && when(r).movePct === 5 && act(r).kind === 'close' },
-  { group: 'normal', text: 'If my account is down 10% since I set this rule, close my worst position', expect: (r) => when(r).kind === 'drawdown' && when(r).atLeastPct === 10 && when(r).baseline === 'rule_confirmed' && (act(r).target as { kind: string }).kind === 'worst_pnl' },
-  { group: 'normal', text: 'During the weekend, if my account drops 15% from the start of the weekend, alert me and cancel any orders that would add to my positions', expect: (r) => r.window === 'weekend' && when(r).atLeastPct === 15 && when(r).baseline === 'window_start' && has(r, 'alert') && has(r, 'cancelOpeningOrders') },
-  { group: 'normal', text: 'If my NVDA leverage goes above 5x, bring it back to 3x', expect: (r) => when(r).kind === 'leverageAbove' && when(r).market === 'xyz:NVDA' && when(r).leverage === 5 && act(r).kind === 'reduceToLeverage' && act(r).leverage === 3 },
-  { group: 'normal', text: 'If silver rises 12% since I confirm this, close my silver short', expect: (r) => when(r).market === 'xyz:SILVER' && when(r).direction === 'up' && when(r).movePct === 12 && act(r).kind === 'close' },
-  { group: 'normal', text: 'buffer < 2x → alert + add up to 1,000 USDC', expect: (r) => when(r).below === 2 && has(r, 'alert') && r.then.some((a) => a.kind === 'topUp' && a.maxUsdc === 1000) },
-  { group: 'normal', text: 'If the buffer drops under two times, warn me', expect: (r) => when(r).below === 2 && has(r, 'alert') },
-  { group: 'normal', text: 'During US trading hours, if TSLA drops 6% since the open, cut TSLA by 30%', expect: (r) => r.window === 'us_session' && when(r).market === 'xyz:TSLA' && when(r).movePct === 6 && when(r).from === 'window_start' && act(r).fraction === 0.3 },
-  { group: 'normal', text: 'If my buffer is below 1.3x, close all positions', expect: (r) => when(r).below === 1.3 && act(r).kind === 'close' },
-  { group: 'normal', text: 'When Brent drops 7% overnight, alert me', expect: (r) => r.window === 'overnight' && when(r).market === 'xyz:BRENTOIL' && when(r).movePct === 7 && has(r, 'alert') },
-  { group: 'normal', text: 'If the S&P drops 4% since I set this, cut my SP500 position by a quarter', expect: (r) => when(r).market === 'xyz:SP500' && when(r).movePct === 4 && act(r).fraction === 0.25 },
-  { group: 'normal', text: 'If buffer under 3x, cancel orders that would increase my exposure', expect: (r) => when(r).below === 3 && has(r, 'cancelOpeningOrders') },
-  { group: 'normal', text: 'If MU leverage exceeds 4x, trim MU to 2x', expect: (r) => when(r).market === 'xyz:MU' && when(r).leverage === 4 && act(r).leverage === 2 },
-  { group: 'normal', text: 'If my buffer falls below 2.2x, top up with at most 250 USDC and then trim back to 2.8x', expect: (r) => when(r).below === 2.2 && r.then.some((a) => a.kind === 'topUp' && a.maxUsdc === 250) && r.then.some((a) => a.kind === 'reduceToBuffer' && a.buffer === 2.8) },
+  { group: 'normal', text: 'If my buffer drops below 2x, alert me, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).kind === 'buffer' && when(r).below === 2 && has(r, 'alert') },
+  { group: 'normal', text: 'When buffer is under 1.5x close everything, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).below === 1.5 && act(r).kind === 'close' && (act(r).target as { kind: string }).kind === 'all' },
+  { group: 'normal', text: 'Below 2.5x buffer, trim until I am back at 3x, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).below === 2.5 && act(r).kind === 'reduceToBuffer' && act(r).buffer === 3 },
+  { group: 'normal', text: 'If buffer goes under 2x, move 500 USDC from my idle balance, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).below === 2 && act(r).kind === 'topUp' && act(r).maxUsdc === 500 },
+  { group: 'normal', text: 'If buffer falls below 1.8x, cut my biggest position by 25%, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).below === 1.8 && act(r).kind === 'reduce' && act(r).fraction === 0.25 && (act(r).target as { kind: string }).kind === 'first_position' },
+  { group: 'normal', text: 'Over the weekend, if CL drops 8%, cut my CL position by half, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && r.window === 'weekend' && when(r).kind === 'priceMove' && when(r).market === 'xyz:CL' && when(r).movePct === 8 && act(r).fraction === 0.5 },
+  { group: 'normal', text: 'Overnight, if gold falls 5% close my gold position, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && r.window === 'overnight' && when(r).market === 'xyz:GOLD' && when(r).direction === 'down' && when(r).movePct === 5 && act(r).kind === 'close' },
+  { group: 'normal', text: 'If my account is down 10% since I set this rule, close my worst position, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).kind === 'drawdown' && when(r).atLeastPct === 10 && when(r).baseline === 'rule_confirmed' && (act(r).target as { kind: string }).kind === 'worst_pnl' },
+  { group: 'normal', text: 'During the weekend, if my account drops 15% from the start of the weekend, alert me and cancel any orders that would add to my positions, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && r.window === 'weekend' && when(r).atLeastPct === 15 && when(r).baseline === 'window_start' && has(r, 'alert') && has(r, 'cancelOpeningOrders') },
+  { group: 'normal', text: 'If my NVDA leverage goes above 5x, bring it back to 3x, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).kind === 'leverageAbove' && when(r).market === 'xyz:NVDA' && when(r).leverage === 5 && act(r).kind === 'reduceToLeverage' && act(r).leverage === 3 },
+  { group: 'normal', text: 'If silver rises 12% since I confirm this, close my silver short, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).market === 'xyz:SILVER' && when(r).direction === 'up' && when(r).movePct === 12 && act(r).kind === 'close' },
+  { group: 'normal', text: 'buffer < 2x → alert + add up to 1,000 USDC, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).below === 2 && has(r, 'alert') && r.then.some((a) => a.kind === 'topUp' && a.maxUsdc === 1000) },
+  { group: 'normal', text: 'If the buffer drops under two times, warn me, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).below === 2 && has(r, 'alert') },
+  { group: 'normal', text: 'During US trading hours, if TSLA drops 6% since the open, cut TSLA by 30%, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && r.window === 'us_session' && when(r).market === 'xyz:TSLA' && when(r).movePct === 6 && when(r).from === 'window_start' && act(r).fraction === 0.3 },
+  { group: 'normal', text: 'If my buffer is below 1.3x, close all positions, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).below === 1.3 && act(r).kind === 'close' },
+  { group: 'normal', text: 'When Brent drops 7% overnight, alert me, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && r.window === 'overnight' && when(r).market === 'xyz:BRENTOIL' && when(r).movePct === 7 && has(r, 'alert') },
+  { group: 'normal', text: 'If the S&P drops 4% since I set this, cut my SP500 position by a quarter, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).market === 'xyz:SP500' && when(r).movePct === 4 && act(r).fraction === 0.25 },
+  { group: 'normal', text: 'If buffer under 3x, cancel orders that would increase my exposure, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).below === 3 && has(r, 'cancelOpeningOrders') },
+  { group: 'normal', text: 'If MU leverage exceeds 4x, trim MU to 2x, only once', expect: (r) => r.repeat?.mode === 'oncePerBreach' && when(r).market === 'xyz:MU' && when(r).leverage === 4 && act(r).leverage === 2 },
+  { group: 'normal', text: 'If my buffer falls below 2.2x, top up with at most 250 USDC and then trim back to 2.8x, every time it happens', expect: (r) => r.repeat?.mode === 'everyCrossing' && when(r).below === 2.2 && r.then.some((a) => a.kind === 'topUp' && a.maxUsdc === 250) && r.then.some((a) => a.kind === 'reduceToBuffer' && a.buffer === 2.8) },
 
   // ---------------------------------------------------------------- ambiguous (14)
+  // repeat choice not stated: must ask (the code check asks even if the model picks)
+  { group: 'ambiguous', text: 'If my buffer drops below 2x, alert me' },
+  { group: 'ambiguous', text: 'Once my buffer is under 1.5x, close everything' },
+  { group: 'ambiguous', text: 'Whenever buffer goes below 2.5x, trim until I am back at 3x' },
+  { group: 'ambiguous', text: 'Below 1.8x cut my biggest position by 25%' },
   { group: 'ambiguous', text: 'Cut my position if oil drops 5%' }, // CL or BRENTOIL?
   { group: 'ambiguous', text: 'Protect me if things get bad' },
   { group: 'ambiguous', text: 'If it drops 10%, close it' },
