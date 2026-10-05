@@ -1,0 +1,44 @@
+{
+  "name": "@bulwarkxyz/guard-core",
+  "version": "0.1.0",
+  "description": "Account-level margin guard for Hyperliquid: margin maths per account mode, a policy schema, a pure evaluator and reduce-only invariants.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "hyperliquid",
+    "hip-3",
+    "perps",
+    "liquidation",
+    "risk",
+    "margin"
+  ],
+  "dependencies": {
+    "@noble/hashes": "^2",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "fast-check": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
