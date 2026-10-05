@@ -24,6 +24,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { getAddress, verifyMessage, verifyTypedData } from 'viem';
 import { parseSiweMessage } from 'viem/siwe';
 import { MAX_COINS, marketActivity } from './market-activity.js';
+import { CONTRACT_WALLET_ERROR, isContractCode, isContractWalletSignature, normalizeSignature } from './signatures.js';
 
 export interface ApiDeps {
   store: ApiStore;
@@ -53,6 +54,10 @@ export interface ApiDeps {
    * off. It is switched on only after the eval's adversarial set passes in full.
    */
   translator?: TranslatorProvider;
+  /** The Telegram bot's username (public), for the one-tap link the app shows next to a link code. */
+  telegramBot?: string;
+  /** Bytecode at an address (Arbitrum), used only to explain a failed signature from a smart-contract wallet. */
+  codeAt?: (address: Hex) => Promise<Hex>;
   now: () => number;
 }
 
@@ -72,6 +77,11 @@ export function createApp(deps: ApiDeps) {
   const app = new Hono<Env>();
   const nonces = new Map<string, { nonce: string; exp: number }>();
   const draftTimes = new Map<string, number[]>();
+  /** A refused signature: say "smart-contract wallet" when that's why, otherwise "bad signature". */
+  const refuseSignature = async (c: Context, address: string, signature: Hex, otherwise = 'bad signature') => {
+    const contract = isContractWalletSignature(signature) || (deps.codeAt ? isContractCode(await deps.codeAt(getAddress(address) as Hex)) : false);
+    return contract ? c.json({ error: CONTRACT_WALLET_ERROR, code: 'contract_wallet' }, 400) : c.json({ error: otherwise }, 401);
+  };
   let marketCache: { at: number; markets: MarketRef[] } | null = null;
   const markets = async (): Promise<MarketRef[]> => {
     if (marketCache && deps.now() - marketCache.at < 10 * 60_000) return marketCache.markets;
@@ -125,7 +135,8 @@ export function createApp(deps: ApiDeps) {
     if (!parsed.address || parsed.domain !== deps.siweDomain) return c.json({ error: 'wrong domain' }, 401);
     const expected = nonces.get(getAddress(parsed.address));
     if (!expected || expected.nonce !== parsed.nonce || expected.exp < deps.now()) return c.json({ error: 'nonce expired' }, 401);
-    if (!(await verifyMessage({ address: parsed.address, message, signature }))) return c.json({ error: 'bad signature' }, 401);
+    if (isContractWalletSignature(signature) || !(await verifyMessage({ address: parsed.address, message, signature: normalizeSignature(signature) }).catch(() => false)))
+      return refuseSignature(c, parsed.address, signature);
     nonces.delete(getAddress(parsed.address));
     const token = await new SignJWT({})
       .setProtectedHeader({ alg: 'HS256' })
@@ -270,15 +281,15 @@ export function createApp(deps: ApiDeps) {
     const current = await deps.store.policy(account);
     if (policy.version !== (current?.policy.version ?? 0) + 1) return c.json({ error: 'stale version' }, 409);
     const hash = policyHash(policy);
-    const ok = await verifyTypedData({
+    const ok = !isContractWalletSignature(body.signature) && (await verifyTypedData({
       address: account,
       domain: policyConfirmationDomain(body.chainId),
       types: POLICY_CONFIRMATION_TYPES,
       primaryType: 'BulwarkPolicy',
       message: { account, version: BigInt(policy.version), policyHash: hash },
-      signature: body.signature,
-    });
-    if (!ok) return c.json({ error: 'signature does not match' }, 401);
+      signature: normalizeSignature(body.signature),
+    }).catch(() => false));
+    if (!ok) return refuseSignature(c, account, body.signature, 'signature does not match');
     const now = deps.now();
     await deps.store.confirmPolicy(account, { policy, hash, signature: body.signature, signatureVerified: true, confirmedAt: now });
     // Baselines for rules measured from the moment of confirmation.
@@ -383,15 +394,15 @@ export function createApp(deps: ApiDeps) {
     if (!['unwind', 'stop', 'resume', 'wipe'].includes(body.command)) return c.json({ error: 'unknown command' }, 400);
     if (Math.abs(deps.now() - body.issuedAt) > COMMAND_MAX_AGE_MS) return c.json({ error: 'command expired; sign again' }, 400);
     if (body.command === 'unwind' && (minutes < 5 || minutes > 7 * 24 * 60)) return c.json({ error: 'unwind time must be 5 minutes to 7 days' }, 400);
-    const ok = await verifyTypedData({
+    const ok = !isContractWalletSignature(body.signature) && (await verifyTypedData({
       address: account,
       domain: policyConfirmationDomain(body.chainId),
       types: COMMAND_TYPES,
       primaryType: 'BulwarkCommand',
       message: { account, command: body.command, minutes, issuedAt: BigInt(body.issuedAt) },
-      signature: body.signature,
-    });
-    if (!ok) return c.json({ error: 'signature does not match' }, 401);
+      signature: normalizeSignature(body.signature),
+    }).catch(() => false));
+    if (!ok) return refuseSignature(c, account, body.signature, 'signature does not match');
     // Stop (and wipe, which implies stop) take effect at once; the worker cancels guard orders, then wipes.
     if (body.command === 'stop' || body.command === 'wipe') await deps.store.setKillSwitch(account, true);
     if (body.command === 'resume') await deps.store.setKillSwitch(account, false);
@@ -416,7 +427,8 @@ export function createApp(deps: ApiDeps) {
     if (!(await deps.store.user(account))) return c.json({ error: 'complete onboarding first' }, 409);
     const code = randomBytes(5).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, 'X').slice(0, 7);
     await deps.store.createTelegramCode(code, account, deps.now() + 15 * 60_000);
-    return c.json({ code, expiresInMinutes: 15 });
+    const bot = deps.telegramBot;
+    return c.json({ code, expiresInMinutes: 15, bot: bot ? `@${bot}` : null, link: bot ? `https://t.me/${bot}?start=${code}` : null });
   });
 
   return app;

@@ -6,6 +6,32 @@ The parts of the Bulwark API the app relies on. Field names here are stable. A c
 - **Base:** the app calls `/api/bw/...` (its server proxy), which forwards to the API.
 - **Auth:** every `/v1/*` route needs `Authorization: Bearer <session>` from `POST /auth/verify` (SIWE). Without it the answer is `401`.
 
+## Signatures (for any wallet library)
+
+**What the API checks:** the same three signatures, however the wallet is connected (injected, WalletConnect, hardware):
+- **Sign-in:** an EIP-4361 (SIWE) message. The domain must be `bulwark.0xo.in`. The message's chain id can be any chain.
+- **Policies:** EIP-712 `BulwarkPolicy`, in the domain `{ name: 'Bulwark', version: '1', chainId }`.
+- **Commands:** EIP-712 `BulwarkCommand`, in the same domain.
+
+**For policies and commands:**
+- Send the `chainId` the wallet actually signed with; any chain works.
+- A mismatch between the signed chain id and the one sent answers `401`.
+
+**Encodings accepted:**
+- `v` as 27/28 or 0/1;
+- EIP-2098 compact (64-byte) signatures.
+
+All three are tested in `test/signatures.test.ts`.
+
+**Smart-contract wallets are not supported.**
+- A Hyperliquid account signs with an ordinary key (EOA): approving an agent, deposits and orders are all ECDSA signatures by the account itself. So a Safe, passkey or other smart wallet can't hold a Hyperliquid account directly.
+- **What the API answers instead of "bad signature":** `400 { code: 'contract_wallet', error }` for:
+  - an ERC-6492 signature;
+  - a signature that isn't 64 or 65 bytes;
+  - a failed signature from an address with contract code on Arbitrum.
+- **EIP-7702 delegated EOAs** still sign with their key and are accepted.
+- **Show `error` as it is.** It says to connect the wallet that holds the Hyperliquid account.
+
 ## Markets
 
 ### `GET /markets/activity?coins=xyz:CL,xyz:GOLD,…`: which markets have recent data on this network
@@ -145,7 +171,17 @@ A replace (`/v1/guard-key/rotate`) isn't a command. Its progress shows in `/v1/m
   - Telegram gets the same messages when linked;
   - the setting only controls whether the app shows them.
 
+**`POST /v1/telegram/code`** → `{ code, expiresInMinutes: 15, bot: '@BulwarkGuardBot', link: 'https://t.me/BulwarkGuardBot?start=<code>' }`.
+- Show `link` as the one-tap way to link; the bot also accepts `/link <code>`.
+- `bot` and `link` are new and additive. They're `null` if no bot is configured.
+
 **`DELETE /v1/telegram`** → `{ linked: false }`: unlinks Telegram and removes the chat id. Answers `409` before onboarding.
+
+**The bot (`@BulwarkGuardBot`):**
+- `/link <code>` (or the deep link) links the chat.
+- `/stop` (also `/disarm`) replies with the kill-switch link. Stopping the guard always needs the wallet's signed command, never a chat message.
+- `/unlink` forgets the chat.
+- `/help` lists the commands.
 
 ## Translator: `POST /v1/rules/draft`
 

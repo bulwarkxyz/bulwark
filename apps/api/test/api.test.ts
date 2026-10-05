@@ -167,6 +167,9 @@ describe('telegram', () => {
     const { code } = (await (await app.request('/v1/telegram/code', { method: 'POST', headers: authed(token) })).json()) as { code: string };
     expect(code).toMatch(/^[A-Z0-9]{7}$/);
     expect(await store.redeemTelegramCode(code, '9', now)).toBe(ACCOUNT);
+    const withBot = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, telegramBot: 'BulwarkGuardBot' });
+    const r = (await (await withBot.request('/v1/telegram/code', { method: 'POST', headers: authed(token) })).json()) as { code: string; bot: string; link: string };
+    expect(r).toMatchObject({ bot: '@BulwarkGuardBot', link: `https://t.me/BulwarkGuardBot?start=${r.code}` });
   });
 });
 

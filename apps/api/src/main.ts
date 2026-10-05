@@ -12,6 +12,7 @@ import { InfoClient, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { ProvisionerKms, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
 import { PgStore, migrate } from '@bulwarkxyz/store';
 import postgres from 'postgres';
+import { arbitrumCode } from './signatures.js';
 import { createApp, retireKmsKeys } from './app.js';
 
 const network = (process.env.NETWORK ?? 'testnet') as Network;
@@ -56,6 +57,8 @@ async function main() {
     repeatChoiceRequired: process.env.REPEAT_CHOICE_REQUIRED === '1',
     network,
     ...(kms ? { provisionAgent: (account: Hex) => createGuardKey(kms, { user: account, env: network }) } : {}),
+    telegramBot: process.env.TELEGRAM_BOT_USERNAME ?? 'BulwarkGuardBot',
+    codeAt: arbitrumCode(),
     now: Date.now,
   });
   // Wiped or replaced KMS keys: disable and schedule deletion (provisioner role only).
