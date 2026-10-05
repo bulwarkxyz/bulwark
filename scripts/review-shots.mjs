@@ -54,10 +54,16 @@ for (const theme of ['dark', 'light']) {
           console.log(`FAILED ${route} ${state} ${size.name} ${theme}: ${e.message.split('\n')[0]}`);
           continue;
         }
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-        if (overflow > 0) errors.push(`horizontal overflow ${overflow}px`);
         const name = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replace('=', '')}-${state}-${size.name}-${theme}.png`;
-        await page.screenshot({ path: join(out, name), fullPage: full || !route.includes('/trade/') });
+        try {
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+          if (overflow > 0) errors.push(`horizontal overflow ${overflow}px`);
+          await page.screenshot({ path: join(out, name), fullPage: full || !route.includes('/trade/') });
+        } catch (e) {
+          console.log(`FAILED ${name}: ${e.message.split('\n')[0]}`);
+          errors.length = 0;
+          continue;
+        }
         console.log(name, errors.length ? `errors: ${[...new Set(errors)].join(' | ').slice(0, 300)}` : '');
         errors.length = 0;
       }

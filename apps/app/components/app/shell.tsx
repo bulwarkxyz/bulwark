@@ -216,9 +216,11 @@ function MobileGuard() {
   const f = useFigures();
   const armed = g.state === 'protected' || g.state === 'acting' || g.state === 'risk';
   return (
-    <Link className="mguard" href="/app/positions" aria-label={`Guard: ${GUARD_LABEL[g.state]}`}>
+    <div className="mguard">
       <div className="row nw" style={{ gap: 10 }}>
-        <GuardChip state={g.state} sm />
+        <Link href="/app/positions" aria-label={`Guard: ${GUARD_LABEL[g.state]}, open positions`}>
+          <GuardChip state={g.state} sm />
+        </Link>
         {g.worst && g.state !== 'loading' ? (
           <>
             <span className="num small b">{fmtBuffer(g.worst.buffer)}</span>
@@ -240,7 +242,7 @@ function MobileGuard() {
       ) : (
         <StateNote g={g} />
       )}
-    </Link>
+    </div>
   );
 }
 

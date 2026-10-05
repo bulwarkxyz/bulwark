@@ -6,7 +6,7 @@
 //   3. VERCEL_ENV=production with the flag set    → no marker (production wins)
 // Usage: node scripts/review-mode-check.mjs   (about three minutes; runs in CI)
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const app = new URL('../apps/app/', import.meta.url).pathname;
@@ -24,6 +24,8 @@ function build(env) {
   const clean = { ...process.env };
   delete clean.NEXT_PUBLIC_REVIEW_MODE;
   delete clean.VERCEL_ENV;
+  // Start clean: a dev server leaves its own output under .next, which is not part of any build.
+  rmSync(join(app, '.next'), { recursive: true, force: true });
   execFileSync('npx', ['next', 'build'], { cwd: app, env: { ...clean, ...env }, stdio: 'ignore' });
   const out = files(join(app, '.next'));
   const hits = (re) => out.filter((f) => re.test(readFileSync(f, 'utf8')));
