@@ -269,4 +269,8 @@ html.light .bw{
 .grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:0 auto 8px}
 
 /* No motion anywhere in the app (design rule). */
-.bw *,.bw *::before,.bw *::after{transition:none !important;animation:none !important;scroll-behavior:auto !important}
+.bw *,.bw *::before,.bw *::after{transition:none !important;animation:none !important;scroll-behavior:auto !important}/* Audit log at phone width: one stacked entry per row instead of a wide table */
+.alist{list-style:none;margin:0;padding:0}
+.alist li{display:flex;flex-direction:column;gap:4px;padding:12px;border-bottom:1px solid var(--line)}
+.alist li:last-child{border-bottom:0}
+.alist .code{margin-top:6px;overflow-x:auto}

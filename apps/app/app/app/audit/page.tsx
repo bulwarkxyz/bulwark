@@ -123,7 +123,36 @@ export default function AuditPage() {
         ) : !entries.length ? (
           <div className="empty">Nothing in this filter yet.</div>
         ) : (
-          <div className="tblw">
+          <>
+          <ul className="mobile-only alist" aria-label="Entries">
+            {entries.map((e) => {
+              const a = attemptOf(e);
+              return (
+                <li key={e.seq}>
+                  <div className="row nw" style={{ gap: 8 }}>
+                    <span className={`num tiny ${broken !== null && e.seq >= broken ? 'ct' : 't3'}`}>#{e.seq}</span>
+                    <span className="num tiny t2">{new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')}</span>
+                    <span className={`chip chip-sm ${KIND_CHIP[e.kind] ?? ''}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
+                    <span className="sp" />
+                    <button type="button" className="btn btn-sm btn-ghost" aria-expanded={open === e.seq} onClick={() => setOpen(open === e.seq ? null : e.seq)}>
+                      {open === e.seq ? 'Hide proof' : 'Proof'}
+                    </button>
+                  </div>
+                  <span className="small">{e.what}</span>
+                  <span className="tiny t2">{e.why}</span>
+                  {a ? (
+                    <span className={`tiny num ${a.n > 1 ? 'wt' : 't2'}`}>
+                      Attempt {a.n}
+                      {a.filled !== null ? ` · filled ${a.filled}` : ''}
+                      {a.limitPx ? ` · limit ${fmtPx(a.limitPx)}` : ''}
+                    </span>
+                  ) : null}
+                  {open === e.seq ? <div className="code">{JSON.stringify({ hash: e.hash, prevHash: e.prevHash, proof: e.proof ?? null }, null, 2)}</div> : null}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="tblw hide-sm">
             <table className="tbl" style={{ fontSize: 13 }}>
               <thead>
                 <tr>
@@ -177,6 +206,7 @@ export default function AuditPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
     </div>
