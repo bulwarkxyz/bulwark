@@ -4,7 +4,7 @@
 // first visit and on a repeat; and whether the click was a client-side navigation or a full page load.
 // Profiles: "laptop" (no throttling) and "phone" (390 wide, 4x CPU slowdown, 4G-class network).
 // Usage: node scripts/perf-tabs.mjs <baseUrl> [--profile laptop|phone] [--json out.json] [--trace out.zip]
-//        [--budget-frame ms] [--budget-data ms] [--query 'watch=0x…'] [--limit ms]
+//        [--budget-frame ms] [--budget-data ms] [--query 'watch=0x…'] [--limit ms] [--first url]
 // Budgets: every tab switch (first and repeat visit) must show its frame within --budget-frame, and every
 // repeat visit must show its data within --budget-data; otherwise the script exits 1 (the CI check).
 import { writeFileSync } from 'node:fs';
@@ -19,6 +19,7 @@ const profile = opt('--profile', 'laptop');
 const jsonOut = opt('--json');
 const traceOut = opt('--trace');
 const limit = Number(opt('--limit', '60000')); // give up on a tab after this long
+const first = opt('--first'); // a URL to open before timing, e.g. a protected preview's share link (sets its cookie)
 const query = opt('--query', ''); // e.g. watch=0x… on a review build: the screens with an account's data
 const budgetFrame = Number(opt('--budget-frame', '0'));
 const budgetData = Number(opt('--budget-data', '0'));
@@ -55,6 +56,7 @@ page.on('request', (r) => {
 const requests = [];
 page.on('requestfinished', (r) => requests.push(r.url()));
 
+if (first) await page.goto(first, { waitUntil: 'load', timeout: 120_000 });
 const results = [];
 const t0 = Date.now();
 await page.goto(`${base}/app${query ? `?${query}` : ''}`, { waitUntil: 'commit', timeout: 120_000 });
