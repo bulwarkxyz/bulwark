@@ -84,3 +84,21 @@ create table if not exists telegram_links (
   expires_at  bigint not null,
   used_at     bigint
 );
+
+-- Signed user commands for the worker to carry out (panic unwind, kill switch, resume).
+create table if not exists commands (
+  id          bigserial primary key,
+  account     text not null references users (account),
+  command     text not null check (command in ('unwind', 'stop', 'resume')),
+  minutes     integer not null default 0,
+  issued_at   bigint not null,
+  signature   text not null,
+  created_at  bigint not null,
+  done_at     bigint,
+  result      jsonb
+);
+create index if not exists commands_pending on commands (created_at) where done_at is null;
+
+alter table users add column if not exists agent_address text;
+alter table users add column if not exists residency text;
+alter table users add column if not exists citizenship text;

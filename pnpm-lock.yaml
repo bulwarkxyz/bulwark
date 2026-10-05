@@ -10,6 +10,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@aws-sdk/client-kms':
+        specifier: ^3
+        version: 3.1146.0
       '@bulwarkxyz/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -22,9 +25,9 @@ importers:
       '@bulwarkxyz/signer':
         specifier: workspace:*
         version: link:../../packages/signer
-      '@bulwarkxyz/worker':
+      '@bulwarkxyz/store':
         specifier: workspace:*
-        version: link:../worker
+        version: link:../../packages/store
       '@hono/node-server':
         specifier: ^1
         version: 1.19.17(hono@4.13.13)

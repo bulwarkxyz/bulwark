@@ -1,11 +1,16 @@
-import type { Policy } from '@bulwarkxyz/guard-core';
+import type { CommandName, Policy } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { MemoryAuditStore, type AuditStore } from './audit.js';
 
 export interface GuardUser {
   account: Hex;
-  /** Where the guard's agent key lives: `kms:<keyId>` in production, `local:<keychain service>` in dev. */
+  /** Where the guard's agent key lives: `kms:<keyId>` in production, `env:<VAR>` on testnet only; `pending` before provisioning. */
   agentKeyRef: string;
+  /** The agent address the user approves on Hyperliquid. */
+  agentAddress?: Hex | null;
+  /** Declared at onboarding (ISO 3166-1 alpha-2). */
+  residency?: string | null;
+  citizenship?: string | null;
   /** Region verdict at onboarding; blocked users are never stored. EU/EEA → guardOff (decision D4). */
   region: 'allowed' | 'guardOff';
   telegramChatId: string | null;
@@ -58,7 +63,26 @@ export interface GuardStore {
   readonly audit: AuditStore;
 }
 
-export class MemoryStore implements GuardStore {
+export interface PendingCommand {
+  id: number;
+  account: string;
+  command: CommandName;
+  minutes: number;
+  issuedAt: number;
+}
+
+/** What the API needs on top of the worker's view. */
+export interface ApiStore extends GuardStore {
+  upsertUser(u: GuardUser, now: number): Promise<void>;
+  setKillSwitch(account: string, on: boolean): Promise<void>;
+  confirmPolicy(account: string, cp: ConfirmedPolicy): Promise<void>;
+  createTelegramCode(code: string, account: string, expiresAt: number): Promise<void>;
+  addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string }, now: number): Promise<number>;
+  pendingCommands(): Promise<PendingCommand[]>;
+  finishCommand(id: number, result: Record<string, unknown>, now: number): Promise<void>;
+}
+
+export class MemoryStore implements ApiStore {
   readonly audit = new MemoryAuditStore();
   private readonly u = new Map<string, GuardUser>();
   private readonly p = new Map<string, ConfirmedPolicy>();
@@ -112,6 +136,32 @@ export class MemoryStore implements GuardStore {
   }
   async addAction(account: string, at: number) {
     this.a.set(this.k(account), [...(this.a.get(this.k(account)) ?? []).filter((t) => t >= at - 3_600_000), at]);
+  }
+  async upsertUser(u: GuardUser) {
+    this.putUser(u);
+  }
+  async setKillSwitch(account: string, on: boolean) {
+    const u = this.u.get(this.k(account));
+    if (u) this.u.set(this.k(account), { ...u, killSwitch: on });
+  }
+  async confirmPolicy(account: string, cp: ConfirmedPolicy) {
+    this.putPolicy(account, cp);
+  }
+  async createTelegramCode(code: string, account: string, expiresAt: number) {
+    this.putTelegramCode(code, account, expiresAt);
+  }
+  private readonly cmds: Array<PendingCommand & { doneAt?: number; result?: Record<string, unknown> }> = [];
+  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number }) {
+    const id = this.cmds.length + 1;
+    this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt });
+    return id;
+  }
+  async pendingCommands() {
+    return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt }) => ({ id, account, command, minutes, issuedAt }));
+  }
+  async finishCommand(id: number, result: Record<string, unknown>, now: number) {
+    const c = this.cmds.find((x) => x.id === id);
+    if (c) Object.assign(c, { doneAt: now, result });
   }
   private readonly codes = new Map<string, { account: string; expiresAt: number; used: boolean }>();
   putTelegramCode(code: string, account: string, expiresAt: number) {

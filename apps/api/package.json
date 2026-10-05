@@ -10,11 +10,12 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3",
     "@bulwarkxyz/config": "workspace:*",
     "@bulwarkxyz/guard-core": "workspace:*",
     "@bulwarkxyz/hyperliquid": "workspace:*",
     "@bulwarkxyz/signer": "workspace:*",
-    "@bulwarkxyz/worker": "workspace:*",
+    "@bulwarkxyz/store": "workspace:*",
     "@hono/node-server": "^1",
     "hono": "^4",
     "jose": "^6",

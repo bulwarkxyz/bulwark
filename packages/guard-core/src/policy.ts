@@ -105,6 +105,21 @@ export function policyConfirmationDomain(chainId: number) {
   return { name: 'Bulwark', version: '1', chainId } as const;
 }
 
+/**
+ * EIP-712 typed data for the user's direct commands (panic unwind, kill switch, resume).
+ * `minutes` is 0 for commands that take none.
+ */
+export const COMMAND_TYPES = {
+  BulwarkCommand: [
+    { name: 'account', type: 'address' },
+    { name: 'command', type: 'string' },
+    { name: 'minutes', type: 'uint32' },
+    { name: 'issuedAt', type: 'uint64' },
+  ],
+} as const;
+
+export type CommandName = 'unwind' | 'stop' | 'resume';
+
 /** Ordered stage lines (buffer triggers) for display and validation: must be strictly decreasing. */
 export function stageLines(policy: Policy): number[] {
   return policy.rules

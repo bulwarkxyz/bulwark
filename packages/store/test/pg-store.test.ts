@@ -16,7 +16,7 @@ describe.skipIf(!url)('postgres store', () => {
   const store = new PgStore(sql);
 
   beforeAll(async () => {
-    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links cascade`;
+    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands cascade`;
     await migrate(sql);
     await migrate(sql); // idempotent
     await store.upsertUser({ account: A, agentKeyRef: 'kms:key-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
@@ -55,6 +55,15 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.redeemTelegramCode('LINK01', '78', 1000)).toBeNull();
     await store.createTelegramCode('OLD', A, 10);
     expect(await store.redeemTelegramCode('OLD', '79', 1000)).toBeNull();
+  });
+
+  it('queues signed commands and flips the kill switch', async () => {
+    const id = await store.addCommand({ account: A, command: 'stop', minutes: 0, issuedAt: 5, signature: '0xs' }, 6);
+    expect(await store.pendingCommands()).toEqual([{ id, account: A, command: 'stop', minutes: 0, issuedAt: 5 }]);
+    await store.finishCommand(id, { cancelled: 2 }, 7);
+    expect(await store.pendingCommands()).toEqual([]);
+    await store.setKillSwitch(A, true);
+    expect((await store.user(A))?.killSwitch).toBe(true);
   });
 
   it('chains the audit log, survives concurrent appends, and refuses edits and deletes', async () => {

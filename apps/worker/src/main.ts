@@ -12,7 +12,7 @@
  */
 import http from 'node:http';
 import { builderField, type Network as ConfigNetwork } from '@bulwarkxyz/config';
-import { GuardedSigner } from '@bulwarkxyz/executor';
+import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, type AssetIndex, type OpenOrder, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
 import { ExchangeClient, InfoClient, NonceManager, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, type DigestSigner } from '@bulwarkxyz/signer';
@@ -101,6 +101,11 @@ async function main() {
       if (!u) throw new Error('unknown user');
       return new GuardedSigner(await digestSigner(u.agentKeyRef), network === 'mainnet');
     },
+    commandSignerFor: async (user) => {
+      const u = await store.user(user);
+      if (!u) throw new Error('unknown user');
+      return new CommandSigner(await digestSigner(u.agentKeyRef), network === 'mainnet');
+    },
     builder: builderField(network as ConfigNetwork) as { b: Hex; f: number } | null,
     now: Date.now,
   });
@@ -139,6 +144,18 @@ async function main() {
   await syncUsers();
   setInterval(() => void syncUsers().catch((e) => console.error('syncUsers', e)), 30_000);
   setInterval(() => void loadAssets().then((m) => (meta = m)).catch((e) => console.error('loadAssets', e)), 10 * 60_000);
+
+  // Signed user commands queued by the API.
+  setInterval(async () => {
+    try {
+      for (const cmd of await store.pendingCommands()) {
+        const result = await engine.command(cmd).catch((e) => ({ error: String(e) }));
+        await store.finishCommand(cmd.id, result, Date.now());
+      }
+    } catch (e) {
+      console.error('commands', e);
+    }
+  }, 2_000);
 
   if (process.env.TELEGRAM_BOT_TOKEN) void new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, store).start();
 

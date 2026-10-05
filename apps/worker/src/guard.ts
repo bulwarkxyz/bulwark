@@ -1,4 +1,4 @@
-import { executeActions, type Exchange, type ExecutionRecord, type GuardedSigner } from '@bulwarkxyz/executor';
+import { executeActions, planUnwind, stopCancels, type CommandSigner, type Exchange, type ExecutionRecord, type GuardedSigner } from '@bulwarkxyz/executor';
 import {
   assessRisk,
   buildSnapshot,
@@ -15,7 +15,7 @@ import {
   type RawSpotState,
 } from '@bulwarkxyz/guard-core';
 import type { BuilderWire, Hex, Network, NonceManager } from '@bulwarkxyz/hyperliquid';
-import type { AuditInput } from '@bulwarkxyz/store';
+import type { AuditInput, PendingCommand } from '@bulwarkxyz/store';
 import { formatRun, type Notifier } from './notify.js';
 import type { GuardStore } from '@bulwarkxyz/store';
 
@@ -38,6 +38,7 @@ export interface EngineDeps {
   openOrders(user: Hex, dex: string): Promise<OpenOrder[]>;
   abstraction(user: Hex): Promise<string>;
   signerFor(user: Hex): Promise<GuardedSigner>;
+  commandSignerFor(user: Hex): Promise<CommandSigner>;
   /** Builder field from config (null while the mainnet switch is off). */
   builder: BuilderWire | null;
   now(): number;
@@ -276,6 +277,46 @@ export class GuardEngine {
       });
     }
     return records;
+  }
+
+  /** Carries out a command the user signed (the API verified the signature before queueing it). */
+  async command(cmd: PendingCommand): Promise<Record<string, unknown>> {
+    const account = cmd.account as Hex;
+    const now = this.deps.now();
+    const signer = await this.deps.commandSignerFor(account);
+    const signed = { kind: cmd.command, minutes: cmd.minutes, issuedAt: cmd.issuedAt, verified: true } as const;
+    if (cmd.command === 'stop') {
+      const c = this.entry(account);
+      const open = await this.openOrders(account, c);
+      const mine = (await this.deps.store.guardOrders(account)).filter((o) => open.some((x) => x.oid === o.oid));
+      const wire = stopCancels(mine.map((o) => ({ asset: (this.deps.assets.get(o.coin) as { assetId: number }).assetId, oid: o.oid })));
+      if (!wire) return { cancelled: 0 };
+      const nonce = this.deps.nonces.next(signer.address);
+      const sig = await signer.signStopCancel({ kind: 'stop', issuedAt: cmd.issuedAt, verified: true }, wire, new Set(mine.map((o) => o.oid)), nonce, now);
+      const res = await this.deps.exchange.send({ action: wire, nonce, signature: sig });
+      if (res.ok) await this.deps.store.removeGuardOrders(account, mine.map((o) => o.oid));
+      c.openOrders = undefined;
+      await this.audit({ account, at: now, kind: 'command', why: 'Kill switch', what: `Cancelled ${mine.length} guard order(s)${res.ok ? '' : `: ${res.error}`}`, proof: { statuses: res.statuses } });
+      return { cancelled: res.ok ? mine.length : 0, error: res.error ?? null };
+    }
+    if (cmd.command === 'unwind') {
+      const confirmed = await this.deps.store.policy(account);
+      const c = this.entry(account);
+      if (!c.stateAt) return { error: 'no account state yet' };
+      const snapshot = this.snapshot(account, c);
+      const marks = Object.fromEntries([...coinsOf(c)].flatMap((coin) => (this.marks.has(coin) ? [[coin, (this.marks.get(coin) as { px: number }).px]] : [])));
+      const steps = planUnwind({ ...signed, kind: 'unwind' }, snapshot, marks, confirmed?.policy.execution.maxSlippagePct ?? 1);
+      const results: Array<Record<string, unknown>> = [];
+      for (const step of steps) {
+        const nonce = this.deps.nonces.next(signer.address);
+        const sig = await signer.signUnwindStep({ ...signed, kind: 'unwind' }, step, snapshot, nonce, this.deps.now());
+        const res = await this.deps.exchange.send({ action: step.wire, nonce, signature: sig });
+        results.push({ coin: step.coin, type: step.wire.type, ok: res.ok, error: res.error ?? null });
+      }
+      await this.audit({ account, at: now, kind: 'command', why: 'Panic unwind you signed', what: `Closing ${steps.length} position(s), reduce-only`, proof: { results } });
+      return { steps: results };
+    }
+    return {};
   }
 
   private async backstops(

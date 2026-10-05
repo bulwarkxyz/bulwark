@@ -73,6 +73,11 @@ export class CommandSigner {
     private readonly isMainnet: boolean,
   ) {}
 
+  /** The agent key's address: nonces are tracked per signing key. */
+  get address(): Hex {
+    return this.signer.address;
+  }
+
   private async signL1(wire: L1Action, nonce: number): Promise<Signature> {
     return this.signer.signDigest(digestOf(l1TypedData(l1ActionHash({ action: wire, nonce }), this.isMainnet)));
   }

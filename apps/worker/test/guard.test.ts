@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { GuardedSigner } from '@bulwarkxyz/executor';
+import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, maintenanceMargin, policyHash, type Policy, type RawClearinghouseState } from '@bulwarkxyz/guard-core';
 import { NonceManager, parseExchangeResponse, type Hex, type SignedRequest } from '@bulwarkxyz/hyperliquid';
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
@@ -71,6 +71,7 @@ function setup(user: Partial<GuardUser> = {}) {
     openOrders: async () => [],
     abstraction: async () => 'default',
     signerFor: async () => new GuardedSigner(new LocalDigestSigner(`0x${'5a'.repeat(32)}`), false),
+    commandSignerFor: async () => new CommandSigner(new LocalDigestSigner(`0x${'5a'.repeat(32)}`), false),
     builder: null,
     now: () => t,
   });
@@ -146,5 +147,26 @@ describe('guard engine', () => {
     expect(sent).toEqual([]);
     expect(store.audit.raw(ACCOUNT).filter((e) => e.kind === 'rejected').every((e) => /I4/.test(e.what))).toBe(true);
     expect(store.audit.raw(ACCOUNT).some((e) => e.kind === 'rejected')).toBe(true);
+  });
+
+
+  it('kill switch command cancels only the guard’s own resting orders', async () => {
+    await feed(91.5);
+    const mine = await store.guardOrders(ACCOUNT);
+    expect(mine).toHaveLength(1);
+    (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = async () => [{ coin: 'xyz:CL', oid: mine[0]!.oid, side: 'A', reduceOnly: true, isTrigger: true }, { coin: 'xyz:CL', oid: 999, side: 'A', reduceOnly: true, isTrigger: true }];
+    sent = [];
+    const r = await engine.command({ id: 1, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t });
+    expect(r).toMatchObject({ cancelled: 1 });
+    expect(sent[0]!.action).toEqual({ type: 'cancel', cancels: [{ a: assets.get('xyz:CL')!.assetId, o: mine[0]!.oid }] });
+    expect(await store.guardOrders(ACCOUNT)).toEqual([]);
+  });
+
+  it('panic unwind closes positions reduce-only', async () => {
+    await feed(91.5);
+    sent = [];
+    const r = (await engine.command({ id: 2, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t })) as { steps: Array<{ ok: boolean }> };
+    expect(r.steps).toHaveLength(1);
+    expect(sent[0]!.action).toMatchObject({ type: 'order', orders: [{ b: false, r: true, s: '0.24' }] }); // $22 < $100 → IOC close
   });
 });

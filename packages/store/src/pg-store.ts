@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { Policy } from '@bulwarkxyz/guard-core';
+import { Policy, type CommandName } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { Baseline, ConfirmedPolicy, GuardOrder, GuardStore, GuardUser } from './store.js';
+import type { ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardUser, PendingCommand } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -34,7 +34,7 @@ class PgAudit implements AuditStore {
   }
 }
 
-export class PgStore implements GuardStore {
+export class PgStore implements ApiStore {
   readonly audit: AuditStore;
   constructor(private readonly sql: Sql) {
     this.audit = new PgAudit(sql);
@@ -49,12 +49,16 @@ export class PgStore implements GuardStore {
       telegramChatId: (r.telegram_chat_id as string | null) ?? null,
       killSwitch: r.kill_switch as boolean,
       builderApproved: r.builder_approved as boolean,
+      agentAddress: (r.agent_address as Hex | null) ?? null,
+      residency: (r.residency as string | null) ?? null,
+      citizenship: (r.citizenship as string | null) ?? null,
     };
   }
   async upsertUser(u: GuardUser, now: number): Promise<void> {
-    await this.sql`insert into users (account, agent_key_ref, region, telegram_chat_id, kill_switch, builder_approved, created_at)
-      values (${this.k(u.account)}, ${u.agentKeyRef}, ${u.region}, ${u.telegramChatId}, ${u.killSwitch}, ${u.builderApproved}, ${now})
-      on conflict (account) do update set agent_key_ref = excluded.agent_key_ref, region = excluded.region, telegram_chat_id = excluded.telegram_chat_id,
+    await this.sql`insert into users (account, agent_key_ref, agent_address, region, residency, citizenship, telegram_chat_id, kill_switch, builder_approved, created_at)
+      values (${this.k(u.account)}, ${u.agentKeyRef}, ${u.agentAddress ?? null}, ${u.region}, ${u.residency ?? null}, ${u.citizenship ?? null}, ${u.telegramChatId}, ${u.killSwitch}, ${u.builderApproved}, ${now})
+      on conflict (account) do update set agent_key_ref = excluded.agent_key_ref, agent_address = excluded.agent_address, region = excluded.region,
+        residency = excluded.residency, citizenship = excluded.citizenship, telegram_chat_id = excluded.telegram_chat_id,
         kill_switch = excluded.kill_switch, builder_approved = excluded.builder_approved`;
   }
   async users() {
@@ -110,6 +114,21 @@ export class PgStore implements GuardStore {
   }
   async addAction(account: string, at: number) {
     await this.sql`insert into actions (account, at) values (${this.k(account)}, ${at})`;
+  }
+  async setKillSwitch(account: string, on: boolean) {
+    await this.sql`update users set kill_switch = ${on} where account = ${this.k(account)}`;
+  }
+  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string }, now: number) {
+    const [row] = await this.sql`insert into commands (account, command, minutes, issued_at, signature, created_at)
+      values (${this.k(c.account)}, ${c.command}, ${c.minutes}, ${c.issuedAt}, ${c.signature}, ${now}) returning id`;
+    return Number(row?.id);
+  }
+  async pendingCommands(): Promise<PendingCommand[]> {
+    const rows = await this.sql`select id, account, command, minutes, issued_at from commands where done_at is null order by created_at`;
+    return rows.map((r) => ({ id: Number(r.id), account: r.account, command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at) }));
+  }
+  async finishCommand(id: number, result: Record<string, unknown>, now: number) {
+    await this.sql`update commands set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;
   }
   async createTelegramCode(code: string, account: string, expiresAt: number) {
     await this.sql`insert into telegram_links (code, account, expires_at) values (${code}, ${this.k(account)}, ${expiresAt})`;
