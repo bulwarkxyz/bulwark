@@ -115,3 +115,11 @@ describe('ids', () => {
     expect(nextRuleId({ ...policy, rules: [...policy.rules, { id: 'ai-2', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }] })).toBe('ai-3');
   });
 });
+
+describe('top-up wording', () => {
+  it('says the exact amount, never "up to"', () => {
+    const text = describeRule({ when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'topUp', maxUsdc: 150 }] });
+    expect(text).toBe('When the buffer falls below 2.5×, move 150 USDC from your idle balance into the pool.');
+    expect(text).not.toMatch(/up to/i);
+  });
+});

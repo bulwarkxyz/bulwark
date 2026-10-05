@@ -56,6 +56,27 @@ describe('simulate', () => {
     expect(r.liquidatedAt).toBeNull();
   });
 
+  it('regression: a top-up sized only to the line (old behaviour) is liquidated; the full typed amount (new) survives', () => {
+    // The case the simulator found on 2026-10-05: "below 2.5×, move 150 USDC", price falling 12%.
+    const snap = standardAccount({ xyz: { positions: [{ coin: CL, size: 10, mark: 90, leverage: 10 }], crossEquity: 100 } }, 200);
+    const path = drop(12);
+    // Old sizing, recreated exactly: at the first breach move only the gap to the line, rounded down to cents.
+    const breach = path.findIndex((m) => assessRisk(snap, m).worst!.buffer < 2.5);
+    const at = assessRisk(snap, path[breach]).worst!;
+    const oldAmount = Math.floor((2.5 * at.maintenance - at.equity) * 100) / 100;
+    expect(oldAmount).toBeGreaterThan(0);
+    expect(oldAmount).toBeLessThan(1);
+    const old = simulate({ policy: policy([{ id: 'stage-1', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'topUp', maxUsdc: oldAmount }] }]), snapshot: snap, path, now: NOW, feeRate: 0 });
+    expect(old.liquidatedAt).not.toBeNull(); // the rule stayed latched just under the line; the fall continued
+    expect(old.steps.flatMap((s) => s.actions).filter((a) => a.type === 'transfer')).toHaveLength(1);
+
+    const now = simulate({ policy: policy([{ id: 'stage-1', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'topUp', maxUsdc: 150 }] }]), snapshot: snap, path, now: NOW, feeRate: 0 });
+    const moved = now.steps.flatMap((s) => s.actions).filter((a) => a.type === 'transfer');
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({ amount: 150 }); // the full typed amount, once
+    expect(now.liquidatedAt).toBeNull();
+  });
+
   it('rules outside their window do not fire', () => {
     const p = policy([{ id: 'w', window: 'weekend', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'close', target: { kind: 'all' } }] }]);
     const weekday = simulate({ policy: p, snapshot: account(), path: drop(12), now: NOW, feeRate: 0 });

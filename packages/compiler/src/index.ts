@@ -44,6 +44,8 @@ If the user names a time span not in this list, ask.
 
 Markets: use the exact coin names from the market list in the message. If a market is unclear, ask.
 
+A top-up moves exactly the amount the user names, once each time its trigger is crossed; "up to 500 USDC" means 500.
+
 Targets: "my biggest position" or "the position using the most margin" is first_position; "my worst position" is worst_pnl; "everything" is all.`;
 
 export interface MarketRef {

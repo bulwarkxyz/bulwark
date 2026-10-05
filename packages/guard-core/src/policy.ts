@@ -23,7 +23,7 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('close'), target: Target }),
   z.object({ kind: z.literal('reduceToBuffer'), buffer: z.number().gt(1) }).describe('Trim the pool until its buffer is back at this line.'),
   z.object({ kind: z.literal('reduceToLeverage'), market: Market, leverage: z.number().gt(0) }),
-  z.object({ kind: z.literal('topUp'), maxUsdc: z.number().gt(0) }),
+  z.object({ kind: z.literal('topUp'), maxUsdc: z.number().gt(0) }).describe('Move this many USDC of idle balance into the pool, once each time the trigger is crossed (all of it, or what is available).'),
   z.object({ kind: z.literal('cancelOpeningOrders') }),
   z.object({ kind: z.literal('alert') }),
 ]);

@@ -45,7 +45,7 @@ export function describeAction(a: Action): string {
     case 'reduceToLeverage':
       return `trim ${coin(a.market)} to ${a.leverage}× leverage`;
     case 'topUp':
-      return `move in up to ${a.maxUsdc} USDC of your idle balance`;
+      return `move ${a.maxUsdc} USDC from your idle balance into the pool`;
     case 'cancelOpeningOrders':
       return 'cancel orders that would add to a position';
     case 'alert':

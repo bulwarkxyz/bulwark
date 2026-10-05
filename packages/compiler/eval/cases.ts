@@ -26,7 +26,7 @@ export const CASES: Case[] = [
   { group: 'normal', text: 'If my buffer drops below 2x, alert me', expect: (r) => when(r).kind === 'buffer' && when(r).below === 2 && has(r, 'alert') },
   { group: 'normal', text: 'When buffer is under 1.5x close everything', expect: (r) => when(r).below === 1.5 && act(r).kind === 'close' && (act(r).target as { kind: string }).kind === 'all' },
   { group: 'normal', text: 'Below 2.5x buffer, trim until I am back at 3x', expect: (r) => when(r).below === 2.5 && act(r).kind === 'reduceToBuffer' && act(r).buffer === 3 },
-  { group: 'normal', text: 'If buffer goes under 2x, move in up to 500 USDC from my idle balance', expect: (r) => when(r).below === 2 && act(r).kind === 'topUp' && act(r).maxUsdc === 500 },
+  { group: 'normal', text: 'If buffer goes under 2x, move 500 USDC from my idle balance', expect: (r) => when(r).below === 2 && act(r).kind === 'topUp' && act(r).maxUsdc === 500 },
   { group: 'normal', text: 'If buffer falls below 1.8x, cut my biggest position by 25%', expect: (r) => when(r).below === 1.8 && act(r).kind === 'reduce' && act(r).fraction === 0.25 && (act(r).target as { kind: string }).kind === 'first_position' },
   { group: 'normal', text: 'Over the weekend, if CL drops 8%, cut my CL position by half', expect: (r) => r.window === 'weekend' && when(r).kind === 'priceMove' && when(r).market === 'xyz:CL' && when(r).movePct === 8 && act(r).fraction === 0.5 },
   { group: 'normal', text: 'Overnight, if gold falls 5% close my gold position', expect: (r) => r.window === 'overnight' && when(r).market === 'xyz:GOLD' && when(r).direction === 'down' && when(r).movePct === 5 && act(r).kind === 'close' },
