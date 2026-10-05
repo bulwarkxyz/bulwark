@@ -83,6 +83,8 @@ export interface SimInput {
    * only when the mark is back within its limit. Re-placed `delaySteps` after positions or latches change.
    */
   backstops?: boolean;
+  /** How the backstop is priced in pools with several positions (default 'single'). */
+  backstopPricing?: 'single' | 'together';
   /**
    * EXPERIMENTAL: every buffer stage as a resting reduce-only market trigger (planStageTriggers),
    * fired by the exchange on the mark. Fill model (conservative): at the mark of the first round at or
@@ -176,7 +178,7 @@ export function simulate(input: SimInput): SimResult {
   const resync = (marks: Marks) => {
     const fresh: Rest[] = [];
     if (input.stageTriggers) for (const t of planStageTriggers(policy, s, marks, { latched, gapPct: input.stageTriggers.planGapPct ?? input.stageTriggers.gapPct, now })) fresh.push({ kind: 'stage', ...t });
-    if (input.backstops) for (const b of planBackstops(policy, s, marks, []).place) fresh.push({ kind: 'backstop', coin: b.coin, isBuy: b.isBuy, size: b.size, triggerPx: b.triggerPx, limitPx: b.limitPx });
+    if (input.backstops) for (const b of planBackstops(policy, s, marks, [], input.backstopPricing ?? 'single').place) fresh.push({ kind: 'backstop', coin: b.coin, isBuy: b.isBuy, size: b.size, triggerPx: b.triggerPx, limitPx: b.limitPx });
     exchange = [...exchange.filter((r) => r.triggered), ...fresh]; // a triggered limit is already on the book
     resyncs++;
   };
@@ -206,10 +208,12 @@ export function simulate(input: SimInput): SimResult {
         feesPaid += fill(s, a.coin, (a.isBuy ? 1 : -1) * size, a.limitPx, m, feeRate);
         events.push({ step: i, kind: 'server', coin: a.coin, size, px: a.limitPx, mark: m });
         settle(a, size, i);
+        scheduleResync(i); // positions changed: the server re-prices its resting orders (late, like everything it sends)
       } else if (a.type === 'transfer') {
         const src = s.idle.find((x) => x.id === a.source);
         const amount = Math.min(a.amount, Math.max(0, src?.availableAtSnapshot ?? a.amount));
         if (amount > 0) feesPaid += apply(s, { ...a, amount }, marks, feeRate, resting);
+        if (amount > 0) scheduleResync(i);
       } else {
         feesPaid += apply(s, a, marks, feeRate, resting);
       }

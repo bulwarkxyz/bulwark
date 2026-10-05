@@ -29,7 +29,20 @@ Your rules set lines on the buffer and what happens at each. Typical actions:
 - **Close** a position or everything.
 - **Cancel** your orders that would add to a position.
 
-A stage acts once each time its line is crossed, then stays quiet until the buffer recovers above the line. If its order does not fill, it is retried (see below). Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
+<Callout type="info" title="Rolling out">
+  This choice reaches the app with its next update. Until then, every stage acts every time its line is crossed, as before.
+</Callout>
+
+What a stage does after it has acted is **your choice, for each stage**. There is no default, and a stage can't be saved without one:
+
+- **Once per fall:** it acts once when its line is crossed, then leaves the rest of the fall to the backstop. It acts again only after the market recovers to where it was when the stage acted, or the positions it acted on are gone. Its own trim lifting your buffer back above the line does not count as a recovery.
+- **Every time the line is crossed:** it acts again each time your buffer comes back above the line and falls through it, including when the buffer only came back because of the guard's own trim.
+
+You can also set a limit: **at most N actions in H hours**, both numbers yours. When the limit is reached, the stage holds and you get one alert; your backstop still stands. The [replays](/backtests#once-per-fall-or-every-time) show both choices on the same days.
+
+Rules signed before this choice existed keep running as they did (every time the line is crossed) until you choose. The app and an alert ask you to choose, and the new version needs your signature.
+
+If a stage's order does not fill, it is retried (see below). Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
 
 ## When an order does not fill
 
@@ -52,7 +65,13 @@ Rules can also watch account drawdown, a market's price move, or a position's le
 
 ## Backstops on the exchange
 
-For every guarded position, the guard keeps a **reduce-only stop order resting on Hyperliquid** at the price where the pool would reach your lowest line. It triggers on Hyperliquid's mark price even if Bulwark is down. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone.
+For every guarded position, the guard keeps a **reduce-only stop order resting on Hyperliquid** at the price where the pool would reach your lowest line. It triggers on Hyperliquid's mark price even if Bulwark is down.
+
+**When a pool holds several positions,** the stop is priced as if **every position in that pool moves against you at once**, by the same percentage: longs fall and shorts rise together. Each stop is placed at the earlier of that price and the price where that position alone would take the pool to the line. So it fires no later than the line would be crossed if they move together. Priced one position at a time, it could sit far too late. With two equal positions falling together, the pool reaches a 2× line after a 5.8% fall, but each single-position stop would sit about 11.5% down, where the pool is already gone.
+
+**The cost:** if only one position falls, its stop fires earlier than strictly needed, and you exit sooner than the line alone would require. The [replays](/backtests#backstops-with-several-positions) show both.
+
+The stop is re-priced whenever your positions, your margin (deposits, withdrawals, transfers, funding) or your rules change, and on the guard's regular sync once a minute. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone. It is being enabled on testnet first.
 
 ## When the guard holds off
 

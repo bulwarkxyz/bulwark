@@ -1,0 +1,24 @@
+---
+title: Sources
+description: Where the facts in these docs come from, with the date each was checked.
+---
+
+## Hyperliquid
+
+- [Margining](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margining), [liquidations](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations), [margin tiers](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margin-tiers) and [account abstraction modes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/account-abstraction-modes): the margin model the guard reproduces.
+- [TP/SL orders](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/take-profit-and-stop-loss-orders-tp-sl): stops trigger on the mark price; market TP/SL orders have a 10% slippage tolerance. Checked 5 October 2026.
+- [Rate limits and user limits](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits): open-order limits and address-based request limits. Checked 5 October 2026.
+- [API wallets](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/nonces-and-api-wallets): agent keys can trade but never withdraw.
+
+## trade.xyz (the xyz dex)
+
+- [Specification index](https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md): each market's specification, including off-hours price bounds. Checked 5 October 2026.
+- [Discovery bounds](https://docs.trade.xyz/perpetuals/mechanics/discovery-bounds.md): how prices are bounded outside the home market's hours. Checked 5 October 2026.
+
+## Price data
+
+- [Hydromancer](https://hydromancer.xyz): mark-price history for the [replays](/backtests) (`perpPriceHistoryByTime`, `oraclePriceHistoryByTime`). A data source only.
+
+## Key storage
+
+- [AWS KMS features](https://aws.amazon.com/kms/features/): KMS keys are generated in, and never leave unencrypted, HSMs validated to FIPS 140-3 Security Level 3. Checked 5 October 2026.

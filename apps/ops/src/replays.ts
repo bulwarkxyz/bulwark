@@ -13,10 +13,32 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildAssetIndex, dexCollateral, simulate, type Marks, type Policy, type RawPerpDexs, type RawPerpMeta, type SimInput } from '@bulwarkxyz/guard-core';
+import { buildAssetIndex, buildSnapshot, dexCollateral, maintenanceMargin, simulate, tiersForPosition, type AssetIndex, type Marks, type Policy, type RawClearinghouseState, type RawPerpDexs, type RawPerpMeta, type SimInput } from '@bulwarkxyz/guard-core';
 import { CASES, EQUITY, FEE_RATE, LEVERAGES, POLICY, ROOT, SLIPPAGE_PCT, STAGE_TEXT, account, hydroSeries, info, largestHourDrop } from './replay-data.js';
 
 const DELAYS = [0, 1, 5];
+
+/** Two cross longs on the xyz dex, each half of `lev` × equity in notional. */
+function account2(assets: AssetIndex, collateral: Map<string, number>, a: string, pa: number, b: string, pb: number, lev: number) {
+  const legs = [[a, pa], [b, pb]] as const;
+  const positions = legs.map(([coin, px]) => {
+    const asset = assets.get(coin)!;
+    const size = Math.floor(((EQUITY * lev) / 2 / px) * 10 ** asset.szDecimals) / 10 ** asset.szDecimals;
+    return { coin, px, size, asset };
+  });
+  const ntl = positions.reduce((s, p) => s + p.size * p.px, 0);
+  const mm = positions.reduce((s, p) => s + maintenanceMargin(tiersForPosition(p.asset.tiers, p.asset.maxLeverage), p.size * p.px), 0);
+  const sum = { accountValue: String(EQUITY), totalNtlPos: '0', totalRawUsd: String(EQUITY - ntl), totalMarginUsed: '0' };
+  const state: RawClearinghouseState = {
+    marginSummary: sum,
+    crossMarginSummary: sum,
+    crossMaintenanceMarginUsed: String(mm),
+    withdrawable: '0',
+    assetPositions: positions.map((p) => ({ type: 'oneWay', position: { coin: p.coin, szi: String(p.size), leverage: { type: 'cross', value: lev }, entryPx: String(p.px), positionValue: String(p.size * p.px), unrealizedPnl: '0', liquidationPx: null, marginUsed: String((p.size * p.px) / lev), maxLeverage: p.asset.maxLeverage } })),
+    time: 0,
+  };
+  return buildSnapshot({ abstraction: 'default', dexStates: { xyz: state }, spot: { balances: [] }, assets, dexCollateral: collateral });
+}
 
 /** Days picked by find-ordinary-days.ts (rule in that file), replayed over the whole UTC day. */
 const ORDINARY = [
@@ -63,6 +85,13 @@ const sweepText = (lines: readonly number[], f: number) => `below ${lines[0]}× 
 
 type Outcome = { liquidated: boolean; liquidatedAt: string | null; allLost: boolean; equityAtEnd: number | null; keptPct: number | null; orders: number; triggerFills: number; triggerMisses: number; missed: number; fees: number };
 const cell = (o: Outcome) => (o.liquidated ? 'L' : o.allLost ? '0 (all lost)' : `${o.keptPct}%`);
+
+/** Two-position accounts for the backstop-pricing comparison: the crash day's market and a related one. */
+const PAIRS = [
+  { id: 'pair-oil-brent', title: 'Oil and Brent, 23 March 2026', a: 'xyz:CL', b: 'xyz:BRENTOIL', start: '2026-03-22T00:00:00Z', end: '2026-03-25T00:00:00Z' },
+  { id: 'pair-silver-gold', title: 'Silver and gold, 30 January 2026', a: 'xyz:SILVER', b: 'xyz:GOLD', start: '2026-01-29T00:00:00Z', end: '2026-02-01T00:00:00Z' },
+  { id: 'pair-skhx-smsn', title: 'SK hynix and Samsung, 27 July 2026', a: 'xyz:SKHX', b: 'xyz:SMSN', start: '2026-07-26T00:00:00Z', end: '2026-07-29T00:00:00Z' },
+];
 
 async function main() {
   const perpDexs = (await info.perpDexs()) as RawPerpDexs;
@@ -149,6 +178,43 @@ async function main() {
     return out;
   };
 
+  // Backstop pricing for pools with several positions: before (each position alone) and after (together).
+  const pairs: Array<Record<string, unknown>> = [];
+  for (const pr of PAIRS) {
+    const sa = await hydroSeries({ id: pr.id.replace('pair-', 'leg-a-'), coin: pr.a, start: pr.start, end: pr.end });
+    const sb = await hydroSeries({ id: pr.id.replace('pair-', 'leg-b-'), coin: pr.b, start: pr.start, end: pr.end });
+    if (!sa || !sb) {
+      pairs.push({ case: pr.id, title: pr.title, error: 'no mark data for one of the markets' });
+      continue;
+    }
+    // Align on the first market's rounds, carrying the second market's last price forward.
+    let j = 0;
+    const path: Marks[] = sa.points.map((p) => {
+      while (j + 1 < sb.points.length && sb.points[j + 1]!.t <= p.t) j++;
+      return { [pr.a]: p.px, [pr.b]: sb.points[j]!.px };
+    });
+    const at = (i: number | null) => (i === null ? null : new Date(sa.points[i]!.t).toISOString());
+    const maxLev = Math.min(assets.get(pr.a)!.maxLeverage, assets.get(pr.b)!.maxLeverage);
+    const rows = LEVERAGES.filter((l) => l <= maxLev).map((lev) => {
+      const snapshot = account2(assets, collateral, pr.a, path[0]![pr.a]!, pr.b, path[0]![pr.b]!, lev);
+      const one = (pricing: 'single' | 'together', delayMin: number) => {
+        const r = simulate({ policy: POLICY, snapshot, path, now: sa.points[0]!.t, feeRate: FEE_RATE, delaySteps: Math.ceil(delayMin / sa.stepMinutes), stepMs: sa.stepMinutes * 60_000, backstops: true, backstopPricing: pricing });
+        sims++;
+        const allLost = r.liquidatedAt === null && r.final.accountValue <= 0;
+        return { liquidated: r.liquidatedAt !== null, liquidatedAt: at(r.liquidatedAt), allLost, keptPct: r.liquidatedAt !== null ? null : allLost ? 0 : +((r.final.accountValue / EQUITY) * 100).toFixed(1), equityAtEnd: r.liquidatedAt !== null ? null : +Math.max(0, r.final.accountValue).toFixed(2), orders: 0, triggerFills: r.triggerFills, triggerMisses: 0, missed: r.missedOrders, fees: +r.feesPaid.toFixed(2) };
+      };
+      const ng = simulate({ policy: { ...POLICY, rules: [] }, snapshot, path, now: sa.points[0]!.t, feeRate: FEE_RATE });
+      return {
+        leverage: lev,
+        noGuard: ng.unguardedLiquidatedAt !== null ? { liquidated: true, at: at(ng.unguardedLiquidatedAt) } : { liquidated: false, keptPct: +((ng.final.accountValue / EQUITY) * 100).toFixed(1) },
+        single: DELAYS.map((m) => one('single', m)),
+        together: DELAYS.map((m) => one('together', m)),
+      };
+    });
+    const fall = (pts: Array<{ px: number }>) => +((Math.min(...pts.map((p) => p.px)) / pts[0]!.px - 1) * 100).toFixed(2);
+    pairs.push({ case: pr.id, title: pr.title, markets: [pr.a, pr.b], resolution: [sa.resolution, sb.resolution], lowVsStartPct: [fall(sa.points), fall(sb.points)], largestHourDrop: [largestHourDrop(sa.points), largestHourDrop(sb.points)], rows });
+  }
+
   const crash = await study(CASES.map((c) => ({ id: c.id, title: c.title, coin: c.coin, start: c.start, end: c.end })), true);
   const ordinary = await study(ORDINARY, true);
 
@@ -167,7 +233,7 @@ async function main() {
     fees: `${FEE_RATE * 1e4} bps per fill, assumed`,
     notModelled: 'Funding, order-book depth and queue position, partial fills, Hyperliquid outages, other traders reacting, open-order and rate limits',
   };
-  const report = { ranAt, priceKind: 'mark (Hydromancer)', assumptions, crash, ordinary };
+  const report = { ranAt, priceKind: 'mark (Hydromancer)', assumptions, crash, ordinary, pairs };
   const stem = `replays-${ranAt.slice(0, 10)}`;
   mkdirSync(join(ROOT, 'evidence'), { recursive: true });
   writeFileSync(join(ROOT, 'evidence', `${stem}.json`), JSON.stringify(report, null, 1));
@@ -221,6 +287,16 @@ async function main() {
       const rc = c.repeatCompare as Array<{ leverage: number; every: Outcome[]; once: Outcome[] }> | undefined;
       if (!rc) return [];
       return [`### ${c.title}`, '', '| Leverage | On time: every / once | Server 5 min late: every / once | Orders on time: every / once |', '|---|---|---|---|', ...rc.map((r) => `| ${r.leverage}× | ${cell(r.every[0]!)} / ${cell(r.once[0]!)} | ${cell(r.every[1]!)} / ${cell(r.once[1]!)} | ${r.every[0]!.orders} / ${r.once[0]!.orders} |`), ''];
+    }),
+    '## Backstop pricing with two positions in one pool: each alone (before) / together (after)',
+    '',
+    'Two cross longs, half the exposure each; example settings; current guard (server + backstop). Cells: before / after.',
+    '',
+    ...pairs.flatMap((c) => {
+      if (c.error) return [`### ${c.title}`, '', String(c.error), ''];
+      const rows = c.rows as Array<{ leverage: number; noGuard: { liquidated: boolean; keptPct?: number }; single: Outcome[]; together: Outcome[] }>;
+      const h = c.largestHourDrop as Array<{ pct: number }>;
+      return [`### ${c.title}`, '', `${(c.markets as string[]).join(' + ')}; low vs start ${(c.lowVsStartPct as number[]).join('% / ')}%; largest fall within an hour ${h.map((x) => x.pct).join('% / ')}%.`, '', '| Leverage | No guard | On time | Server 1 min late | Server 5 min late |', '|---|---|---|---|---|', ...rows.map((r) => `| ${r.leverage}× | ${r.noGuard.liquidated ? 'L' : `${r.noGuard.keptPct}%`} | ${[0, 1, 2].map((k) => `${cell(r.single[k]!)} / ${cell(r.together[k]!)}`).join(' | ')} |`), ''];
     }),
     '## Ordinary bad days, example settings',
     '',

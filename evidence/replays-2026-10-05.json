@@ -1,5 +1,5 @@
 {
- "ranAt": "2026-10-05T12:03:18.552Z",
+ "ranAt": "2026-10-05T12:17:08.771Z",
  "priceKind": "mark (Hydromancer)",
  "assumptions": {
   "account": "A cross long on the xyz dex, opened at the first mark of each window, with 10,000 USDC of equity and nothing else in the account",
@@ -8273,16 +8273,16 @@
        "fees": 40.73
       },
       {
-       "liquidated": true,
-       "liquidatedAt": "2026-07-27T23:00:27.675Z",
+       "liquidated": false,
+       "liquidatedAt": null,
        "allLost": false,
-       "equityAtEnd": null,
-       "keptPct": null,
+       "equityAtEnd": 1761.33,
+       "keptPct": 17.6,
        "orders": 4,
-       "triggerFills": 0,
+       "triggerFills": 1,
        "triggerMisses": 0,
-       "missed": 1,
-       "fees": 25.48
+       "missed": 2,
+       "fees": 41.31
       }
      ]
     }
@@ -24836,6 +24836,1011 @@
        "triggerMisses": 0,
        "missed": 0,
        "fees": 15.95
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pairs": [
+  {
+   "case": "pair-oil-brent",
+   "title": "Oil and Brent, 23 March 2026",
+   "markets": [
+    "xyz:CL",
+    "xyz:BRENTOIL"
+   ],
+   "resolution": [
+    "accepted mark prices, 85,311 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime",
+    "accepted mark prices, 85,311 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime"
+   ],
+   "lowVsStartPct": [
+    -14.11,
+    -15.44
+   ],
+   "largestHourDrop": [
+    {
+     "pct": -15.4,
+     "from": "2026-03-23T10:28:03.972Z",
+     "to": "2026-03-23T11:09:34.024Z"
+    },
+    {
+     "pct": -17.01,
+     "from": "2026-03-23T10:28:10.040Z",
+     "to": "2026-03-23T11:09:31.054Z"
+    }
+   ],
+   "rows": [
+    {
+     "leverage": 3,
+     "noGuard": {
+      "liquidated": false,
+      "keptPct": 71.5
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 71.5,
+       "equityAtEnd": 7145.51,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "noGuard": {
+      "liquidated": false,
+      "keptPct": 52.4
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 52.4,
+       "equityAtEnd": 5242.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-03-23T11:07:13.099Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 10.5,
+       "equityAtEnd": 1047.41,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 36.78
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:07:13.099Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:07:13.099Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 10.5,
+       "equityAtEnd": 1047.41,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 36.78
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 18.2,
+       "equityAtEnd": 1815.31,
+       "orders": 0,
+       "triggerFills": 2,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.34
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 18.2,
+       "equityAtEnd": 1815.31,
+       "orders": 0,
+       "triggerFills": 2,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 41.34
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-03-23T11:05:52.424Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 9.3,
+       "equityAtEnd": 925.35,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 82.23
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 4,
+       "equityAtEnd": 404.17,
+       "orders": 0,
+       "triggerFills": 2,
+       "triggerMisses": 0,
+       "missed": 3,
+       "fees": 85.72
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-03-23T11:06:52.420Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 34.49
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 9.3,
+       "equityAtEnd": 925.35,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 82.23
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 22.9,
+       "equityAtEnd": 2287.7,
+       "orders": 0,
+       "triggerFills": 2,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.57
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 23,
+       "equityAtEnd": 2300.65,
+       "orders": 0,
+       "triggerFills": 2,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 86.57
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "pair-silver-gold",
+   "title": "Silver and gold, 30 January 2026",
+   "markets": [
+    "xyz:SILVER",
+    "xyz:GOLD"
+   ],
+   "resolution": [
+    "deployer-submitted mark inputs (not the accepted mark), 85,513 rounds, one about every 3.0 s, from Hydromancer oraclePriceHistoryByTime",
+    "deployer-submitted mark inputs (not the accepted mark), 85,513 rounds, one about every 3.0 s, from Hydromancer oraclePriceHistoryByTime"
+   ],
+   "lowVsStartPct": [
+    -37.21,
+    -15.11
+   ],
+   "largestHourDrop": [
+    {
+     "pct": -17.74,
+     "from": "2026-01-30T17:26:17.622Z",
+     "to": "2026-01-30T18:22:35.868Z"
+    },
+    {
+     "pct": -8.19,
+     "from": "2026-01-29T14:29:32.257Z",
+     "to": "2026-01-29T15:28:23.670Z"
+    }
+   ],
+   "rows": [
+    {
+     "leverage": 3,
+     "noGuard": {
+      "liquidated": false,
+      "keptPct": 40.3
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 40.3,
+       "equityAtEnd": 4033.09,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 40.3,
+       "equityAtEnd": 4033.09,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 40.3,
+       "equityAtEnd": 4033.09,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 33.4,
+       "equityAtEnd": 3341.09,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 4.56
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 33.4,
+       "equityAtEnd": 3341.09,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 4.56
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 33.4,
+       "equityAtEnd": 3341.09,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 4.56
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-30T17:42:56.598Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 1.1,
+       "equityAtEnd": 107.36,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 17.62
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 1.1,
+       "equityAtEnd": 107.36,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 17.62
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 2.3,
+       "equityAtEnd": 233.44,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 16.8
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 22.8,
+       "equityAtEnd": 2281.2,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 9.13
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 22.8,
+       "equityAtEnd": 2281.2,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 9.13
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 22.8,
+       "equityAtEnd": 2281.2,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 9.13
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-29T15:28:12.030Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 0.1,
+       "equityAtEnd": 13.36,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 40.47
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:28:12.030Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:28:12.030Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 1.2,
+       "equityAtEnd": 124.63,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 39.96
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 19.3,
+       "equityAtEnd": 1934.97,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 38.5
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 19.3,
+       "equityAtEnd": 1934.97,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 38.5
+      }
+     ]
+    },
+    {
+     "leverage": 20,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-01-29T15:16:27.133Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 0,
+       "equityAtEnd": 4.68,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 85.52
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:17:38.670Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 35.91
+      },
+      {
+       "liquidated": true,
+       "liquidatedAt": "2026-01-29T15:17:38.670Z",
+       "allLost": false,
+       "keptPct": null,
+       "equityAtEnd": null,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.91
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 0,
+       "equityAtEnd": 4.52,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 85.51
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 2.7,
+       "equityAtEnd": 271.28,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 84.21
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 2.9,
+       "equityAtEnd": 286.33,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 84.14
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "case": "pair-skhx-smsn",
+   "title": "SK hynix and Samsung, 27 July 2026",
+   "markets": [
+    "xyz:SKHX",
+    "xyz:SMSN"
+   ],
+   "resolution": [
+    "accepted mark prices, 86,386 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime",
+    "accepted mark prices, 86,386 rounds, one about every 3.0 s, from Hydromancer perpPriceHistoryByTime"
+   ],
+   "lowVsStartPct": [
+    -24.97,
+    -16.58
+   ],
+   "largestHourDrop": [
+    {
+     "pct": -19.38,
+     "from": "2026-07-27T22:01:21.649Z",
+     "to": "2026-07-27T23:01:18.654Z"
+    },
+    {
+     "pct": -5.53,
+     "from": "2026-07-28T22:11:35.613Z",
+     "to": "2026-07-28T23:10:37.500Z"
+    }
+   ],
+   "rows": [
+    {
+     "leverage": 3,
+     "noGuard": {
+      "liquidated": false,
+      "keptPct": 65
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 65,
+       "equityAtEnd": 6504.91,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 0
+      }
+     ]
+    },
+    {
+     "leverage": 5,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-07-28T22:50:53.570Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 34.3,
+       "equityAtEnd": 3426.87,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 11.42
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 48.5,
+       "equityAtEnd": 4847.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 7.09
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 48.5,
+       "equityAtEnd": 4847.57,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 7.09
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 28.5,
+       "equityAtEnd": 2845.74,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 12.84
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 28.5,
+       "equityAtEnd": 2845.74,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 12.84
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 28.5,
+       "equityAtEnd": 2845.74,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 12.84
+      }
+     ]
+    },
+    {
+     "leverage": 10,
+     "noGuard": {
+      "liquidated": true,
+      "at": "2026-07-27T14:27:48.709Z"
+     },
+     "single": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 24.2,
+       "equityAtEnd": 2416.09,
+       "orders": 0,
+       "triggerFills": 0,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 35.36
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 9.1,
+       "equityAtEnd": 914.38,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 38.58
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 10,
+       "equityAtEnd": 998.49,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 2,
+       "fees": 38.61
+      }
+     ],
+     "together": [
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 14.4,
+       "equityAtEnd": 1439.02,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 0,
+       "fees": 37.48
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 22.2,
+       "equityAtEnd": 2218.75,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 1,
+       "fees": 35.78
+      },
+      {
+       "liquidated": false,
+       "liquidatedAt": null,
+       "allLost": false,
+       "keptPct": 21.3,
+       "equityAtEnd": 2134.27,
+       "orders": 0,
+       "triggerFills": 1,
+       "triggerMisses": 0,
+       "missed": 2,
+       "fees": 35.74
       }
      ]
     }

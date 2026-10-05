@@ -76,6 +76,19 @@ describe('stage triggers (experimental)', () => {
     expect(r.triggerFills).toBe(1);
   });
 
+  it('regression: a late retry that fills re-prices the resting backstop for the smaller position', () => {
+    const p = policy([
+      { id: 'trim', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'reduce', target: { kind: 'all' }, fraction: 0.5 }], repeat: { mode: 'oncePerBreach' } },
+      { id: 'floor', when: { kind: 'buffer', below: 1.3 }, then: [{ kind: 'alert' }] },
+    ]);
+    // The stage fires at 86; its late order lands at 84, past its limit, and misses; the retry fills.
+    const path = [90, 86, 86, 86, 84, 84, 84, 84, 84, 84, 84, 84].map((m) => ({ [CL]: m }));
+    const r = simulate({ policy: p, snapshot: account(), path, now: NOW, feeRate: 0, backstops: true, delaySteps: 3 });
+    expect(r.events.map((e) => e.kind)).toEqual(['missed', 'server']);
+    // placed at the start, re-placed when the stage fired, and again after the retry filled
+    expect(r.resyncs).toBe(3);
+  });
+
   it('off by default: results are exactly as before', () => {
     const path = Array.from({ length: 60 }, (_, i) => ({ [CL]: 90 * 0.998 ** i }));
     const r = simulate({ policy: stages, snapshot: account(), path, now: NOW, feeRate: 0.00045 });

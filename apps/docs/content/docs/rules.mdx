@@ -17,6 +17,21 @@ A rule is a trigger and one or more actions, optionally limited to a fixed windo
 
 Windows are a fixed table, not numbers: **weekend** (Friday US close to Monday US open), **overnight** (US close to the next US open) and **US session** (9:30–16:00 New York time on weekdays).
 
+## Once per fall, or every time
+
+<Callout type="info" title="Rolling out">
+  This choice reaches the app with its next update. Until then, every stage acts every time its line is crossed, as before.
+</Callout>
+
+Every rule carries one more setting, which you choose and the app never pre-selects:
+
+- **Once per fall:** act once when the trigger is met, then leave the rest of the fall to the backstop. It acts again only after the market recovers to where it was when it acted.
+- **Every time:** act each time the trigger is met again, including after the guard's own trim lifted your buffer.
+
+Optionally: **at most N actions in H hours**, with both numbers typed by you. [How each behaves](/how-the-guard-works#stages).
+
+In a policy this is the rule's `repeat` field: `{ "mode": "oncePerBreach" | "everyCrossing", "limit"?: { "times": N, "perHours": H } }`. A policy version can't be signed until every rule has it.
+
 ## Every number is yours
 
 The app never pre-fills a number and never suggests one. Every line, share and amount in your rules is a number you typed.
@@ -28,6 +43,7 @@ You can write a rule in a sentence, for example *"close gold if it falls [your n
 - **What it sees:** your sentence, the market list and your current rules. No keys, and no access to the exchange.
 - **Numbers:** every number in a draft must be one you typed; otherwise the draft is refused before you see it.
 - **Only adds protection:** a draft can add a rule. It cannot change, loosen or remove an existing rule or your slippage limit. Loosening is a manual edit with its own signature.
+- **Once or every time, only from your words:** the translator sets this only if your sentence says it ("only once", "every time"). If it doesn't, you get a question back, whatever the model would have picked. A plain "once the buffer drops…" or "whenever…" doesn't count, because those usually mean "when". A limit's numbers must be ones you typed.
 - **Asks or refuses:** if a number, market or action is missing, it asks one question. If the request isn't a protective rule (raising leverage, opening positions, sending funds), it refuses.
 - **What you see:** the rule shown back to you is generated from the rule's structure, not the model's wording, so every number on screen comes from the rule.
 - **You sign it:** nothing applies until you sign the new policy version in your wallet.
