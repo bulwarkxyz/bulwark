@@ -1,0 +1,78 @@
+-- Bulwark guard worker schema. Idempotent: safe to run on every start.
+
+create table if not exists users (
+  account           text primary key,
+  agent_key_ref     text not null,
+  region            text not null check (region in ('allowed', 'guardOff')),
+  telegram_chat_id  text,
+  kill_switch       boolean not null default false,
+  builder_approved  boolean not null default false,
+  created_at        bigint not null
+);
+
+create table if not exists policies (
+  account             text not null references users (account),
+  version             integer not null,
+  body                jsonb not null,
+  hash                text not null,
+  signature           text not null,
+  signature_verified  boolean not null,
+  confirmed_at        bigint not null,
+  active              boolean not null default true,
+  primary key (account, version)
+);
+create unique index if not exists policies_one_active on policies (account) where active;
+
+create table if not exists latches (
+  account  text primary key,
+  keys     jsonb not null
+);
+
+create table if not exists baselines (
+  account  text not null,
+  rule_id  text not null,
+  body     jsonb not null,
+  primary key (account, rule_id)
+);
+
+-- Orders the guard placed itself: the only orders it may ever cancel.
+create table if not exists guard_orders (
+  account     text not null,
+  oid         bigint not null,
+  coin        text not null,
+  kind        text not null,
+  trigger_px  double precision not null,
+  size        double precision not null,
+  placed_at   bigint not null,
+  primary key (account, oid)
+);
+
+create table if not exists actions (
+  account  text not null,
+  at       bigint not null
+);
+create index if not exists actions_account_at on actions (account, at);
+
+-- Append-only, hash-chained audit log (one chain per account).
+create table if not exists audit_log (
+  account    text not null,
+  seq        integer not null,
+  at         bigint not null,
+  kind       text not null,
+  why        text not null,
+  what       text not null,
+  proof      jsonb,
+  prev_hash  text not null,
+  hash       text not null,
+  primary key (account, seq)
+);
+
+create or replace function audit_log_append_only() returns trigger as $$
+begin
+  raise exception 'audit_log is append-only';
+end
+$$ language plpgsql;
+
+drop trigger if exists audit_log_no_change on audit_log;
+create trigger audit_log_no_change before update or delete on audit_log
+  for each row execute function audit_log_append_only();
