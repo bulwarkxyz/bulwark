@@ -6,14 +6,16 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 
 /**
- * Review mode exists only to take the design-review screenshots. It works only in a development build
- * with NEXT_PUBLIC_REVIEW_MODE=1 (production builds compile it out), driven by URL parameters:
+ * Review mode exists only for design review. It is compiled in only when the build sets
+ * NEXT_PUBLIC_REVIEW_MODE=1 outside Vercel production (see next.config.mjs), driven by URL parameters:
  *   ?watch=0x…   show a public account read-only, as if connected
  *   ?rules=example   give that account example rules, labelled "Example rules" on screen
  *   ?state=empty|loading|error|closed   force a screen state
  * Nothing here can sign, send or store anything.
  */
-export const REVIEW_BUILD = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_REVIEW_MODE === '1';
+export const REVIEW_BUILD = process.env.NEXT_PUBLIC_REVIEW_MODE === '1';
+/** Present in the bundle only when review mode is compiled in; scripts/review-mode-check.mjs looks for it. */
+export const REVIEW_MARKER = REVIEW_BUILD ? 'bulwark-review-mode-compiled-in' : '';
 
 export type ForcedState = 'empty' | 'loading' | 'error' | 'closed' | null;
 interface Review {
@@ -39,7 +41,12 @@ export function ReviewProvider({ children }: { children: React.ReactNode }) {
       state: state === 'empty' || state === 'loading' || state === 'error' || state === 'closed' ? state : null,
     });
   }, []);
-  return <Ctx.Provider value={r}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={r}>
+      {REVIEW_BUILD ? <span hidden data-review={REVIEW_MARKER} /> : null}
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export const useReview = () => useContext(Ctx);

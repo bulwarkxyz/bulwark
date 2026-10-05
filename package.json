@@ -11,7 +11,8 @@
     "typecheck": "pnpm -r typecheck",
     "fixtures:capture": "node scripts/capture-fixtures.mjs",
     "screenshots": "node scripts/screenshots.mjs",
-    "check:contrast": "node scripts/contrast-check.mjs"
+    "check:contrast": "node scripts/contrast-check.mjs",
+    "check:review-mode": "node scripts/review-mode-check.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"
