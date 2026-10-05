@@ -8,7 +8,8 @@ import { useTimes } from '@/lib/time';
 import { Select } from './select';
 import { groupLevels, tickOptions } from '@/lib/book-group';
 
-const fmtSz = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+const SZ = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 });
+const fmtSz = (n: number) => SZ.format(n);
 
 function Side({ levels, kind, max }: { levels: BookLevel[]; kind: 'ask' | 'bid'; max: number }) {
   let total = 0;

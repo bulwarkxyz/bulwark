@@ -33,3 +33,27 @@ jobs:
         env:
           FC_RUNS: '5000'
           DATABASE_URL: postgres://postgres:pw@localhost:5432/postgres
+  # Tab switching must stay fast: a production build, clicked through every tab on a throttled phone profile
+  # (4x CPU, 4G) and a laptop. Fails if any tab's frame takes over 500 ms, or a repeat visit's data over 1 s.
+  # Market data comes from Hyperliquid testnet, so a slow network run is retried once before failing.
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+      - run: pnpm --filter ./apps/app exec next build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Tab-switch budgets
+        run: |
+          (pnpm --filter ./apps/app exec next start -p 3230 &)
+          for i in $(seq 60); do curl -sf -o /dev/null http://localhost:3230/app && break; sleep 1; done
+          for p in phone laptop; do
+            node scripts/perf-tabs.mjs http://localhost:3230 --profile $p --budget-frame 500 --budget-data 1000 \
+              || node scripts/perf-tabs.mjs http://localhost:3230 --profile $p --budget-frame 500 --budget-data 1000
+          done

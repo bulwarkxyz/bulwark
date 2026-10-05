@@ -53,11 +53,16 @@ interface ZonedParts {
   weekday: number; // 0 Sun … 6 Sat
   minutes: number;
 }
+// One formatter per zone, built once: constructing an Intl.DateTimeFormat costs far more than using one,
+// and the Markets screen asks for every market's session each second.
+const FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 function zoned(t: number, timeZone: string): ZonedParts {
-  const f = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  let f = FORMATTERS.get(timeZone);
+  if (!f) FORMATTERS.set(timeZone, (f = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })));
   const p = f.formatToParts(new Date(t));
   const g = (k: string) => p.find((x) => x.type === k)?.value ?? '0';
-  return { weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(g('weekday')), minutes: Number(g('hour')) * 60 + Number(g('minute')) };
+  return { weekday: WD[g('weekday')] ?? 0, minutes: Number(g('hour')) * 60 + Number(g('minute')) };
 }
 
 /** Is the home market open at time t? (Exchange holidays are not modelled.) */
@@ -83,12 +88,29 @@ export function homeOpen(kind: SessionKind, t: number): boolean {
   return !(n.minutes >= 17 * 60 && n.minutes < 18 * 60);
 }
 
-/** The next time (ms) the home market changes state, found minute by minute (capped at 4 days). */
+const HALF_HOUR = 30 * 60_000;
+const nextCache = new Map<string, number | null>();
+
+/**
+ * The next time (ms) the home market changes state (capped at 4 days). Every session boundary falls on a
+ * local :00 or :30, and both home zones are whole hours off UTC, so only UTC half-hour marks are checked.
+ * Between two marks the answer is the same, so it is kept per mark.
+ */
 export function nextChange(kind: SessionKind, t: number): number | null {
   const now = homeOpen(kind, t);
-  let cur = Math.ceil(t / 60_000) * 60_000;
-  for (let i = 0; i < 4 * 24 * 60; i++, cur += 60_000) if (homeOpen(kind, cur) !== now) return cur;
-  return null;
+  const first = Math.floor(t / HALF_HOUR) * HALF_HOUR + HALF_HOUR;
+  const key = `${kind}:${first}:${now}`;
+  const hit = nextCache.get(key);
+  if (hit !== undefined) return hit;
+  let found: number | null = null;
+  for (let cur = first; cur <= t + 4 * 86_400_000; cur += HALF_HOUR)
+    if (homeOpen(kind, cur) !== now) {
+      found = cur;
+      break;
+    }
+  if (nextCache.size > 200) nextCache.clear();
+  nextCache.set(key, found);
+  return found;
 }
 
 export function sessionLabel(kind: SessionKind, t: number, utc = true): string {

@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { GUARD_LABEL, STATE_STALE_MS, useClock, useGuardView, type GuardView } from '@/lib/guard';
 import { NETWORK } from '@/lib/env';
-import { useAccountView, useStreamStatus, useXyzMarkets } from '@/lib/hl';
+import { useAccountView, useMarketActivity, useStreamStatus, useXyzMarkets } from '@/lib/hl';
+import { readLastMarket } from '@/lib/last-market';
+import { defaultMarket } from '@/lib/markets';
 import { useViewer } from '@/lib/review';
 import { BufferMeter, GuardChip } from './guard-ui';
 import { ConnectButton } from './connect';
@@ -43,6 +46,18 @@ export function NetBand() {
   );
 }
 
+/**
+ * Where the Trade tab goes: straight to a market (no redirect page in between). The user's last market on
+ * this device if it still has data, else the default from live activity, else the fixed first choice.
+ */
+function useTradeHref(): string {
+  const activity = useMarketActivity();
+  const [last, setLast] = useState<string | null>(null);
+  const path = usePathname();
+  useEffect(() => setLast(readLastMarket()), [path]);
+  return `/app/trade/${defaultMarket(activity.data, NETWORK, Date.now(), last).ticker}`;
+}
+
 function phoneTitle(path: string): string {
   if (path.startsWith('/app/trade')) return 'Trade';
   if (path.startsWith('/app/positions')) return 'Positions';
@@ -68,6 +83,7 @@ function AlertBell() {
 
 function TopNav({ focused }: { focused: boolean }) {
   const path = usePathname();
+  const tradeHref = useTradeHref();
   return (
     <header className="topnav">
       {/* The site root is the landing page (a separate zone). */}
@@ -82,7 +98,7 @@ function TopNav({ focused }: { focused: boolean }) {
       ) : (
         <nav className="nav" aria-label="Main">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className={isOn(path, n) ? 'on' : ''} aria-current={isOn(path, n) ? 'page' : undefined}>
+            <Link key={n.href} href={n.href === '/app/trade' ? tradeHref : n.href} className={isOn(path, n) ? 'on' : ''} aria-current={isOn(path, n) ? 'page' : undefined}>
               {n.label}
             </Link>
           ))}
@@ -320,10 +336,11 @@ function StatusBar() {
 
 function MobileTabBar() {
   const path = usePathname();
+  const tradeHref = useTradeHref();
   return (
     <nav className="mtabbar" aria-label="Main">
       {TABS.map((t) => (
-        <Link key={t.href} href={t.href} className={isOn(path, t) ? 'on' : ''} aria-current={isOn(path, t) ? 'page' : undefined}>
+        <Link key={t.href} href={t.href === '/app/trade' ? tradeHref : t.href} className={isOn(path, t) ? 'on' : ''} aria-current={isOn(path, t) ? 'page' : undefined}>
           {t.icon(20)}
           {t.label}
         </Link>

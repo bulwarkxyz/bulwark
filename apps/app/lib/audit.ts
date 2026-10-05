@@ -6,13 +6,13 @@ import { api, useSignedIn } from './api';
 import { useReview, useViewer } from './review';
 
 /** The audit log (GET /v1/audit), newest 500. Shared by the Audit log screen and the guard actions panel. */
-export function useAudit() {
+export function useAudit({ enabled = true }: { enabled?: boolean } = {}) {
   const review = useReview();
   const { address } = useViewer();
   const signedIn = useSignedIn();
   return useQuery({
     queryKey: ['audit', address, review.on],
-    enabled: Boolean(address && (signedIn || review.on)),
+    enabled: enabled && Boolean(address && (signedIn || review.on)),
     queryFn: async () => (review.on ? reviewEntries() : api<AuditEntry[]>('/v1/audit?limit=500')),
     refetchInterval: 30_000,
   });

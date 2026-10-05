@@ -61,10 +61,11 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
   const signedIn = useSignedIn() || review.on;
   const orders = useOpenOrders(address);
   const fills = useFills(address);
-  const funding = useFunding(address);
-  const history = useHistory(address);
+  // Only the open tab's history is fetched.
+  const funding = useFunding(tab === 'funding' ? address : undefined);
+  const history = useHistory(tab === 'history' ? address : undefined);
   const guardOrders = useGuardOrders(address);
-  const audit = useAudit();
+  const audit = useAudit({ enabled: tab === 'guard' });
   const acted = (audit.data ?? []).filter((e) => GUARD_KINDS.includes(e.kind)).sort((a, b) => b.seq - a.seq).slice(0, 20);
   const nPos = risk ? risk.pools.reduce((s, p) => s + p.positions.length, 0) : null;
   const tabs: Array<{ id: Tab; label: string; n?: number | null }> = [
@@ -182,7 +183,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
             </table>
           </div>
         ) : (
-          <div className="pb small t2">{audit.error ? `Can’t load the audit log: ${(audit.error as Error).message}` : 'The guard hasn’t acted yet.'}</div>
+          <div className="pb small t2">{audit.error ? `Can’t load the audit log: ${(audit.error as Error).message}` : audit.isLoading ? 'Loading the guard’s actions…' : 'The guard hasn’t acted yet.'}</div>
         )}
       </div>
     );
