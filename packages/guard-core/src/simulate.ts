@@ -32,6 +32,8 @@ export interface SimResult {
   unguardedLiquidatedAt: number | null;
   final: { buffer: number; accountValue: number; positions: Array<{ coin: string; size: number }> };
   feesPaid: number;
+  /** Guard IOC orders that reached the exchange after the price had moved past their limit. */
+  missedOrders: number;
 }
 
 export interface SimInput {
@@ -44,6 +46,12 @@ export interface SimInput {
   /** Taker fee as a fraction of notional (e.g. the user's realised rate). */
   feeRate: number;
   automationAllowed?: boolean;
+  /**
+   * Congestion model: the guard's actions reach the exchange this many path steps after they were
+   * decided. A delayed IOC fills (at its limit price) only if the mark is still within its limit;
+   * otherwise it is missed. 0 = immediate.
+   */
+  delaySteps?: number;
 }
 
 function clone(s: AccountSnapshot): AccountSnapshot {
@@ -124,9 +132,33 @@ export function simulate(input: SimInput): SimResult {
   const steps: SimStep[] = [];
   let liquidatedAt: number | null = null;
   let feesPaid = 0;
+  let missedOrders = 0;
+  const delay = Math.max(0, Math.floor(input.delaySteps ?? 0));
+  const pending: Array<{ due: number; action: GuardAction }> = [];
 
   for (let i = 0; i < path.length && liquidatedAt === null; i++) {
     const marks = path[i]!;
+    // Delayed actions reach the exchange now; an IOC whose limit the mark has passed does not fill.
+    for (const p of pending.filter((x) => x.due <= i)) {
+      pending.splice(pending.indexOf(p), 1);
+      const a = p.action;
+      if (a.type === 'order') {
+        const m = marks[a.coin];
+        const fillable = m !== undefined && (a.isBuy ? m <= a.limitPx : m >= a.limitPx);
+        const pos = s.positions.find((x) => x.coin === a.coin);
+        if (!fillable || !pos) {
+          missedOrders++;
+          continue;
+        }
+        feesPaid += fill(s, a.coin, (a.isBuy ? 1 : -1) * Math.min(a.size, Math.abs(pos.size)), a.limitPx, m, feeRate);
+      } else if (a.type === 'transfer') {
+        const src = s.idle.find((x) => x.id === a.source);
+        const amount = Math.min(a.amount, Math.max(0, src?.availableAtSnapshot ?? a.amount));
+        if (amount > 0) feesPaid += apply(s, { ...a, amount }, marks, feeRate, resting);
+      } else {
+        feesPaid += apply(s, a, marks, feeRate, resting);
+      }
+    }
     // Resting backstops fire on mark, before the guard's next look.
     for (const r of [...resting]) {
       if (r.type !== 'trigger') continue;
@@ -148,7 +180,8 @@ export function simulate(input: SimInput): SimResult {
     }
     const d = evaluate(policy, s, marks, { now, baselines, openOrders: [], latched, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
     latched = d.latched;
-    for (const a of d.actions) feesPaid += apply(s, a, marks, feeRate, resting);
+    if (delay) for (const a of d.actions) pending.push({ due: i + delay, action: a });
+    else for (const a of d.actions) feesPaid += apply(s, a, marks, feeRate, resting);
     prune(s);
     const after = assessRisk(s, marks);
     steps.push({ step: i, marks, buffer: after.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: after.accountValue, fired: d.fired.map((f) => f.ruleId), actions: d.actions, liquidated: false });
@@ -162,6 +195,7 @@ export function simulate(input: SimInput): SimResult {
     unguardedLiquidatedAt: unguarded === -1 ? null : unguarded,
     final: { buffer: last.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: last.accountValue, positions: s.positions.map((p) => ({ coin: p.coin, size: p.size })) },
     feesPaid,
+    missedOrders,
   };
 }
 

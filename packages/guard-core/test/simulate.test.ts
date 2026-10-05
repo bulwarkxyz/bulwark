@@ -100,4 +100,18 @@ describe('simulate', () => {
     const slip = order.size * (path[i]![CL]! - order.limitPx);
     expect(r.final.accountValue).toBeCloseTo(assessRisk(snap, path[i]).accountValue - slip, 9);
   });
+
+  it('congestion: delayed IOC orders that land past their limit are missed, and the account can be liquidated', () => {
+    const p = policy([{ id: 'stage-1', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'reduceToBuffer', buffer: 4 }] }]);
+    const path = drop(12);
+    const now0 = simulate({ policy: p, snapshot: account(), path, now: NOW, feeRate: 0 });
+    const zero = simulate({ policy: p, snapshot: account(), path, now: NOW, feeRate: 0, delaySteps: 0 });
+    expect(zero).toEqual(now0); // delay 0 is the old behaviour exactly
+    // a short delay still fills; a longer one lands after the price fell past the 1% limit: missed, then liquidated
+    expect(simulate({ policy: p, snapshot: account(), path, now: NOW, feeRate: 0, delaySteps: 2 }).liquidatedAt).toBeNull();
+    const late = simulate({ policy: p, snapshot: account(), path, now: NOW, feeRate: 0, delaySteps: 4 });
+    expect(now0.liquidatedAt).toBeNull();
+    expect(late.missedOrders).toBe(1);
+    expect(late.liquidatedAt).not.toBeNull();
+  });
 });
