@@ -14,6 +14,8 @@ const nextConfig = {
   // Served as a zone under the landing site: /app and /api/bw route here; assets live under /app-static.
   assetPrefix: '/app-static',
   env: { NEXT_PUBLIC_REVIEW_MODE: reviewMode },
+  // Review previews are shared by link only: never indexed, whatever the host does by default.
+  ...(reviewMode === '1' ? { headers: async () => [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] }] } : {}),
 };
 
 export default nextConfig;
