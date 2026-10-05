@@ -12,6 +12,10 @@ export interface OpenOrder {
   side: 'B' | 'A';
   reduceOnly: boolean;
   isTrigger: boolean;
+  /** Present on trigger orders. */
+  triggerPx?: number;
+  /** Remaining size (absolute). */
+  size?: number;
 }
 
 export interface GuardContext {
@@ -23,6 +27,11 @@ export interface GuardContext {
   latched: ReadonlySet<string>;
   /** False for regions where automatic action is off (EU, decision D4): actions become alerts. */
   automationAllowed: boolean;
+  /**
+   * Order ids the guard itself placed (from its own records, never inferred from a client order id,
+   * which anyone can set). Only these reduce-only orders may be cancelled by the guard.
+   */
+  guardOwnedOids?: ReadonlySet<number>;
 }
 
 interface Base {
@@ -44,6 +53,19 @@ export type GuardAction =
       tif: 'Ioc';
       /** True when the order closes the whole position. */
       closesPosition: boolean;
+    })
+  | (Base & {
+      /** A reduce-only stop resting on the exchange that fires on mark even if Bulwark is unreachable. */
+      type: 'trigger';
+      dex: string;
+      coin: string;
+      assetId: number;
+      isBuy: boolean;
+      size: number;
+      triggerPx: number;
+      limitPx: number;
+      reduceOnly: true;
+      tpsl: 'sl';
     })
   | (Base & { type: 'transfer'; source: IdleSource['id']; toDex: string; amount: number; token: number })
   | (Base & { type: 'isolatedMargin'; dex: string; coin: string; assetId: number; amount: number })

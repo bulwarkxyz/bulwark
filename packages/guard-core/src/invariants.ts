@@ -100,7 +100,29 @@ export function checkAction(
     case 'cancel': {
       const order = ctx.openOrders.find((o) => o.oid === action.oid);
       if (!order) return { invariant: 'I2', message: `order ${action.oid} is not open` };
-      if (order.reduceOnly) return { invariant: 'I2', message: 'never cancel the user’s reduce-only orders' };
+      const own = ctx.guardOwnedOids?.has(action.oid) === true;
+      if (order.reduceOnly && !own) return { invariant: 'I2', message: 'never cancel the user’s reduce-only orders' };
+      return null;
+    }
+
+    case 'trigger': {
+      const pos = snapshot.positions.find((p) => p.dex === action.dex && p.coin === action.coin);
+      if (action.reduceOnly !== true || action.tpsl !== 'sl') return { invariant: 'I1', message: 'backstop must be a reduce-only stop' };
+      if (!pos) return { invariant: 'I1', message: `no open position on ${action.coin}` };
+      if (action.isBuy !== pos.size < 0) return { invariant: 'I1', message: 'backstop side does not oppose the position' };
+      if (!(action.size > 0) || action.size > Math.abs(pos.size) + EPS) return { invariant: 'I1', message: 'backstop larger than the position' };
+      if (action.assetId !== pos.asset.assetId) return { invariant: 'I1', message: 'asset id does not match the position' };
+      const row = risk.pools.flatMap((p) => p.positions).find((r) => r.position.key === pos.key);
+      const mark = row?.mark ?? pos.markAtSnapshot;
+      // must sit on the losing side of the mark, or it would fire at once
+      if (pos.size > 0 ? !(action.triggerPx < mark) : !(action.triggerPx > mark)) return { invariant: 'I1', message: 'backstop trigger is not on the losing side of the mark' };
+      if (Math.abs(action.limitPx - action.triggerPx) / action.triggerPx > policy.execution.maxSlippagePct / 100 + 1e-12) {
+        return { invariant: 'I1', message: 'backstop limit outside your max slippage' };
+      }
+      if (action.builder) {
+        if (!ctx.builder?.enabled) return { invariant: 'I7', message: 'builder code attached while disabled' };
+        if (action.builder.f > ctx.builder.approvedMaxTenthsBps) return { invariant: 'I7', message: 'builder fee above the user-approved maximum' };
+      }
       return null;
     }
 
