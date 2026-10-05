@@ -91,12 +91,20 @@ describe('region gate', () => {
 describe('policy confirmation', () => {
   const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }], execution: { maxSlippagePct: 1 } };
 
-  it('refuses a policy until every stage has the repeat choice, and says which stages need it', async () => {
+  it('refuses a policy until every stage has the repeat choice (when required), and says which stages need it', async () => {
+    app = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, repeatChoiceRequired: true });
     const token = await signIn();
     const unchosen: Policy = { ...policy, rules: [...policy.rules, { id: 'stage-2', when: { kind: 'buffer', below: 1.5 }, then: [{ kind: 'alert' }] }] };
     const res = await app.request('/v1/policy', { method: 'POST', headers: authed(token), body: JSON.stringify({ policy: unchosen, signature: await sign(user, unchosen), chainId: 42161 }) });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ needsChoice: ['stage-2'] });
+  });
+
+  it('while not required (until the app sends it), a policy without the choice is accepted and runs as before', async () => {
+    const token = await signIn();
+    const unchosen: Policy = { ...policy, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }] };
+    const res = await app.request('/v1/policy', { method: 'POST', headers: authed(token), body: JSON.stringify({ policy: unchosen, signature: await sign(user, unchosen), chainId: 42161 }) });
+    expect(res.status).toBe(200);
   });
 
   it('lists the stages of an older signed policy that still need the choice', async () => {

@@ -129,6 +129,7 @@ async function main() {
     },
     builder: builderField(network as ConfigNetwork) as { b: Hex; f: number } | null,
     backstopPricing: process.env.BACKSTOP_PRICING === 'together' ? 'together' : 'single',
+    askRepeatChoice: process.env.REPEAT_CHOICE_REQUIRED === '1',
     onAgentGone: async (account) => void (await keys.promoteRotations([account])),
     agents: async (user) => (await info.extraAgents(user)) as Array<{ address: string; validUntil?: number | null }>,
     now: Date.now,

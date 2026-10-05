@@ -41,6 +41,11 @@ export interface ApiDeps {
    */
   keyCustody: 'sealed' | 'kms';
   network: 'mainnet' | 'testnet';
+  /**
+   * Whether new policy versions must carry the per-stage repeat choice. Off until the app sends it;
+   * while off, a rule without it runs as "every time", exactly as before the choice existed.
+   */
+  repeatChoiceRequired?: boolean;
   /** Claude client for the plain-language translator; absent without ANTHROPIC_API_KEY. */
   translator?: MessagesClient;
   now: () => number;
@@ -228,7 +233,7 @@ export function createApp(deps: ApiDeps) {
     if (policy.account.toLowerCase() !== account) return c.json({ error: 'policy is for another account' }, 403);
     // Every stage carries the user's own repeat choice; there is no default.
     const unchosen = needsRepeatChoice(policy);
-    if (unchosen.length) return c.json({ error: 'choose for each stage: act once per fall, or every time the line is crossed', needsChoice: unchosen }, 400);
+    if (deps.repeatChoiceRequired && unchosen.length) return c.json({ error: 'choose for each stage: act once per fall, or every time the line is crossed', needsChoice: unchosen }, 400);
     const current = await deps.store.policy(account);
     if (policy.version !== (current?.policy.version ?? 0) + 1) return c.json({ error: 'stale version' }, 409);
     const hash = policyHash(policy);

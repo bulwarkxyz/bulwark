@@ -65,6 +65,8 @@ export interface EngineDeps {
    * against the user at once; fires earlier) or 'single' (each position alone). Default 'single'.
    */
   backstopPricing?: BackstopPricing;
+  /** Ask users of older policies to make the per-stage repeat choice (once the app can offer it). */
+  askRepeatChoice?: boolean;
   /**
    * The exchange no longer accepts this account's guard key. Usually the user has just approved a
    * replacement under the same name (which replaces the old one on Hyperliquid): promote it now
@@ -306,7 +308,7 @@ export class GuardEngine {
     if (JSON.stringify({ b: decision.breaches, f: decision.fires }) !== JSON.stringify({ b: memory.breaches, f: memory.fires }))
       await store.saveRuleMemory(account, { breaches: decision.breaches, fires: decision.fires });
     // Rules signed before the repeat choice existed keep running as they did (every crossing); ask once per version.
-    const unchosen = needsRepeatChoice(policy);
+    const unchosen = this.deps.askRepeatChoice ? needsRepeatChoice(policy) : [];
     if (unchosen.length && c.choiceNoticeFor !== confirmed.hash) {
       c.choiceNoticeFor = confirmed.hash;
       const what = `${unchosen.length} of your stages (${unchosen.join(', ')}) need a choice: act once per fall and then leave the rest to the backstop, or act every time the line is crossed. Until you choose and sign, they act every time the line is crossed, as before.`;

@@ -432,7 +432,10 @@ describe('backstops priced as if the pool moves together', () => {
 });
 
 describe('repeat choice for policies signed before it existed', () => {
-  beforeEach(() => setup());
+  beforeEach(() => {
+    setup();
+    (engine as unknown as { deps: { askRepeatChoice: boolean } }).deps.askRepeatChoice = true;
+  });
 
   it('keeps running as before, and asks the user once per policy version', async () => {
     await feed(91.5);
