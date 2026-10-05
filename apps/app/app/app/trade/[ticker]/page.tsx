@@ -1,22 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { BottomPanel } from '@/components/app/bottom-panel';
 import { CandleChart, type ChartLine } from '@/components/app/candle-chart';
 import { fmtPct, fmtPx, fmtUsd, upDown } from '@/components/app/format';
 import { GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
+import { DepthChart, FundingChart, MarketInfo } from '@/components/app/market-panels';
 import { OrderBook } from '@/components/app/order-book';
 import { GuardCell } from '@/components/app/positions-table';
 import { Ticket } from '@/components/app/ticket';
 import { NETWORK } from '@/lib/env';
 import { describeAction, orderKindLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
-import { useAccountView, useCandles, useXyzMarkets, type MarketCtx } from '@/lib/hl';
+import { useAccountView, useCandles, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
 import { MARKETS, homeOpen, marketByTicker, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { priceAtLine } from '@bulwarkxyz/guard-core';
 import { useTimes } from '@/lib/time';
+import { closeIntent, ticketIntent } from '@/lib/ticket-intent';
 
 const TF = [
   { id: '5m', hours: 12 },
@@ -48,7 +50,7 @@ function Funding({ ctx }: { ctx: MarketCtx }) {
   );
 }
 
-function MarketPicker({ m }: { m: Market }) {
+function MarketPicker({ m, maxLev }: { m: Market; maxLev?: number }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ position: 'relative' }}>
@@ -58,6 +60,7 @@ function MarketPicker({ m }: { m: Market }) {
           <b style={{ fontSize: 14 }}>{m.ticker}-USDC</b>
           <span className="tiny t3">{m.name} · xyz</span>
         </span>
+        {maxLev ? <span className="chip chip-sm num">{maxLev}×</span> : null}
         {Icon.caret()}
       </button>
       {open ? (
@@ -92,7 +95,10 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   const guardOrders = useGuardOrders(address);
   const now = useNow();
   const { utc } = useTimes();
-  const [phoneTab, setPhoneTab] = useState<'chart' | 'book' | 'info'>('chart');
+  const [phoneTab, setPhoneTab] = useState<'chart' | 'book' | 'trades' | 'info'>('chart');
+  const [chartTab, setChartTab] = useState<'chart' | 'depth' | 'funding' | 'info'>('chart');
+  const recentTrades = useTrades(m.coin);
+  const lastTrade = recentTrades.data?.[0];
   const [sheet, setSheet] = useState<null | 'long' | 'short'>(null);
 
   const loading = review.state === 'loading' || (!markets.data && !markets.isError);
@@ -120,9 +126,21 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
     if (mine.row.liquidationPx) lines.push({ px: mine.row.liquidationPx, kind: 'liq', label: 'Liquidation without the guard' });
   }
 
+  // Arrived from "Close" on another screen: fill the ticket once the position is known (never send).
+  const closeAsked = useRef(false);
+  useEffect(() => {
+    if (closeAsked.current || !mine || loading) return;
+    if (new URLSearchParams(window.location.search).get('close') !== '1') return;
+    closeAsked.current = true;
+    const i = closeIntent(mine.row.position.coin, mine.row.position.size);
+    // Phones have the ticket in a sheet: open it on the closing side first.
+    if (window.matchMedia('(max-width: 760px)').matches) setSheet(i.side);
+    setTimeout(() => ticketIntent.emit(i), 60);
+  }, [mine, loading]);
+
   const header = (
     <div className="panel mhead">
-      <MarketPicker m={m} />
+      <MarketPicker m={m} maxLev={ctx?.maxLeverage} />
       {loading ? (
         <>
           <span className="sk" style={{ width: 90, height: 18 }} />
@@ -135,29 +153,33 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
         </>
       ) : ctx ? (
         <>
-          <div className="col" style={{ gap: 0 }} title="Mark price">
+          <div className="col" style={{ gap: 0 }} title={lastTrade ? 'Last trade' : 'Mark price'}>
             <span className="num" style={{ fontSize: 20, fontWeight: 600 }}>
-              {fmtPx(ctx.mark)}
+              {fmtPx(lastTrade?.px ?? ctx.mark)}
             </span>
             <span className={`num tiny ${upDown(ctx.change)}`}>{fmtPct(ctx.change * 100)}</span>
           </div>
-          <div className="stat hide-sm">
+          <div className="stat">
+            <span className="lbl">Mark</span>
+            <span className="num">{fmtPx(ctx.mark)}</span>
+          </div>
+          <div className="stat hide-sm wide-only">
             <span className="lbl">Oracle</span>
             <span className="num">{fmtPx(ctx.oracle)}</span>
           </div>
-          <div className="stat">
+          <div className="stat hide-sm">
             <span className="lbl">24h volume</span>
             <span className="num">
               {fmtUsd(ctx.dayVolumeUsd)} <Testnet />
             </span>
           </div>
-          <div className="stat">
+          <div className="stat hide-sm">
             <span className="lbl">Open interest</span>
             <span className="num">
               {fmtUsd(ctx.openInterestUsd)} <Testnet />
             </span>
           </div>
-          <div className="stat">
+          <div className="stat hide-sm">
             <span className="lbl">Funding / 1h · next</span>
             <Funding ctx={ctx} />
           </div>
@@ -206,17 +228,36 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
   const chart = (
     <>
       <div className="tabs" style={{ minHeight: 36 }}>
-        <span className="small t2 hide-sm" style={{ alignSelf: 'center', padding: '0 10px' }}>
-          {m.ticker} · {tf.id} candles
+        <span className="hide-sm row nw" role="tablist" aria-label="Chart" style={{ gap: 0 }}>
+          {(
+            [
+              ['chart', 'Chart'],
+              ['depth', 'Depth'],
+              ['funding', 'Funding'],
+              ['info', 'Market info'],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={chartTab === id} className={chartTab === id ? 'on' : ''} onClick={() => setChartTab(id)}>
+              {label}
+            </button>
+          ))}
         </span>
         <span className="sp" />
-        {TF.map((t) => (
-          <button key={t.id} type="button" className={`num ${tf.id === t.id ? 'on' : ''}`} onClick={() => setTf(t)}>
-            {t.id}
-          </button>
-        ))}
+        {chartTab === 'chart'
+          ? TF.map((t) => (
+              <button key={t.id} type="button" className={`num ${tf.id === t.id ? 'on' : ''}`} onClick={() => setTf(t)}>
+                {t.id}
+              </button>
+            ))
+          : null}
       </div>
-      {loading || (!candles.data && !candles.isError) ? (
+      {chartTab === 'depth' ? (
+        <DepthChart coin={m.coin} ticker={m.ticker} />
+      ) : chartTab === 'funding' ? (
+        <FundingChart coin={m.coin} />
+      ) : chartTab === 'info' ? (
+        <MarketInfo m={m} ctx={ctx} />
+      ) : loading || (!candles.data && !candles.isError) ? (
         <div className="pb" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="skb" style={{ flex: 1, minHeight: 220 }} />
           <span className="small t3">Loading candles from Hyperliquid…</span>
@@ -247,28 +288,34 @@ export default function TradePage({ params }: { params: Promise<{ ticker: string
         {/* Phone: one column with tabs. */}
         <div className="mobile-only" style={{ padding: '8px 12px 0' }}>
           <div className="seg">
-            {(['chart', 'book', 'info'] as const).map((t) => (
+            {(['chart', 'book', 'trades', 'info'] as const).map((t) => (
               <button key={t} type="button" className={phoneTab === t ? 'on' : ''} onClick={() => setPhoneTab(t)}>
-                {t === 'chart' ? 'Chart' : t === 'book' ? 'Book · trades' : 'Info'}
+                {t === 'chart' ? 'Chart' : t === 'book' ? 'Book' : t === 'trades' ? 'Trades' : 'Info'}
               </button>
             ))}
           </div>
         </div>
         <div className={`panel tchart ${phoneTab === 'chart' ? '' : 'hide-sm'}`}>{chart}</div>
-        <div className={`panel tbook ${phoneTab === 'book' ? '' : 'hide-sm'}`}>
+        <div className="panel tbook hide-sm">
           <OrderBook coin={m.coin} ticker={m.ticker} forceLoading={loading} stale={stale} />
         </div>
+        {phoneTab === 'book' || phoneTab === 'trades' ? (
+          <div className="panel mobile-only">
+            <OrderBook coin={m.coin} ticker={m.ticker} forceLoading={loading} stale={stale} only={phoneTab} />
+          </div>
+        ) : null}
         {phoneTab === 'info' ? (
-          <div className="panel mobile-only pb col" style={{ gap: 4 }}>
-            {ctx ? (
-              <>
-                <div className="kv line"><span>Oracle</span><span className="num">{fmtPx(ctx.oracle)}</span></div>
-                <div className="kv line"><span>Max leverage</span><span className="num">{ctx.maxLeverage}×</span></div>
-                <div className="kv line"><span>Margin mode</span><span>{ctx.onlyIsolated ? 'Isolated only' : 'Cross or isolated'}</span></div>
-                <div className="kv line"><span>Funding / 1h</span><Funding ctx={ctx} /></div>
-                {m.bound ? <div className="kv"><span>Off-hours bound</span><span className="num">±{m.bound.pct}% · {m.bound.resets} resets</span></div> : null}
-              </>
-            ) : null}
+          <div className="panel mobile-only">
+            <div className="pb col" style={{ gap: 0, paddingBottom: 0 }}>
+              {ctx ? (
+                <>
+                  <div className="kv line"><span className="small">24h volume</span><span className="num small">{fmtUsd(ctx.dayVolumeUsd)} <Testnet /></span></div>
+                  <div className="kv line"><span className="small">Open interest</span><span className="num small">{fmtUsd(ctx.openInterestUsd)} <Testnet /></span></div>
+                  <div className="kv line"><span className="small">Funding / 1h · next</span><Funding ctx={ctx} /></div>
+                </>
+              ) : null}
+            </div>
+            <MarketInfo m={m} ctx={ctx} />
           </div>
         ) : null}
         <aside className="panel tticket desk" aria-label="Order ticket">

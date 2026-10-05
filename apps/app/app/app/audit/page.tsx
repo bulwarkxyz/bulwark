@@ -1,6 +1,6 @@
 'use client';
 
-import { verifyChain } from '@bulwarkxyz/store/audit';
+import { verifyChain, type AuditEntry } from '@bulwarkxyz/store/audit';
 import Link from 'next/link';
 import { Fragment, useState } from 'react';
 import { fmtPx } from '@/components/app/format';
@@ -31,6 +31,20 @@ const FILTERS: Array<{ id: string; label: string; kinds: string[] | null }> = [
   { id: 'commands', label: 'Commands', kinds: ['command', 'approval'] },
   { id: 'errors', label: 'Refusals', kinds: ['rejected', 'degraded'] },
 ];
+
+/** Who wrote the entry: you (a signature), the guard (an action), or the checks and the system. */
+const BY: Record<string, string> = { rule_confirmed: 'you', command: 'you', approval: 'you', guard_action: 'guard', backstop: 'guard', alert: 'guard', window: 'guard', degraded: 'guard', rejected: 'checks', rule_draft_rejected: 'system', key: 'system' };
+const shortHash = (h: string) => (h.startsWith('0x') ? `${h.slice(0, 6)}…${h.slice(-4)}` : h);
+
+/** The log as JSON, exactly as received (hashes included), so it can be checked outside the app. */
+function exportJson(entries: readonly AuditEntry[], account: string | undefined) {
+  const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `bulwark-audit-${account ? account.slice(0, 8) : 'log'}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 
 export default function AuditPage() {
   const review = useReview();
@@ -75,6 +89,9 @@ export default function AuditPage() {
             </button>
           ))}
         </div>
+        <button type="button" className="btn btn-sm" disabled={!all.length} onClick={() => exportJson([...all].reverse(), address)}>
+          Export JSON
+        </button>
       </div>
       <p className="small t2" style={{ margin: 0, maxWidth: 900 }}>
         Every action the guard sends (each retry of an order that didn’t fully fill is its own entry, numbered by attempt), every action its checks refuse, and every policy and command you sign. Each entry carries the hash of the one before it, and this page recomputes the chain in your browser, so an edited or deleted entry shows up here.
@@ -86,6 +103,10 @@ export default function AuditPage() {
           <span>
             <b>The chain does not verify at entry {broken}.</b> Its stored hash does not match the entry before it. Treat entries from {broken} onward as unverified, and keep a copy of the log.
           </span>
+          <span className="sp" />
+          <button type="button" className="btn btn-sm" disabled={!all.length} onClick={() => exportJson([...all].reverse(), address)}>
+            Export JSON
+          </button>
         </div>
       ) : null}
       {log.error ? (
@@ -162,9 +183,9 @@ export default function AuditPage() {
                   <th>When ({times.label})</th>
                   <th>Kind</th>
                   <th>What happened</th>
-                  <th className="r hide-sm">Attempt</th>
-                  <th className="hide-sm">Why</th>
-                  <th className="r">Proof</th>
+                  <th className="r">Attempt</th>
+                  <th>By</th>
+                  <th>Hash</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,8 +197,11 @@ export default function AuditPage() {
                       <td>
                         <span className={`chip chip-sm ${KIND_CHIP[e.kind] ?? ''}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
                       </td>
-                      <td style={{ whiteSpace: 'normal', minWidth: 220 }}>{e.what}</td>
-                      <td className="r num hide-sm">{(() => {
+                      <td style={{ whiteSpace: 'normal', minWidth: 260 }}>
+                        {e.what}
+                        {e.why ? <span className="tiny t3" style={{ display: 'block' }}>{e.why}</span> : null}
+                      </td>
+                      <td className="r num">{(() => {
                         const a = attemptOf(e);
                         if (!a) return <span className="t3">—</span>;
                         return (
@@ -187,12 +211,10 @@ export default function AuditPage() {
                           </span>
                         );
                       })()}</td>
-                      <td className="hide-sm t2" style={{ whiteSpace: 'normal', minWidth: 180 }}>
-                        {e.why}
-                      </td>
-                      <td className="r">
-                        <button type="button" className="btn btn-sm btn-ghost" aria-expanded={open === e.seq} onClick={() => setOpen(open === e.seq ? null : e.seq)}>
-                          {open === e.seq ? 'Hide' : 'Show'}
+                      <td className="t2">{BY[e.kind] ?? 'system'}</td>
+                      <td>
+                        <button type="button" className="linkbtn num tiny t3" aria-expanded={open === e.seq} title="Show the hash, the one before it, and the exchange evidence" onClick={() => setOpen(open === e.seq ? null : e.seq)}>
+                          {shortHash(e.hash)}
                         </button>
                       </td>
                     </tr>

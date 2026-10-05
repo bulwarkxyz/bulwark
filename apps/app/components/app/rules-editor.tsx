@@ -26,6 +26,7 @@ import {
   type PolicyDraft,
   type RuleForm,
 } from '@/lib/rule-builder';
+import { saveDraft } from '@/lib/draft-store';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
 import { Icon } from './icons';
 
@@ -54,6 +55,10 @@ export function usePolicyDraft() {
 
   const changes = useMemo(() => draftChanges(signed, draft), [signed, draft]);
   const account = address ?? me.data?.account;
+  // Kept for this browser session so the simulator can test the draft before it is signed.
+  useEffect(() => {
+    if (account) saveDraft(account, me.data?.policy?.hash ?? null, changes.any ? draft : null);
+  }, [account, draft, changes.any, me.data?.policy?.hash]);
   const next = account ? draftPolicy(signed, draft, account) : ({ ok: false, problem: 'Connect a wallet first.' } as const);
 
   async function sign() {

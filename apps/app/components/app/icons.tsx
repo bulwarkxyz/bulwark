@@ -60,6 +60,12 @@ export const Icon = {
       <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
     </svg>
   ),
+  search: (s = 18) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </svg>
+  ),
   markets: (s = 18) => (
     <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
       <path d="M3 3v18h18" />

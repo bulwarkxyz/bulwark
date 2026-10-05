@@ -8,8 +8,8 @@ import { Icon } from '@/components/app/icons';
 import { PositionCards, PositionsTable, poolState } from '@/components/app/positions-table';
 import { useSignedIn } from '@/lib/api';
 import { useCommand } from '@/lib/commands';
-import { STATE_STALE_MS, describeAction, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
-import { useAccountView } from '@/lib/hl';
+import { STATE_STALE_MS, describeAction, nextWindowOpen, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
+import { useAccountView, useFills } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
@@ -41,6 +41,18 @@ export default function PositionsPage() {
   });
   const worst = g.worst;
   const worstRow = worst?.positions.reduce((a, b) => (Math.abs(a.notional) >= Math.abs(b.notional) ? a : b));
+  // Rules that run in a fixed window, soonest first (null: the window is open now).
+  const byTime = g.rules
+    .filter((r) => r.window)
+    .map((r) => ({ does: r.then.map(describeAction).join(', then '), at: nextWindowOpen(r.window!, now) }))
+    .sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  const [showClosed, setShowClosed] = useState(false);
+  const fills = useFills(address);
+  const dayStart = (() => {
+    const d = new Date(now);
+    return times.utc ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) : new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  })();
+  const closedToday = (fills.data ?? []).filter((f) => f.time >= dayStart && f.dir.startsWith('Close'));
   const doesAt = (line: number) => {
     const r = g.rules.find((x) => x.when.kind === 'buffer' && x.when.below === line);
     return r ? r.then.map(describeAction).join(', ') : '';
@@ -133,7 +145,31 @@ export default function PositionsPage() {
         </div>
       ) : risk ? (
         <>
-          <section className="panel" aria-label="Account buffer">
+          {/* Phones: the buffer in one compact card. */}
+          <section className="panel pb col mobile-only" aria-label="Account buffer" style={{ gap: 10 }}>
+            <div className="row nw" style={{ justifyContent: 'space-between' }}>
+              <GuardChip state={worst ? poolState(g, worst) : g.state} />
+              <span className="num" style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.03em' }}>
+                {worst ? fmtBuffer(worst.buffer) : '—'}
+              </span>
+            </div>
+            <BufferMeter buffer={worst?.buffer ?? null} lines={g.lines} state={worst ? poolState(g, worst) : g.state} labels does={doesAt} />
+            <div className="kv line">
+              <span className="small">{g.crossed ? 'Guard now' : 'Next by price'}</span>
+              <span className="small" style={{ textAlign: 'right' }}>
+                {g.crossed ? `below ${g.crossed.line}× on ${g.crossed.ticker}: ${g.crossed.does}` : g.next ? <>{g.next.does} · {g.next.ticker} <span className="num">{fmtPx(g.next.price)}</span> <span className="num t3">{fmtPct(g.next.move * 100, 1)}</span></> : g.lines.length ? 'no line within reach' : 'no lines'}
+              </span>
+            </div>
+            {byTime.length ? (
+              <div className="kv">
+                <span className="small">Next by time</span>
+                <span className="small" style={{ textAlign: 'right' }}>
+                  {byTime[0]!.does} · {byTime[0]!.at === null ? 'window open now' : `${times.fmt(byTime[0]!.at)} ${times.label}`}
+                </span>
+              </div>
+            ) : null}
+          </section>
+          <section className="panel hide-sm" aria-label="Account buffer">
             <div className="ph">
               <h2>Account buffer</h2>
               <span className="tiny t3">the lowest pool sets it · liquidation at 1.00×</span>
@@ -176,6 +212,14 @@ export default function PositionsPage() {
                     )}
                   </span>
                 </div>
+                {byTime.length ? (
+                  <div className="kv line">
+                    <span className="small">Next by time</span>
+                    <span className="small" style={{ textAlign: 'right' }}>
+                      {byTime[0]!.does} · {byTime[0]!.at === null ? <span className="wt">window open now</span> : <span className="num">{times.fmt(byTime[0]!.at)} {times.label}</span>}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="kv">
                   <span className="small">Without the guard</span>
                   <span className="small">
@@ -201,6 +245,10 @@ export default function PositionsPage() {
             <div className="ph">
               <h2>By margin pool, riskiest first</h2>
               <span className="sp" />
+              <label className="row nw small t2" style={{ gap: 6 }}>
+                <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+                Show closed today
+              </label>
               <span className="tiny t3">
                 Unrealised{' '}
                 <span className={`num ${upDown(risk.pools.reduce((s, p) => s + p.positions.reduce((t, r) => t + r.unrealizedPnl, 0), 0))}`}>
@@ -209,6 +257,40 @@ export default function PositionsPage() {
               </span>
             </div>
             <PositionsTable g={g} risk={risk} now={now} />
+            {showClosed ? (
+              closedToday.length ? (
+                <div className="tblw" style={{ borderTop: '1px solid var(--line)' }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Closed today ({times.label})</th>
+                        <th>Market</th>
+                        <th>Direction</th>
+                        <th className="r">Price</th>
+                        <th className="r">Size</th>
+                        <th className="r">Closed PnL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {closedToday.map((f, i) => (
+                        <tr key={`${f.time}-${i}`}>
+                          <td className="num">{times.fmt(f.time, 'clock')}</td>
+                          <td>
+                            <b>{tickerOf(f.coin)}</b>
+                          </td>
+                          <td>{f.dir}</td>
+                          <td className="r num">{fmtPx(Number(f.px))}</td>
+                          <td className="r num">{f.sz}</td>
+                          <td className={`r num ${upDown(Number(f.closedPnl))}`}>{fmtSignedUsd(Number(f.closedPnl))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="pb small t2" style={{ borderTop: '1px solid var(--line)' }}>Nothing closed today.</div>
+              )
+            ) : null}
           </section>
 
           <div className="grid2 even">
@@ -220,7 +302,20 @@ export default function PositionsPage() {
               {!signedIn && !review.on ? (
                 <div className="pb small t2">Sign in to see the guard’s orders.</div>
               ) : orders.orders.length ? (
-                <div className="tblw">
+                <>
+                <ul className="mobile-only plist">
+                  {orders.orders.map((o) => (
+                    <li key={o.oid} className="row nw" style={{ justifyContent: 'space-between', flexDirection: 'row' }}>
+                      <span className="small">
+                        {tickerOf(o.coin)} {orderKindLabel(o.kind).toLowerCase()} · reduce-only
+                      </span>
+                      <span className="num small">
+                        {fmtPx(o.triggerPx)} · {Math.abs(o.size)} {tickerOf(o.coin)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="tblw hide-sm">
                   <table className="tbl">
                     <thead>
                       <tr>
@@ -246,6 +341,7 @@ export default function PositionsPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               ) : (
                 <div className="pb small t2">{orders.error ? `Can’t load the guard’s orders: ${orders.error.message}` : me.data?.policy ? 'None resting right now.' : 'No rules yet, so no backstops.'}</div>
               )}
@@ -261,7 +357,7 @@ export default function PositionsPage() {
               </div>
               <div className="pb col" style={{ gap: 10 }}>
                 <span className="small t2">Closes every position with reduce-only orders, in equal slices over the time you type, from 5 minutes to 7 days.</span>
-                <div className="row nw" style={{ alignItems: 'flex-end' }}>
+                <div className="row nw unwind-row" style={{ alignItems: 'flex-end' }}>
                   <div className="field" style={{ flex: 1 }}>
                     <label htmlFor="unwind-min">Over how many minutes</label>
                     <div className="input">

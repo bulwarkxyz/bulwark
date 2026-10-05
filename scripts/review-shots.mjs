@@ -2,7 +2,7 @@
 // Design-review screenshots against a review-mode build (NEXT_PUBLIC_REVIEW_MODE=1): every screen at
 // desktop 1440 and phone 390, dark and light, in each state.
 // Usage: node scripts/review-shots.mjs <baseUrl> <outDir> --routes /app/trade/CL,/app/positions
-//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full] [--tab 'Guard actions']
+//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full] [--tab 'Guard actions'] [--no-example-rules]
 // "live" uses ?watch=&rules=example (a public account read-only with example rules, labelled on screen).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,6 +24,7 @@ const routes = (flag('--routes') ?? '/app/trade/CL').split(',');
 const states = (flag('--states') ?? 'live').split(',');
 const full = has('--full');
 const tab = flag('--tab'); // open this tab (by its label) before the shot
+const noExample = has('--no-example-rules'); // the watched account with no rules (first-rules screens)
 const base = args[0] ?? 'http://localhost:3227';
 const out = args[1] ?? 'review-shots';
 const sizes = [
@@ -45,7 +46,7 @@ for (const theme of ['dark', 'light']) {
       for (const state of states) {
         const q = new URLSearchParams();
         if (watch && state !== 'empty') q.set('watch', watch);
-        if (watch && state !== 'empty') q.set('rules', 'example');
+        if (watch && state !== 'empty' && !noExample) q.set('rules', 'example');
         if (state !== 'live') q.set('state', state);
         try {
           // Not networkidle: the order book and trades stream over a WebSocket that never goes idle.

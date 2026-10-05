@@ -4,7 +4,7 @@ import { BUILDER_ADDRESS, BUILDER_FEE_TENTHS_BPS } from '@bulwarkxyz/config';
 import { roundPrice, toWire } from '@bulwarkxyz/guard-core';
 import { orderAction, orderWire, updateLeverageAction, type ExchangeResult } from '@bulwarkxyz/hyperliquid';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { describeAction, type GuardView } from '@/lib/guard';
 import { realisedFeeBps, useAccountView, useAssets, useFills, type MarketCtx } from '@/lib/hl';
@@ -13,6 +13,7 @@ import { useMe } from '@/lib/me';
 import { previewOrder } from '@/lib/preview';
 import { useViewer } from '@/lib/review';
 import { sendWithTradingKey, tradingKey } from '@/lib/signing';
+import { ticketIntent } from '@/lib/ticket-intent';
 import { fmtBuffer, fmtPct, fmtPx, fmtUsd } from './format';
 import { Icon } from './icons';
 
@@ -36,6 +37,24 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
   const [reduceOnly, setReduceOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ExchangeResult | { error: string } | null>(null);
+  const [closing, setClosing] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  // "Close" on a position row: fill the ticket, never send.
+  useEffect(
+    () =>
+      ticketIntent.on((i) => {
+        if (i.coin !== m.coin) return;
+        setSide(i.side);
+        setType('market');
+        setSize(i.size);
+        setReduceOnly(true);
+        setResult(null);
+        setClosing(true);
+        root.current?.scrollIntoView({ block: 'nearest' });
+        root.current?.querySelector<HTMLInputElement>('[id^="slip-"]')?.focus();
+      }),
+    [m.coin],
+  );
 
   const sizeN = Number(size);
   const levN = Math.floor(Number(lev));
@@ -65,7 +84,7 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
           ? 'Approve a trading key first (Settings or setup).'
           : !(sizeN > 0)
             ? 'Type a size.'
-            : !(levN >= 1 && ctx && levN <= ctx.maxLeverage)
+            : !reduceOnly && !(levN >= 1 && ctx && levN <= ctx.maxLeverage)
               ? `Type a leverage from 1 to ${ctx?.maxLeverage ?? '—'}.`
               : type === 'limit' && !(Number(limitPx) > 0)
                 ? 'Type a limit price.'
@@ -98,7 +117,18 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
 
   const move = (px: number) => (ctx ? fmtPct(((px - ctx.mark) / ctx.mark) * 100, 1) : '');
   return (
-    <div className="pb col" style={{ gap: 10 }}>
+    <div className="pb col" style={{ gap: 10 }} ref={root}>
+      {closing && reduceOnly ? (
+        <div className="banner" role="status">
+          <span>
+            <b>Closing your {m.ticker} position.</b> The ticket is set to {side === 'long' ? 'buy' : 'sell'} {size} {m.ticker} at market, reduce-only. Check it and send.
+          </span>
+          <span className="sp" />
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setClosing(false); setReduceOnly(false); setSize(''); }}>
+            Clear
+          </button>
+        </div>
+      ) : null}
       <div className="row nw">
         <span className="chip chip-sm">{ctx ? (ctx.onlyIsolated ? 'Isolated only' : 'Cross or isolated') : '—'}</span>
         <span className="sp" />
@@ -153,7 +183,7 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor={`lev-${compact ? 'm' : 'd'}`}>Leverage</label>
           <div className="input">
-            <input id={`lev-${compact ? 'm' : 'd'}`} inputMode="numeric" placeholder="Your leverage" value={lev} onChange={(e) => setLev(e.target.value)} />
+            <input id={`lev-${compact ? 'm' : 'd'}`} inputMode="numeric" placeholder={reduceOnly ? 'Not used: reduce-only' : 'Your leverage'} disabled={reduceOnly} value={reduceOnly ? '' : lev} onChange={(e) => setLev(e.target.value)} />
             <span className="unit">× · max {ctx?.maxLeverage ?? '—'}</span>
           </div>
         </div>

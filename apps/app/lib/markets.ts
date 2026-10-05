@@ -8,6 +8,9 @@
  * The table is authoritative: it publishes XYZ100 at ±3.5% (not 1 ÷ 30×) and SKHX as SKHYNIX.
  * Off-hours the oracle is trade.xyz's internal price: https://docs.trade.xyz/perpetuals/mechanics/oracle-price.md
  */
+/** Where the sessions and bounds come from, and when they were checked (shown in the app). */
+export const MARKETS_SOURCE = { url: 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md', label: 'trade.xyz specification index, checked 5 Oct 2026' };
+
 export type Category = 'Commodities' | 'Indices' | 'Stocks';
 export type SessionKind = 'futures' | 'futuresBrent' | 'usStocks' | 'korea';
 

@@ -72,12 +72,20 @@ export function BufferMeter({ buffer, lines, draft = [], state, size = 'full', l
         {pin !== null ? <div className={`pin ${pinCls}`} style={{ left: `${pin}%` }} /> : null}
       </div>
       {labels ? (
-        <div className="mlabels" style={{ marginTop: 6, height: staggered ? 60 : 30 }}>
+        <div className="mlabels" style={{ marginTop: 6, height: staggered || (pin !== null && placed.some((p) => Math.abs(p.pos - pin) < 9 && p.row === 0)) ? 60 : 30 }}>
           <span className="ct" style={{ left: 0, transform: 'none', textAlign: 'left' }}>
             1.00×
             <br />
             liquidation
           </span>
+          {pin !== null && buffer !== null && Number.isFinite(buffer) ? (
+            // "now" under the pin, on whichever row is clear of the line labels.
+            <span className="b" style={{ left: `${Math.min(pin, 96)}%`, top: placed.some((p) => Math.abs(p.pos - pin) < 9 && p.row === 0) ? 30 : 0 }}>
+              now
+              <br />
+              <span className="num">{buffer.toFixed(2)}×</span>
+            </span>
+          ) : null}
           {placed.map(({ l, pos, row, d }) => (
             <span key={`${d ? 'd' : ''}${l}`} className={d ? 'wt' : undefined} style={{ left: `${pos}%`, top: row ? 30 : 0 }}>
               <span className="num">{l}×</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { bufferLines, guardActsAt, priceAtLine, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
+import { bufferLines, guardActsAt, nextTimeIn, priceAtLine, type WindowName, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
 import type { GuardOrder } from '@bulwarkxyz/store';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -298,3 +298,9 @@ export function meterPos(buffer: number, top: number): number {
 }
 /** Meter top: 6× or a little above the highest line, so every line fits. */
 export const meterTop = (lines: readonly number[]) => Math.max(6, (Math.max(0, ...lines) || 0) * 1.4);
+
+/** When a fixed window next opens (null if it is open now), to the engine's 15-minute resolution. */
+export function nextWindowOpen(name: WindowName, now: number): number | null {
+  const t = nextTimeIn(name, now);
+  return t === now ? null : t;
+}

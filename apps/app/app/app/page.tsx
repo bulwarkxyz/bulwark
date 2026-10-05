@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fmtPct, fmtPx, fmtUsd, upDown } from '@/components/app/format';
 import { GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
@@ -9,12 +9,12 @@ import { poolState } from '@/components/app/positions-table';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { useGuardView, useNow } from '@/lib/guard';
 import { realisedFeeBps, useAccountView, useFills, useXyzMarkets, type MarketCtx } from '@/lib/hl';
-import { MARKETS, homeOpen, sessionLabel, type Category, type Market } from '@/lib/markets';
+import { MARKETS, homeOpen, sessionLabel, type Category, type Market, MARKETS_SOURCE } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 
 const CATS: Array<'All' | Category> = ['All', 'Commodities', 'Indices', 'Stocks'];
-const SPEC = 'https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md';
+const SPEC = MARKETS_SOURCE.url;
 
 function Testnet() {
   return NETWORK === 'testnet' ? <span className="tag tag-net">testnet</span> : null;
@@ -106,7 +106,11 @@ export default function MarketsPage() {
   const now = useNow();
   const { utc } = useTimes();
   const [cat, setCat] = useState<(typeof CATS)[number]>('All');
-  const [q, setQ] = useState(review.state === 'empty' ? 'copper' : '');
+  const [q, setQ] = useState('');
+  // Review "empty": a search that finds nothing (the review state is read from the URL after mount).
+  useEffect(() => {
+    if (review.state === 'empty') setQ('copper');
+  }, [review.state]);
   const [sel, setSel] = useState(MARKETS[0]!.coin);
   const loading = review.state === 'loading' || (!markets.data && !markets.isError);
   const stale = review.state === 'error' || markets.isError;
@@ -135,7 +139,7 @@ export default function MarketsPage() {
         <h1 className="h1">Markets</h1>
         <span className="chip chip-sm">HIP-3 · trade.xyz</span>
         <label className="input" style={{ minHeight: 36, width: 'min(320px, 100%)' }}>
-          {Icon.markets(14)}
+          {Icon.search(14)}
           <input type="search" placeholder="Search oil, gold, NVDA…" aria-label="Search markets" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         <div className="seg" role="tablist" aria-label="Category" style={{ width: 'min(400px, 100%)' }}>

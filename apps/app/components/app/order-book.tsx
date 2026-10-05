@@ -5,6 +5,7 @@ import { NETWORK } from '@/lib/env';
 import { useBook, useTrades, type BookLevel } from '@/lib/hl';
 import { fmtPx } from './format';
 import { useTimes } from '@/lib/time';
+import { groupLevels, tickOptions } from '@/lib/book-group';
 
 const fmtSz = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
 
@@ -30,13 +31,17 @@ function Side({ levels, kind, max }: { levels: BookLevel[]; kind: 'ask' | 'bid';
 }
 
 /** Order book and recent trades as tabs (Hyperliquid's arrangement). Depth bars show cumulative size. */
-export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale }: { coin: string; ticker: string; depth?: number; forceLoading?: boolean; stale?: boolean }) {
+export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale, only }: { coin: string; ticker: string; depth?: number; forceLoading?: boolean; stale?: boolean; only?: 'book' | 'trades' }) {
   const times = useTimes();
-  const [tab, setTab] = useState<'book' | 'trades'>('book');
+  const [picked, setTab] = useState<'book' | 'trades'>('book');
+  const tab = only ?? picked;
+  const [group, setGroup] = useState(0);
   const book = useBook(coin);
   const trades = useTrades(coin);
-  const asks = (book.data?.asks ?? []).slice(0, depth);
-  const bids = (book.data?.bids ?? []).slice(0, depth);
+  const ticks = tickOptions(book.data?.asks[0]?.px ?? book.data?.bids[0]?.px);
+  const tick = group > 0 ? (ticks[group] ?? null) : null;
+  const asks = groupLevels(book.data?.asks ?? [], tick, 'ask').slice(0, depth);
+  const bids = groupLevels(book.data?.bids ?? [], tick, 'bid').slice(0, depth);
   const max = Math.max(1e-12, asks.reduce((s, l) => s + l.sz, 0), bids.reduce((s, l) => s + l.sz, 0));
   const bestAsk = asks[0]?.px;
   const bestBid = bids[0]?.px;
@@ -47,12 +52,29 @@ export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale }: { co
   return (
     <>
       <div className="tabs" role="tablist" aria-label="Book and trades">
-        <button type="button" role="tab" aria-selected={tab === 'book'} className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
-          Order book
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'trades'} className={tab === 'trades' ? 'on' : ''} onClick={() => setTab('trades')}>
-          Trades
-        </button>
+        {only ? null : (
+          <>
+            <button type="button" role="tab" aria-selected={tab === 'book'} className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
+              Order book
+            </button>
+            <button type="button" role="tab" aria-selected={tab === 'trades'} className={tab === 'trades' ? 'on' : ''} onClick={() => setTab('trades')}>
+              Trades
+            </button>
+          </>
+        )}
+        <span className="sp" />
+        {tab === 'book' && ticks.length ? (
+          <label className="tick" title="Group prices">
+            <span className="sr">Group prices by</span>
+            <select value={group} onChange={(e) => setGroup(Number(e.target.value))}>
+              {ticks.map((t, i) => (
+                <option key={t} value={i}>
+                  {i === 0 ? 'As sent' : t}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
       {loading ? (
         <div className="pb col" style={{ gap: 10 }}>
