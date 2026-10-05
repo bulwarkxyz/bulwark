@@ -56,6 +56,11 @@ HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops backtest -- --hydromancer 
 
 The mark-price history comes from [Hydromancer](https://hydromancer.xyz) (courtesy of Hydromancer; fetched with your own key and cached locally, not committed). Margin tiers and market limits come from Hyperliquid directly. Results, method and limits: the docs' replays page ([source](apps/docs/content/docs/backtests.mdx)); latest run: [`evidence/replays-2026-10-05.md`](evidence/replays-2026-10-05.md).
 
+## Contact
+
+- **X:** [@bulwarkxyz](https://x.com/bulwarkxyz).
+- **Privacy and security reports:** baskarayelu@gmail.com. See also [security.txt](https://bulwark.0xo.in/.well-known/security.txt).
+
 ## Licence
 
 MIT

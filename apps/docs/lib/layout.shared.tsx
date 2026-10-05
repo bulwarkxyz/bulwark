@@ -23,6 +23,7 @@ export function baseOptions(): BaseLayoutProps {
     links: [
       { text: 'Home', url: '/../', external: true },
       { text: 'Open the app', url: '/../app', external: true },
+      { text: 'X', url: 'https://x.com/bulwarkxyz', external: true },
     ],
   };
 }
