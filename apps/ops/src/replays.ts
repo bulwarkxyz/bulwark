@@ -1,0 +1,219 @@
+/**
+ * The wider replay study (investigation): the same simulator and mark prices as backtest.ts, with
+ *  - three set-ups: the server alone (as first published), the current guard (server + its resting
+ *    backstop at the lowest line), and a proposal where every stage rests on Hyperliquid as a
+ *    reduce-only trigger and the server is the second line;
+ *  - the server on time, 1 and 5 minutes late;
+ *  - a settings sweep (earlier/later lines, lighter/heavier trims), every setting an example for the test;
+ *  - ordinary bad days picked by a fixed rule (find-ordinary-days.ts), not only the worst days.
+ *
+ *   HYDROMANCER_API_KEY=… pnpm --filter @bulwarkxyz/ops replays
+ *
+ * Writes evidence/replays-<date>.{json,md}.
+ */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildAssetIndex, dexCollateral, simulate, type Marks, type Policy, type RawPerpDexs, type RawPerpMeta, type SimInput } from '@bulwarkxyz/guard-core';
+import { CASES, EQUITY, FEE_RATE, LEVERAGES, POLICY, ROOT, SLIPPAGE_PCT, STAGE_TEXT, account, hydroSeries, info, largestHourDrop } from './replay-data.js';
+
+const DELAYS = [0, 1, 5];
+
+/** Days picked by find-ordinary-days.ts (rule in that file), replayed over the whole UTC day. */
+const ORDINARY = [
+  { coin: 'xyz:SILVER', day: '2026-10-02', fall: '3.8% (13:00–16:00)' },
+  { coin: 'xyz:SILVER', day: '2026-09-28', fall: '5.5% (00:00–08:00)' },
+  { coin: 'xyz:CL', day: '2026-10-02', fall: '5.3% (00:00–14:00)' },
+  { coin: 'xyz:CL', day: '2026-09-29', fall: '6.5% (05:00–23:00)' },
+  { coin: 'xyz:SKHX', day: '2026-10-01', fall: '3.3% (06:00–15:00)' },
+  { coin: 'xyz:SKHX', day: '2026-09-30', fall: '3.6% (00:00–22:00)' },
+].map((d) => ({
+  id: `ordinary-${d.coin.split(':')[1]!.toLowerCase()}-${d.day}`,
+  title: `${{ 'xyz:SILVER': 'Silver', 'xyz:CL': 'Oil', 'xyz:SKHX': 'SK hynix' }[d.coin]}, ${d.day}`,
+  coin: d.coin,
+  start: `${d.day}T00:00:00Z`,
+  end: new Date(Date.parse(`${d.day}T00:00:00Z`) + 86_400_000).toISOString().replace('.000', ''),
+  fall: d.fall,
+}));
+
+type ModeId = 'server' | 'current' | 'resting' | 'restingSafe' | 'resting3';
+const MODES: Record<ModeId, { label: string; opts: Partial<SimInput> }> = {
+  server: { label: 'Server only (as first published)', opts: {} },
+  current: { label: 'Current guard: server + resting backstop', opts: { backstops: true } },
+  resting: { label: 'Proposed: stages resting on the exchange, fills 1% worse than the mark', opts: { stageTriggers: { gapPct: 1 } } },
+  restingSafe: { label: 'Proposed, lower stages priced as if earlier ones fill 5% worse; fills 1% worse', opts: { stageTriggers: { gapPct: 1, planGapPct: 5 } } },
+  resting3: { label: 'Proposed, fills 3% worse than the mark', opts: { stageTriggers: { gapPct: 3 } } },
+};
+
+/** Settings sweep: lines × trim size. Every setting is an example chosen for the test. */
+const LINE_SETS = { earlier: [3, 2, 1.5], example: [2, 1.5, 1.2], later: [1.5, 1.25, 1.1] } as const;
+const TRIMS = { light: 1.25, medium: 1.5, heavy: 2 } as const;
+const sweepPolicy = (lines: readonly number[], f: number): Policy => ({
+  version: 1,
+  account: POLICY.account,
+  rules: [
+    { id: 'stage-1', when: { kind: 'buffer', below: lines[0]! }, then: [{ kind: 'reduceToBuffer', buffer: +(lines[0]! * f).toFixed(3) }] },
+    { id: 'stage-2', when: { kind: 'buffer', below: lines[1]! }, then: [{ kind: 'reduceToBuffer', buffer: +(lines[1]! * f).toFixed(3) }] },
+    { id: 'stage-3', when: { kind: 'buffer', below: lines[2]! }, then: [{ kind: 'close', target: { kind: 'all' } }] },
+  ],
+  execution: { maxSlippagePct: SLIPPAGE_PCT },
+});
+const sweepText = (lines: readonly number[], f: number) => `below ${lines[0]}× → back to ${+(lines[0]! * f).toFixed(2)}×; below ${lines[1]}× → back to ${+(lines[1]! * f).toFixed(2)}×; below ${lines[2]}× → close`;
+
+type Outcome = { liquidated: boolean; liquidatedAt: string | null; allLost: boolean; equityAtEnd: number | null; keptPct: number | null; orders: number; triggerFills: number; triggerMisses: number; missed: number; fees: number };
+const cell = (o: Outcome) => (o.liquidated ? 'L' : o.allLost ? '0 (all lost)' : `${o.keptPct}%`);
+
+async function main() {
+  const perpDexs = (await info.perpDexs()) as RawPerpDexs;
+  const metas = (await info.allPerpMetas()) as RawPerpMeta[];
+  const assets = buildAssetIndex(perpDexs, metas);
+  const collateral = dexCollateral(perpDexs, metas);
+  const started = Date.now();
+  let sims = 0;
+
+  async function load(c: { id: string; coin: string; start: string; end: string }) {
+    const series = await hydroSeries(c);
+    if (!series) return null;
+    return { series, path: series.points.map((p) => ({ [c.coin]: p.px })) as Marks[], at: (i: number | null) => (i === null ? null : new Date(series.points[i]!.t).toISOString()) };
+  }
+
+  function run(c: { coin: string }, d: NonNullable<Awaited<ReturnType<typeof load>>>, lev: number, policy: Policy, mode: ModeId, delayMin: number): Outcome {
+    const { snapshot } = account(assets, collateral, c.coin, d.series.points[0]!.px, lev);
+    const r = simulate({ policy, snapshot, path: d.path, now: d.series.points[0]!.t, feeRate: FEE_RATE, delaySteps: Math.ceil(delayMin / d.series.stepMinutes), stepMs: d.series.stepMinutes * 60_000, ...MODES[mode].opts });
+    sims++;
+    if (sims % 25 === 0) console.error(`${sims} runs, ${((Date.now() - started) / 1000).toFixed(0)} s`);
+    // Fills worse than the remaining equity can take the account below zero; Hyperliquid would have
+    // liquidated it first. Shown as everything lost, never as a negative balance.
+    const allLost = r.liquidatedAt === null && r.final.accountValue <= 0;
+    return {
+      liquidated: r.liquidatedAt !== null,
+      liquidatedAt: d.at(r.liquidatedAt),
+      allLost,
+      equityAtEnd: r.liquidatedAt !== null ? null : allLost ? 0 : +r.final.accountValue.toFixed(2),
+      keptPct: r.liquidatedAt !== null ? null : allLost ? 0 : +((r.final.accountValue / EQUITY) * 100).toFixed(1),
+      orders: r.steps.flatMap((s) => s.actions.filter((a) => a.type === 'order')).length,
+      triggerFills: r.triggerFills,
+      triggerMisses: r.triggerMisses,
+      missed: r.missedOrders,
+      fees: +r.feesPaid.toFixed(2),
+    };
+  }
+
+  function noGuard(c: { coin: string }, d: NonNullable<Awaited<ReturnType<typeof load>>>, lev: number) {
+    const { size, snapshot } = account(assets, collateral, c.coin, d.series.points[0]!.px, lev);
+    const r = simulate({ policy: { ...POLICY, rules: [] }, snapshot, path: d.path, now: d.series.points[0]!.t, feeRate: FEE_RATE });
+    const end = EQUITY + size * (d.series.points[d.series.points.length - 1]!.px - d.series.points[0]!.px);
+    return r.unguardedLiquidatedAt !== null ? { liquidated: true, at: d.at(r.unguardedLiquidatedAt) } : { liquidated: false, equityAtEnd: +end.toFixed(2), keptPct: +((end / EQUITY) * 100).toFixed(1) };
+  }
+
+  const study = async (cases: Array<{ id: string; title: string; coin: string; start: string; end: string; fall?: string }>, withSweep: boolean) => {
+    const out: Array<Record<string, unknown>> = [];
+    for (const c of cases) {
+      const d = await load(c);
+      const asset = assets.get(c.coin);
+      if (!d || !asset) {
+        out.push({ case: c.id, title: c.title, error: 'no mark data for this window' });
+        continue;
+      }
+      const levs = LEVERAGES.filter((l) => l <= asset.maxLeverage);
+      const rows = levs.map((lev) => ({
+        leverage: lev,
+        noGuard: noGuard(c, d, lev),
+        modes: Object.fromEntries((Object.keys(MODES) as ModeId[]).map((m) => [m, DELAYS.map((delay) => ({ delayMinutes: delay, ...run(c, d, lev, POLICY, m, delay) }))])),
+      }));
+      const sweep = withSweep
+        ? Object.entries(LINE_SETS).flatMap(([ln, lines]) =>
+            Object.entries(TRIMS).map(([tn, f]) => ({
+              lines: ln,
+              trim: tn,
+              settings: sweepText(lines, f),
+              byLeverage: levs.map((lev) => ({ leverage: lev, currentOnTime: run(c, d, lev, sweepPolicy(lines, f), 'current', 0), currentServer5Late: run(c, d, lev, sweepPolicy(lines, f), 'current', 5), restingServer5Late: run(c, d, lev, sweepPolicy(lines, f), 'resting', 5), restingSafeServer5Late: run(c, d, lev, sweepPolicy(lines, f), 'restingSafe', 5) })),
+            })),
+          )
+        : [];
+      const pts = d.series.points;
+      out.push({
+        case: c.id, title: c.title, coin: c.coin, window: `${c.start} → ${c.end}`, resolution: d.series.resolution, points: pts.length,
+        entryPrice: pts[0]!.px, lowestPrice: Math.min(...pts.map((p) => p.px)), endPrice: pts[pts.length - 1]!.px,
+        largestHourDrop: largestHourDrop(pts), ...(c.fall ? { selectedFor: `fall of ${c.fall} on hourly trade prices` } : {}),
+        rows, sweep,
+      });
+    }
+    return out;
+  };
+
+  const crash = await study(CASES.map((c) => ({ id: c.id, title: c.title, coin: c.coin, start: c.start, end: c.end })), true);
+  const ordinary = await study(ORDINARY, true);
+
+  const ranAt = new Date().toISOString();
+  const assumptions = {
+    account: `A cross long on the xyz dex, opened at the first mark of each window, with ${EQUITY.toLocaleString('en-US')} USDC of equity and nothing else in the account`,
+    exampleSettings: `Example settings chosen for the test (not product defaults): ${STAGE_TEXT.join('; ')}`,
+    sweep: 'Every combination of three line sets and three trim sizes; each is an example chosen for the test',
+    setups: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])),
+    serverLate: `The server's orders and its re-placing of resting orders reach the exchange ${DELAYS.join(', ')} minutes after the decision; resting orders already on the exchange fire on the mark regardless`,
+    serverOrderFills: `IOC at the worst price a ${SLIPPAGE_PCT}% slippage limit allows; a late IOC fills only if the mark is still within its limit; retries as in the guard`,
+    backstopFills: 'A stop with a limit at the user’s slippage: once the mark crosses the trigger it rests as a limit and fills at that limit only when the mark is within it',
+    stageTriggerFills: 'Market triggers: fill at the mark of the first round at or past the trigger, made 1% (or 3%) worse; no fill if that is more than 10% worse than the trigger (Hyperliquid’s market-trigger tolerance)',
+    stageTriggerPlacement: 'Placed from the account before the window starts; re-placed by the server (late as above) after any fill or latch change; each stage’s trigger price holds other positions still',
+    fees: `${FEE_RATE * 1e4} bps per fill, assumed`,
+    notModelled: 'Funding, order-book depth and queue position, partial fills, Hyperliquid outages, other traders reacting, open-order and rate limits',
+  };
+  const report = { ranAt, priceKind: 'mark (Hydromancer)', assumptions, crash, ordinary };
+  const stem = `replays-${ranAt.slice(0, 10)}`;
+  mkdirSync(join(ROOT, 'evidence'), { recursive: true });
+  writeFileSync(join(ROOT, 'evidence', `${stem}.json`), JSON.stringify(report, null, 1));
+
+  const modeTable = (c: Record<string, unknown>) => {
+    const rows = c.rows as Array<{ leverage: number; noGuard: { liquidated: boolean; keptPct?: number }; modes: Record<ModeId, Array<Outcome & { delayMinutes: number }>> }>;
+    return [
+      '| Leverage | Set-up | No guard | On time | Server 1 min late | Server 5 min late | Resting fills / misses (on time) |',
+      '|---|---|---|---|---|---|---|',
+      ...rows.flatMap((r) =>
+        (Object.keys(MODES) as ModeId[]).map((m) => `| ${r.leverage}× | ${m} | ${r.noGuard.liquidated ? 'L' : `${r.noGuard.keptPct}%`} | ${r.modes[m].map(cell).join(' | ')} | ${r.modes[m][0]!.triggerFills} / ${r.modes[m][0]!.triggerMisses} |`),
+      ),
+    ];
+  };
+  const head = (c: Record<string, unknown>) => {
+    const h = c.largestHourDrop as { pct: number };
+    return `${c.coin}, ${c.window}, ${c.resolution}. Entry ${c.entryPrice}, low ${c.lowestPrice}, end ${c.endPrice}; largest fall within an hour ${h.pct}%.${c.selectedFor ? ` Selected for a ${c.selectedFor}.` : ''}`;
+  };
+  const md = [
+    `# Replay study: resting stage orders, settings sweep, ordinary days (mark prices)`,
+    '',
+    `Run ${ranAt.slice(0, 16)}Z. Cells: share of the 10,000 USDC kept at the end of the window, or L (liquidated).`,
+    '',
+    ...Object.entries(assumptions).map(([k, v]) => `- **${k}:** ${typeof v === 'string' ? v : Object.entries(v).map(([a, b]) => `${a} = ${b}`).join('; ')}`),
+    '',
+    '## Crash days, example settings',
+    '',
+    ...crash.flatMap((c) => (c.error ? [`### ${c.title}`, '', String(c.error), ''] : [`### ${c.title}`, '', head(c), '', ...modeTable(c), ''])),
+    '## Settings sweep (crash days, then ordinary days)',
+    '',
+    'Cells: current guard on time / current guard, server 5 min late / proposed, server 5 min late / proposed with safer pricing, server 5 min late.',
+    '',
+    ...[...crash, ...ordinary].flatMap((c) => {
+      const sweep = c.sweep as Array<{ lines: string; trim: string; settings: string; byLeverage: Array<{ leverage: number; currentOnTime: Outcome; currentServer5Late: Outcome; restingServer5Late: Outcome; restingSafeServer5Late: Outcome }> }>;
+      if (!sweep?.length) return [];
+      const levs = sweep[0]!.byLeverage.map((b) => b.leverage);
+      return [
+        `### ${c.title}`,
+        '',
+        `| Lines | Trim | Settings | ${levs.map((l) => `${l}×`).join(' | ')} |`,
+        `|---|---|---|${levs.map(() => '---').join('|')}|`,
+        ...sweep.map((s) => `| ${s.lines} | ${s.trim} | ${s.settings} | ${s.byLeverage.map((b) => [b.currentOnTime, b.currentServer5Late, b.restingServer5Late, b.restingSafeServer5Late].map(cell).join(' / ')).join(' | ')} |`),
+        '',
+      ];
+    }),
+    '## Ordinary bad days, example settings',
+    '',
+    ...ordinary.flatMap((c) => (c.error ? [`### ${c.title}`, '', String(c.error), ''] : [`### ${c.title}`, '', head(c), '', ...modeTable(c), ''])),
+  ].join('\n');
+  writeFileSync(join(ROOT, 'evidence', `${stem}.md`), md + '\n');
+  console.error(`${sims} runs in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  console.log(md);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

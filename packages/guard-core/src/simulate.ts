@@ -1,9 +1,12 @@
+import { planBackstops } from './backstop.js';
 import { evaluate, type GuardAction } from './evaluate.js';
 import { MAX_ACTIONS_PER_MINUTE } from './invariants.js';
 import type { Policy } from './policy.js';
 import { planRetries, positionKey, recordFill, type RetryChain } from './retry.js';
 import { assessRisk, type Marks } from './risk.js';
-import type { AccountSnapshot, Position } from './snapshot.js';
+import type { AccountSnapshot } from './snapshot.js';
+import { clone, fill } from './sim-state.js';
+import { planStageTriggers } from './stage-triggers.js';
 import { windowContains, type WindowName } from './windows.js';
 
 /**
@@ -42,6 +45,14 @@ export interface SimResult {
   retryAlertAt: number | null;
   /** Actions held back by the I6 rate cap (only counted when `stepMs` is set). */
   rateCapped: number;
+  /** Resting exchange orders (backstops, stage triggers) that fired and filled. */
+  triggerFills: number;
+  /** Stage triggers that fired but could not fill within the exchange's 10% market-trigger tolerance. */
+  triggerMisses: number;
+  /** Times the guard re-placed its resting orders. */
+  resyncs: number;
+  /** Every fill and missed order, in order (for tracing a run). */
+  events: Array<{ step: number; kind: 'server' | 'backstop' | 'stage' | 'missed' | 'stage-missed'; coin: string; size: number; px: number; mark: number }>;
 }
 
 export interface SimInput {
@@ -66,27 +77,19 @@ export interface SimInput {
   retry?: boolean;
   /** Length of one path step in ms. When set, the I6 cap (actions per minute) is applied. */
   stepMs?: number;
-}
-
-function clone(s: AccountSnapshot): AccountSnapshot {
-  return { ...s, positions: s.positions.map((p) => ({ ...p })), pools: s.pools.map((p) => ({ ...p })), idle: s.idle.map((i) => ({ ...i })) };
-}
-
-/** Moves a position by `delta` at `px`, keeping pool equity consistent with assessRisk. */
-function fill(s: AccountSnapshot, coin: string, delta: number, px: number, mark: number, feeRate: number): number {
-  const p = s.positions.find((x) => x.coin === coin) as Position | undefined;
-  if (!p || !delta) return 0;
-  const pool = s.pools.find((x) => x.id === p.poolId);
-  const fee = Math.abs(delta) * px * feeRate;
-  // Realise PnL to the current mark, then pay the gap between mark and fill price, and the fee.
-  const realised = p.size * (mark - p.markAtSnapshot);
-  const cost = delta * (px - mark) + fee;
-  s.accountValueAtSnapshot += realised - cost;
-  if (pool && pool.kind !== 'isolated') pool.equityAtSnapshot += realised - cost;
-  else if (p.isolatedRawUsd !== null) p.isolatedRawUsd -= delta * px + fee; // isolated equity = rawUsd + size × mark
-  p.markAtSnapshot = mark;
-  p.size = Math.abs(p.size + delta) < 1e-12 ? 0 : p.size + delta;
-  return fee;
+  /**
+   * The live guard's resting backstop: a reduce-only stop on the exchange at the lowest line, as a
+   * limit at the user's slippage (planBackstops). Once triggered it rests as a limit order and fills
+   * only when the mark is back within its limit. Re-placed `delaySteps` after positions or latches change.
+   */
+  backstops?: boolean;
+  /**
+   * EXPERIMENTAL: every buffer stage as a resting reduce-only market trigger (planStageTriggers),
+   * fired by the exchange on the mark. Fill model (conservative): at the mark of the first round at or
+   * past the trigger, worse by `gapPct`; if that is worse than the trigger by more than
+   * `tolerancePct` (Hyperliquid's market-trigger tolerance, 10%), it does not fill.
+   */
+  stageTriggers?: { gapPct: number; tolerancePct?: number; /** Fill gap assumed when pricing lower stages (default `gapPct`). */ planGapPct?: number };
 }
 
 function apply(s: AccountSnapshot, a: GuardAction, marks: Marks, feeRate: number, resting: GuardAction[]): number {
@@ -156,6 +159,25 @@ export function simulate(input: SimInput): SimResult {
   let retryAlertAt: number | null = null;
   let rateCapped = 0;
   const sentAt: number[] = [];
+  // Resting exchange orders (backstop, stage triggers) and their re-sync by the server.
+  type Rest = { kind: 'backstop' | 'stage'; coin: string; isBuy: boolean; size: number; triggerPx: number; limitPx?: number; key?: string; triggered?: boolean };
+  const exchangeModel = Boolean(input.backstops || input.stageTriggers);
+  let exchange: Rest[] = [];
+  let resyncDue: number | null = exchangeModel ? 0 : null;
+  let triggerFills = 0;
+  let triggerMisses = 0;
+  let resyncs = 0;
+  const events: SimResult['events'] = [];
+  const scheduleResync = (i: number) => {
+    if (exchangeModel && resyncDue === null) resyncDue = i + delay;
+  };
+  const resync = (marks: Marks) => {
+    const fresh: Rest[] = [];
+    if (input.stageTriggers) for (const t of planStageTriggers(policy, s, marks, { latched, gapPct: input.stageTriggers.planGapPct ?? input.stageTriggers.gapPct, now })) fresh.push({ kind: 'stage', ...t });
+    if (input.backstops) for (const b of planBackstops(policy, s, marks, []).place) fresh.push({ kind: 'backstop', coin: b.coin, isBuy: b.isBuy, size: b.size, triggerPx: b.triggerPx, limitPx: b.limitPx });
+    exchange = [...exchange.filter((r) => r.triggered), ...fresh]; // a triggered limit is already on the book
+    resyncs++;
+  };
   const settle = (a: GuardAction, filled: number, i: number) => {
     if (a.type !== 'order') return;
     inFlight.delete(positionKey(a.dex, a.coin));
@@ -174,11 +196,13 @@ export function simulate(input: SimInput): SimResult {
         const pos = s.positions.find((x) => x.coin === a.coin);
         if (!fillable || !pos) {
           missedOrders++;
+          events.push({ step: i, kind: 'missed', coin: a.coin, size: a.size, px: a.limitPx, mark: m ?? NaN });
           settle(a, 0, i);
           continue;
         }
         const size = Math.min(a.size, Math.abs(pos.size));
         feesPaid += fill(s, a.coin, (a.isBuy ? 1 : -1) * size, a.limitPx, m, feeRate);
+        events.push({ step: i, kind: 'server', coin: a.coin, size, px: a.limitPx, mark: m });
         settle(a, size, i);
       } else if (a.type === 'transfer') {
         const src = s.idle.find((x) => x.id === a.source);
@@ -188,7 +212,43 @@ export function simulate(input: SimInput): SimResult {
         feesPaid += apply(s, a, marks, feeRate, resting);
       }
     }
-    // Resting backstops fire on mark, before the guard's next look.
+    // Resting exchange orders fire on the mark, before the guard's next look; most protective first.
+    for (const r of [...exchange].sort((a, b) => (a.isBuy ? a.triggerPx - b.triggerPx : b.triggerPx - a.triggerPx))) {
+      const m = marks[r.coin];
+      const pos = s.positions.find((x) => x.coin === r.coin);
+      if (m === undefined) continue;
+      if (!pos) {
+        exchange.splice(exchange.indexOf(r), 1);
+        continue;
+      }
+      if (!r.triggered && !(r.isBuy ? m >= r.triggerPx : m <= r.triggerPx)) continue;
+      if (r.kind === 'stage') {
+        const { gapPct, tolerancePct = 10 } = input.stageTriggers!;
+        const px = r.isBuy ? m * (1 + gapPct / 100) : m * (1 - gapPct / 100);
+        const bound = r.isBuy ? r.triggerPx * (1 + tolerancePct / 100) : r.triggerPx * (1 - tolerancePct / 100);
+        exchange.splice(exchange.indexOf(r), 1);
+        scheduleResync(i);
+        if (r.isBuy ? px > bound : px < bound) {
+          triggerMisses++; // the stage did not act: the server sees its line crossed and acts as the second line
+          events.push({ step: i, kind: 'stage-missed', coin: r.coin, size: r.size, px, mark: m });
+          continue;
+        }
+        const size = Math.min(r.size, Math.abs(pos.size));
+        feesPaid += fill(s, r.coin, (r.isBuy ? 1 : -1) * size, px, m, feeRate);
+        events.push({ step: i, kind: 'stage', coin: r.coin, size, px, mark: m });
+        latched.add(r.key as string);
+        triggerFills++;
+      } else {
+        r.triggered = true;
+        if (!(r.isBuy ? m <= (r.limitPx as number) : m >= (r.limitPx as number))) continue; // rests as a limit below the market
+        const size = Math.min(r.size, Math.abs(pos.size));
+        feesPaid += fill(s, r.coin, (r.isBuy ? 1 : -1) * size, r.limitPx as number, m, feeRate);
+        events.push({ step: i, kind: 'backstop', coin: r.coin, size, px: r.limitPx as number, mark: m });
+        exchange.splice(exchange.indexOf(r), 1);
+        triggerFills++;
+        scheduleResync(i);
+      }
+    }
     for (const r of [...resting]) {
       if (r.type !== 'trigger') continue;
       const m = marks[r.coin];
@@ -208,12 +268,18 @@ export function simulate(input: SimInput): SimResult {
       break;
     }
     if (pending.length) {
+      // The server's re-sync of resting orders lands when due (its lateness is already in `resyncDue`).
+      if (resyncDue !== null && i >= resyncDue) {
+        resyncDue = null;
+        resync(marks);
+      }
       // Waiting for the exchange's answer: no new decision until it arrives.
       const now_ = assessRisk(s, marks);
       steps.push({ step: i, marks, buffer: now_.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: now_.accountValue, fired: [], actions: [], liquidated: false });
       continue;
     }
     const d = evaluate(policy, s, marks, { now, baselines, openOrders: [], latched, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
+    if ([...d.latched].sort().join() !== [...latched].sort().join()) scheduleResync(i);
     latched = d.latched;
     let actions = d.actions;
     if (retry) {
@@ -241,10 +307,18 @@ export function simulate(input: SimInput): SimResult {
         if (a.type === 'order') inFlight.add(positionKey(a.dex, a.coin));
       } else {
         feesPaid += apply(s, a, marks, feeRate, resting);
-        if (a.type === 'order') settle(a, a.size, i);
+        if (a.type === 'order') {
+          settle(a, a.size, i);
+          events.push({ step: i, kind: 'server', coin: a.coin, size: a.size, px: a.limitPx, mark: marks[a.coin] ?? NaN });
+        }
       }
+      if (a.type === 'order' || a.type === 'transfer' || a.type === 'isolatedMargin') scheduleResync(i);
     }
     prune(s);
+    if (resyncDue !== null && i >= resyncDue) {
+      resyncDue = null;
+      resync(marks);
+    }
     const after = assessRisk(s, marks);
     steps.push({ step: i, marks, buffer: after.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: after.accountValue, fired: d.fired.map((f) => f.ruleId), actions, liquidated: false });
   }
@@ -261,6 +335,10 @@ export function simulate(input: SimInput): SimResult {
     retryOrders,
     retryAlertAt,
     rateCapped,
+    triggerFills,
+    triggerMisses,
+    resyncs,
+    events,
   };
 }
 

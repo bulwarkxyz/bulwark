@@ -52,7 +52,9 @@ Bulwark uses it to protect HIP-3 stock and commodity positions on [trade.xyz](ht
 
 - **Retries for orders that did not fill.** `planRetries(decision, chains, options)` re-sends the unfilled part of a stage's order while that stage's condition still holds. Each retry is re-priced from the current mark within the user's slippage (never wider), is no larger than the unfilled part or the position, and goes through the same invariants. After `RETRY_ALERT_AFTER` (3) attempts that did not fully fill it adds a critical "cannot fill within your slippage" alert and keeps trying. `recordFill` updates the chains from each attempt's result. Both are pure; the caller keeps the chains between evaluations.
 
-- **A simulator.** `simulate()` replays a price path through `evaluate`, applying the guard's actions as it goes. It models fees, slippage, resting backstops, retries, the I6 rate cap, and congestion as a delay (a late IOC fills only if the price is still within its limit).
+- **A simulator.** `simulate()` replays a price path through `evaluate`, applying the guard's actions as it goes. It models fees, slippage, retries, the I6 rate cap, and congestion as a delay (a late IOC fills only if the price is still within its limit). Options model resting exchange orders: `backstops` (the live guard's stop at the lowest line, a limit at the user's slippage) and `stageTriggers` (below).
+
+- **Experimental: stages as resting trigger orders.** `planStageTriggers(policy, snapshot, marks, options)` turns every buffer stage into a reduce-only trigger priced where the pool reaches the stage's line and sized to the stage's own trim, planned from the highest line down. It is an investigation, not used by the guard; it holds other positions still when pricing each one, so a pool whose positions move together crosses its line before any trigger fires.
 
 - **Invariants I1–I7**, checked on every action before signing:
 
