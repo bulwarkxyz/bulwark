@@ -150,9 +150,16 @@ export function createApp(deps: ApiDeps) {
     if (!user) return c.json({ error: 'complete the region step first' }, 409);
     if (user.agentAddress && user.agentKeyRef !== 'pending') return c.json({ agentAddress: user.agentAddress });
     if (!deps.provisionAgent) return c.json({ error: 'guard keys are not available yet' }, 503);
-    const { keyId, address } = await deps.provisionAgent(account);
-    await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${keyId}`, agentAddress: address }, deps.now());
-    return c.json({ agentAddress: address });
+    let key: { keyId: string; address: Hex };
+    try {
+      key = await deps.provisionAgent(account);
+    } catch (e) {
+      // AWS refusals carry the denied action, never credentials; keep them in the server log only.
+      console.error(JSON.stringify({ msg: 'guard key provisioning failed', account, error: (e as Error).name, detail: (e as Error).message }));
+      return c.json({ error: 'guard keys are not available yet; please try again later' }, 503);
+    }
+    await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, deps.now());
+    return c.json({ agentAddress: key.address });
   });
 
   // -------------------------------------------------------------- policy

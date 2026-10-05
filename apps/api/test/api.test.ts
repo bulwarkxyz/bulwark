@@ -68,6 +68,15 @@ describe('region gate', () => {
     expect((await store.user(ACCOUNT))?.region).toBe('allowed');
   });
 
+  it('answers 503, not 500, when KMS refuses to create a key', async () => {
+    const token = await signIn();
+    await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
+    const refusing = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now, provisionAgent: async () => { throw Object.assign(new Error('not authorized to perform: kms:TagResource'), { name: 'AccessDeniedException' }); } });
+    const res = await refusing.request('/v1/onboarding/agent', { method: 'POST', headers: authed(token) });
+    expect(res.status).toBe(503);
+    expect((await store.user(ACCOUNT))?.agentKeyRef).toBe('pending');
+  });
+
   it('provisions a guard key only when KMS is configured', async () => {
     const token = await signIn();
     await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
