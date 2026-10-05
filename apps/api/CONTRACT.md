@@ -69,6 +69,62 @@ Asking again while a replacement is pending returns the same pending key. Errors
 
 **Resting guard orders during a wipe:** they are cancelled in step 2. If cancelling fails, for example because the exchange is unreachable, the audit entry says so. Those orders stay on Hyperliquid as reduce-only stops until the user cancels them in their own trading view.
 
+### `GET /v1/commands/:id`: a command's result
+
+Returns `{ id, command, minutes, issuedAt, createdAt, doneAt, result }` for one of the user's own commands. `doneAt` is `null` until the worker has carried the command out, about 2 s later. Another account's id, or an unknown one, returns `404`.
+
+**`result` by command:**
+
+| Command | `result` |
+|---|---|
+| `stop` (kill switch) | `{ cancelled: N, error: string \| null }` |
+| `wipe` | `{ cancelled: { cancelled: N, error }, wiped: N }`: the keys wiped. For KMS keys, the AWS step follows within about 15 s and is in the audit log |
+| `unwind` | `{ steps: [{ coin, type, ok, error }] }` |
+| `resume` | Takes effect at once and isn't queued: its answer has `id: null` |
+
+A replace (`/v1/guard-key/rotate`) isn't a command. Its progress shows in `/v1/me` (`pendingAgent`, then the new `agent`) and in the audit log.
+
+## Alerts
+
+- **`GET /v1/settings/alerts`** → `{ inApp: boolean, telegram: { linked: boolean } }`. `inApp` is `true` until the user turns it off.
+- **`PUT /v1/settings/alerts`** with `{ inApp: boolean }` → `{ inApp }`. Answers `400` for anything other than a boolean, and `409` before onboarding.
+- **`GET /v1/alerts?since=<ms>&limit=<n>`:**
+  - returns the user's recent alerts, newest first, with at most 200;
+  - these are audit entries of kind `alert` (the guard telling the user something) and `degraded` (the guard holding off on stale data);
+  - Telegram gets the same messages when linked;
+  - the setting only controls whether the app shows them.
+
+## Translator: `POST /v1/rules/draft`
+
+- **Body:** `{ text, maxSlippagePct? }`.
+- **With a signed policy:** the draft adds one rule to it.
+- **Without one (a first policy):** `maxSlippagePct` is required, typed by the user (above 0, at most 10), and the draft is version 1 with that slippage limit. Without it the answer is `400`.
+- **Answers:**
+  - `{ kind: 'draft', rule, description, provenance, policy }`;
+  - `{ kind: 'clarify', question }`, including when the sentence doesn't say "once" or "every time";
+  - `{ kind: 'refuse', reason }`;
+  - `{ kind: 'rejected', violations }`;
+  - `503` when the translator is off; `429` past 30 a hour.
+- **Nothing is saved until the user signs the returned `policy`** with `POST /v1/policy`.
+
+## The user's own take-profit and stop-loss orders
+
+The user places TP/SL and other orders with their own trading key in the browser. They never pass through the API. The guard's own orders are only the ones in `/v1/guard-orders`. To tell them apart, the app compares Hyperliquid's open orders with that list by `oid`.
+
+**What the guard does with the user's orders:**
+- **Never cancels a reduce-only order of the user's,** so their TP/SL stays. Invariant I2 enforces this before every signature.
+- **"Cancel orders that would add to a position"** (a stage action) cancels only non-reduce-only orders: resting buys or sells, or stop-entries, that would grow a position.
+- **The kill switch and wipe** cancel only the guard's own orders.
+
+**A user's stop and the guard's backstop on the same position:**
+- **Both rest on Hyperliquid and both fire on the mark price.** Whichever triggers first fires.
+- **Both are reduce-only,** so together they can never close more than the position or flip it. Hyperliquid cancels a reduce-only order that would no longer reduce a position (status `reduceOnlyCanceled`, [info endpoint docs](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint)).
+- **If the user's stop fires first**, the position shrinks or closes. On its next run the guard re-prices the backstop for what is left, or removes it.
+- **If the backstop fires first**, the user's stop has nothing left to reduce.
+- **The guard doesn't move its backstop to match the user's stop.** The backstop sits at the user's lowest buffer line; the user's stop sits wherever they put it.
+
+**Limits:** Hyperliquid allows 1,000 open orders per account by default and rejects new reduce-only and trigger orders above that. The user's orders and the guard's count together. The guard keeps one backstop per position.
+
 ## `GET /v1/guard/status`
 
 ```json

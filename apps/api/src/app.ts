@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { BUILDER_ADDRESS, BUILDER_FEE_TENTHS_BPS, regionVerdict, strictestVerdict } from '@bulwarkxyz/config';
 import {
   COMMAND_TYPES,
+  Execution,
   POLICY_CONFIRMATION_TYPES,
   Policy,
   assessRisk,
@@ -262,10 +263,17 @@ export function createApp(deps: ApiDeps) {
   app.post('/v1/rules/draft', async (c) => {
     const account = c.get('account');
     if (!deps.translator) return c.json({ error: 'the AI translator is not available yet' }, 503);
-    const { text } = await c.req.json<{ text: string }>();
+    const { text, maxSlippagePct } = await c.req.json<{ text: string; maxSlippagePct?: number }>();
     if (typeof text !== 'string') return c.json({ error: 'text required' }, 400);
-    const current = await deps.store.policy(account);
-    if (!current) return c.json({ error: 'sign your first rules (with your slippage limit) before using the translator' }, 409);
+    const signed = await deps.store.policy(account);
+    // A first policy: the user types their slippage limit in the form; the draft becomes version 1.
+    let base = signed?.policy;
+    if (!base) {
+      const slip = Execution.safeParse({ maxSlippagePct });
+      if (!slip.success) return c.json({ error: 'for your first rules, type your slippage limit (above 0, at most 10%)' }, 400);
+      base = { version: 0, account, rules: [], execution: slip.data };
+    }
+    const current = { policy: base };
     const now = deps.now();
     const recent = (draftTimes.get(account) ?? []).filter((t) => now - t < 3_600_000);
     if (recent.length >= DRAFTS_PER_HOUR) return c.json({ error: 'too many translations this hour; try again later' }, 429);
@@ -279,6 +287,38 @@ export function createApp(deps: ApiDeps) {
       return c.json({ kind: 'rejected', violations: r.check.violations });
     }
     return c.json({ kind: 'draft', rule: r.check.rule, description: describeRule(r.check.rule!), provenance: r.check.provenance, policy: r.check.policy });
+  });
+
+  // -------------------------------------------------------------- command results
+  // A command's result, once the worker has carried it out (doneAt null until then). Own account only.
+  app.get('/v1/commands/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'not found' }, 404);
+    const cmd = await deps.store.command(c.get('account'), id);
+    return cmd ? c.json(cmd) : c.json({ error: 'not found' }, 404);
+  });
+
+  // -------------------------------------------------------------- alerts (in-app, alongside Telegram)
+  app.get('/v1/settings/alerts', async (c) => {
+    const account = c.get('account');
+    const [s, user] = await Promise.all([deps.store.alertSettings(account), deps.store.user(account)]);
+    return c.json({ inApp: s.inApp, telegram: { linked: Boolean(user?.telegramChatId) } });
+  });
+  app.put('/v1/settings/alerts', async (c) => {
+    const account = c.get('account');
+    const body = await c.req.json<{ inApp?: unknown }>();
+    if (typeof body.inApp !== 'boolean') return c.json({ error: 'inApp must be true or false' }, 400);
+    if (!(await deps.store.user(account))) return c.json({ error: 'complete onboarding first' }, 409);
+    await deps.store.setAlertSettings(account, { inApp: body.inApp });
+    return c.json({ inApp: body.inApp });
+  });
+  /** The user's recent alerts for the in-app feed: what the guard said to them (also sent to Telegram when linked). */
+  app.get('/v1/alerts', async (c) => {
+    const account = c.get('account');
+    const since = Number(c.req.query('since') ?? 0);
+    const limit = Math.min(200, Number(c.req.query('limit') ?? 50));
+    const entries = await deps.store.audit.list(account, 500);
+    return c.json(entries.filter((e) => (e.kind === 'alert' || e.kind === 'degraded') && e.at > since).slice(0, limit));
   });
 
   // -------------------------------------------------------------- guard status

@@ -101,6 +101,17 @@ export interface GuardStore {
   readonly audit: AuditStore;
 }
 
+export interface CommandRecord {
+  id: number;
+  command: CommandName;
+  minutes: number;
+  issuedAt: number;
+  createdAt: number;
+  /** Null while the worker has not finished it. */
+  doneAt: number | null;
+  result: Record<string, unknown> | null;
+}
+
 export interface PendingCommand {
   id: number;
   account: string;
@@ -178,6 +189,11 @@ export interface ApiStore extends GuardStore {
   addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string }, now: number): Promise<number>;
   pendingCommands(): Promise<PendingCommand[]>;
   finishCommand(id: number, result: Record<string, unknown>, now: number): Promise<void>;
+  /** One of the account's commands with its result (null for another account's id). */
+  command(account: string, id: number): Promise<CommandRecord | null>;
+  /** The user's alert preferences (in-app; Telegram is linked separately). */
+  alertSettings(account: string): Promise<{ inApp: boolean }>;
+  setAlertSettings(account: string, s: { inApp: boolean }): Promise<void>;
 }
 
 export class MemoryStore implements ApiStore, KeyVault {
@@ -270,11 +286,22 @@ export class MemoryStore implements ApiStore, KeyVault {
   async createTelegramCode(code: string, account: string, expiresAt: number) {
     this.putTelegramCode(code, account, expiresAt);
   }
-  private readonly cmds: Array<PendingCommand & { doneAt?: number; result?: Record<string, unknown> }> = [];
-  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number }) {
+  private readonly cmds: Array<PendingCommand & { createdAt: number; doneAt?: number; result?: Record<string, unknown> }> = [];
+  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number }, now = 0) {
     const id = this.cmds.length + 1;
-    this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt });
+    this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt, createdAt: now });
     return id;
+  }
+  async command(account: string, id: number): Promise<CommandRecord | null> {
+    const c = this.cmds.find((x) => x.id === id && x.account === this.k(account));
+    return c ? { id: c.id, command: c.command, minutes: c.minutes, issuedAt: c.issuedAt, createdAt: c.createdAt, doneAt: c.doneAt ?? null, result: c.result ?? null } : null;
+  }
+  private readonly alertPrefs = new Map<string, { inApp: boolean }>();
+  async alertSettings(account: string) {
+    return { ...(this.alertPrefs.get(this.k(account)) ?? { inApp: true }) };
+  }
+  async setAlertSettings(account: string, s: { inApp: boolean }) {
+    this.alertPrefs.set(this.k(account), { inApp: s.inApp });
   }
   async pendingCommands() {
     return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt }) => ({ id, account, command, minutes, issuedAt }));

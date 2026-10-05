@@ -158,3 +158,6 @@ alter table agent_keys add column if not exists kms_retired_at bigint;
 -- Per-stage repeat choice: prices when "once per breach" stages acted, and action times for limits.
 alter table latches add column if not exists breaches jsonb not null default '{}'::jsonb;
 alter table latches add column if not exists fires jsonb not null default '{}'::jsonb;
+
+-- In-app alerts preference (alongside Telegram, which is linked separately).
+alter table users add column if not exists in_app_alerts boolean not null default true;

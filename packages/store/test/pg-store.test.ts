@@ -74,6 +74,17 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.wipeAgentKeys(A, 'testnet', 7, '0x00000000000000000000000000000000000000a1')).toBe(0);
   });
 
+  it('reads back a command and its result for its own account only; stores the in-app alerts setting', async () => {
+    const id = await store.addCommand({ account: A, command: 'wipe', minutes: 0, issuedAt: 10, signature: '0xsig' }, 11);
+    expect(await store.command(A, id)).toEqual({ id, command: 'wipe', minutes: 0, issuedAt: 10, createdAt: 11, doneAt: null, result: null });
+    await store.finishCommand(id, { cancelled: 2 }, 12);
+    expect(await store.command(A, id)).toMatchObject({ doneAt: 12, result: { cancelled: 2 } });
+    expect(await store.command('0x0000000000000000000000000000000000000009', id)).toBeNull();
+    expect(await store.alertSettings(A)).toEqual({ inApp: true });
+    await store.setAlertSettings(A, { inApp: false });
+    expect(await store.alertSettings(A)).toEqual({ inApp: false });
+  });
+
   it('round-trips rule memory next to the latches, without touching them', async () => {
     await store.saveLatched(A, new Set(['stage-1@dex:xyz']));
     const m = { breaches: { 'stage-1@dex:xyz': { at: 5, marks: { 'xyz:CL': { px: 86.3, long: true } } } }, fires: { 'stage-1': [5, 9] } };

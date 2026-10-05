@@ -173,20 +173,31 @@ describe('AI translator', () => {
   const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
   const reply = (out: unknown) => ({ messages: { create: async () => ({ content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }) } });
   const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: reply(out) });
-  const draft = (a: ReturnType<typeof createApp>, token: string, text: string) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text }) });
+  const draft = (a: ReturnType<typeof createApp>, token: string, text: string, extra: Record<string, unknown> = {}) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text, ...extra }) });
   const confirm = () => store.confirmPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x', signatureVerified: true, confirmedAt: now });
 
-  it('is off without a key and needs a signed policy first', async () => {
+  it('is off without a key; for a first policy it needs the slippage limit the user typed, and drafts version 1', async () => {
     const token = await signIn();
     expect((await draft(app, token, 'below 2x alert me')).status).toBe(503);
-    expect((await draft(withTranslator({}), token, 'below 2x alert me')).status).toBe(409);
+    const t = withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }, message: '' });
+    expect((await draft(t, token, 'below 2x alert me, only once')).status).toBe(400);
+    expect((await draft(t, token, 'below 2x alert me, only once', { maxSlippagePct: 25 })).status).toBe(400);
+    const res = await draft(t, token, 'below 2x alert me, only once', { maxSlippagePct: 0.8 });
+    expect(await res.json()).toMatchObject({ kind: 'draft', policy: { version: 1, execution: { maxSlippagePct: 0.8 }, rules: [{ id: 'ai-1', repeat: { mode: 'oncePerBreach' } }] } });
+  });
+
+  it('asks rather than picks when the sentence does not say once or every time', async () => {
+    const token = await signIn();
+    await confirm();
+    const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing' } }, message: '' }), token, 'If my buffer drops below 2x, alert me');
+    expect(await res.json()).toMatchObject({ kind: 'clarify' });
   });
 
   it('returns a checked draft with a fixed description and the next policy version', async () => {
     const token = await signIn();
     await confirm();
-    const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }, message: '' }), token, 'If my buffer drops below 2x, alert me');
-    expect(await res.json()).toMatchObject({ kind: 'draft', description: 'When the buffer falls below 2×, alert you.', policy: { version: 2 }, rule: { id: 'ai-2' } });
+    const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing' } }, message: '' }), token, 'If my buffer drops below 2x, alert me every time');
+    expect(await res.json()).toMatchObject({ kind: 'draft', description: 'When the buffer falls below 2×, alert you. Acts every time the line is crossed.', policy: { version: 2 }, rule: { id: 'ai-2' } });
   });
 
   it('never shows a draft with a number the user did not type, and logs the rejection', async () => {
@@ -364,5 +375,33 @@ describe('KMS custody (active)', () => {
     expect(await retireKmsKeys(deps(fail))).toEqual({ retired: 0, failed: 1 });
     expect(await retireKmsKeys(deps(gone))).toEqual({ retired: 1, failed: 0 });
     expect(await store.kmsKeysToRetire('testnet')).toEqual([]);
+  });
+});
+
+describe('command results and alerts', () => {
+  const onboard = () => store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: '0x0000000000000000000000000000000000000001', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
+
+  it('returns a command and, once the worker has done it, its result; never another account’s', async () => {
+    const token = await signIn();
+    onboard();
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: BigInt(now) } });
+    const { id } = (await (await app.request('/v1/commands', { method: 'POST', headers: authed(token), body: JSON.stringify({ command: 'stop', issuedAt: now, signature: sig, chainId: 42161 }) })).json()) as { id: number };
+    expect(await (await app.request(`/v1/commands/${id}`, { headers: authed(token) })).json()).toMatchObject({ id, command: 'stop', doneAt: null, result: null });
+    await store.finishCommand(id, { cancelled: 1 }, now + 2000);
+    expect(await (await app.request(`/v1/commands/${id}`, { headers: authed(token) })).json()).toMatchObject({ doneAt: now + 2000, result: { cancelled: 1 } });
+    const other = await signIn(stranger);
+    expect((await app.request(`/v1/commands/${id}`, { headers: authed(other) })).status).toBe(404);
+  });
+
+  it('in-app alerts: a setting next to Telegram, and a feed of what the guard told the user', async () => {
+    const token = await signIn();
+    onboard();
+    expect(await (await app.request('/v1/settings/alerts', { headers: authed(token) })).json()).toEqual({ inApp: true, telegram: { linked: false } });
+    expect((await app.request('/v1/settings/alerts', { method: 'PUT', headers: authed(token), body: JSON.stringify({ inApp: 'no' }) })).status).toBe(400);
+    expect(await (await app.request('/v1/settings/alerts', { method: 'PUT', headers: authed(token), body: JSON.stringify({ inApp: false }) })).json()).toEqual({ inApp: false });
+    await store.audit.append({ account: ACCOUNT, at: now + 1, kind: 'alert', why: 'buffer 1.4× below your 1.5× line', what: 'alert' });
+    await store.audit.append({ account: ACCOUNT, at: now + 2, kind: 'guard_action', why: 'x', what: 'order sent' });
+    const feed = (await (await app.request(`/v1/alerts?since=${now}`, { headers: authed(token) })).json()) as Array<{ kind: string }>;
+    expect(feed.map((e) => e.kind)).toEqual(['alert']);
   });
 });

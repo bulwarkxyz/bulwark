@@ -71,7 +71,18 @@ For every guarded position, the guard keeps a **reduce-only stop order resting o
 
 **The cost:** if only one position falls, its stop fires earlier than strictly needed, and you exit sooner than the line alone would require. The [replays](/backtests#backstops-with-several-positions) show both.
 
-The stop is re-priced whenever your positions, your margin (deposits, withdrawals, transfers, funding) or your rules change, and on the guard's regular sync once a minute. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone. It is being enabled on testnet first.
+The stop is re-priced whenever your positions, your margin (deposits, withdrawals, transfers, funding) or your rules change, and on the guard's regular sync once a minute. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone.
+
+**Measured in our replays:** when two positions in a pool fell together, the accounts that were liquidated with the old pricing (each position on its own) survived with this one. When only one of them fell, the earlier stops kept less money. This pricing is **on testnet**; mainnet keeps the old pricing until it has been checked on funded testnet accounts.
+
+## Your own stop-loss and take-profit orders
+
+- **Never touched by the guard:** your reduce-only orders, including your stop-loss and take-profit, are never cancelled. The guard's only cancelling action, "cancel orders that would add to a position", leaves every reduce-only order alone. The kill switch and wipe cancel only the guard's own orders.
+- **When your stop and the guard's backstop sit on the same position:**
+  - both rest on Hyperliquid and fire on the mark price, so whichever is reached first fires;
+  - both are reduce-only, so together they never close more than the position or turn it around;
+  - after either fires, the guard re-prices or removes its backstop for what is left.
+- **Order limit:** your orders and the guard's count toward Hyperliquid's limit of 1,000 open orders per account.
 
 ## When the guard holds off
 

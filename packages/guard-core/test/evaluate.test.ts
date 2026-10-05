@@ -177,3 +177,18 @@ describe('mode and region', () => {
     expect(d.actions[0]).toMatchObject({ type: 'alert', level: 'critical' });
   });
 });
+
+describe('user take-profit and stop-loss orders next to the guard', () => {
+  it('"cancel opening orders" cancels the user’s orders that would add to a position, never their reduce-only TP/SL', () => {
+    const snap = standardAccount({ xyz: { positions: [{ coin: 'xyz:CL', size: 10, mark: 100 }], crossEquity: 40 } }, 0);
+    const p = policy([{ id: 'stop-adding', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'cancelOpeningOrders' }] }]);
+    const openOrders = [
+      { coin: 'xyz:CL', oid: 1, side: 'A' as const, reduceOnly: true, isTrigger: true, triggerPx: 95, size: 10 }, // the user's stop-loss
+      { coin: 'xyz:CL', oid: 2, side: 'A' as const, reduceOnly: true, isTrigger: true, triggerPx: 110, size: 5 }, // the user's take-profit
+      { coin: 'xyz:CL', oid: 3, side: 'B' as const, reduceOnly: false, isTrigger: true, triggerPx: 105, size: 5 }, // a stop that would add
+      { coin: 'xyz:CL', oid: 4, side: 'B' as const, reduceOnly: false, isTrigger: false, size: 2 }, // a resting buy that would add
+    ];
+    const d = evaluate(p, snap, { 'xyz:CL': 100 }, ctx({ openOrders }));
+    expect(d.actions.filter((a) => a.type === 'cancel').map((a) => (a as { oid: number }).oid).sort()).toEqual([3, 4]);
+  });
+});

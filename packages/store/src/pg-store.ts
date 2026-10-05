@@ -3,7 +3,7 @@ import { Policy, type CommandName, type RetryChain } from '@bulwarkxyz/guard-cor
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import postgres from 'postgres';
 import { GENESIS, entryHash, type AuditEntry, type AuditInput, type AuditStore } from './audit.js';
-import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, KmsKeyToRetire, PendingCommand, RuleMemory } from './store.js';
+import type { AgentKeyInfo, AgentKeyStatus, ApiStore, Baseline, ConfirmedPolicy, GuardOrder, GuardStatus, GuardUser, KeyRequest, KeyRequestKind, KeyVault, KmsKeyToRetire, PendingCommand, RuleMemory, CommandRecord } from './store.js';
 
 type Sql = postgres.Sql;
 
@@ -156,6 +156,18 @@ export class PgStore implements ApiStore, KeyVault {
   }
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     await this.sql`update commands set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;
+  }
+  async command(account: string, id: number): Promise<CommandRecord | null> {
+    const [r] = await this.sql`select id, command, minutes, issued_at, created_at, done_at, result from commands where id = ${id} and account = ${this.k(account)}`;
+    if (!r) return null;
+    return { id: Number(r.id), command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at), createdAt: Number(r.created_at), doneAt: r.done_at === null ? null : Number(r.done_at), result: (r.result as Record<string, unknown> | null) ?? null };
+  }
+  async alertSettings(account: string) {
+    const [r] = await this.sql`select in_app_alerts from users where account = ${this.k(account)}`;
+    return { inApp: r?.in_app_alerts ?? true };
+  }
+  async setAlertSettings(account: string, s: { inApp: boolean }) {
+    await this.sql`update users set in_app_alerts = ${s.inApp} where account = ${this.k(account)}`;
   }
   // ---------------------------------------------------------------- agent keys
   async requestAgentKey(account: string, network: string, kind: KeyRequestKind, now: number) {
