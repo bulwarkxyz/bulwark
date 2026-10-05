@@ -108,7 +108,7 @@ function TopNav({ focused }: { focused: boolean }) {
       {/* Testnet label, part 2 of 3. */}
       {NETWORK === 'testnet' ? <span className="chip chip-net chip-sm">TESTNET</span> : null}
       {focused ? null : <AlertBell />}
-      <ConnectButton />
+      <ConnectButton stepSignIn={focused} />
       {focused ? (
         <Link className="btn btn-sm btn-ghost" href="/app">
           Exit
@@ -154,8 +154,14 @@ function StateNote({ g }: { g: GuardView }) {
       if (g.source === 'guard')
         return (
           <span className="small">
-            {g.reasonText ?? 'The guard is paused.'} It holds off until this clears, then resumes by itself.{' '}
-            {g.reason === 'agent_expired' ? <Link href="/app/onboarding?step=4" style={{ textDecoration: 'underline' }}>Approve again</Link> : null}
+            {g.reasonText ?? 'The guard is paused.'}{' '}
+            {g.reason === 'agent_expired' ? (
+              <Link href="/app/onboarding?step=4" style={{ textDecoration: 'underline' }}>
+                {g.noKey ? 'Create it' : 'Approve again'}
+              </Link>
+            ) : (
+              'It holds off until this clears, then resumes by itself.'
+            )}
           </span>
         );
       return <span className="small">{g.ageMs !== null && g.ageMs > STATE_STALE_MS ? `Account data is ${Math.round(g.ageMs / 1000)} s old. ` : 'Can’t reach Hyperliquid’s data. '}The guard acts only on fresh data and holds off until it returns.</span>;

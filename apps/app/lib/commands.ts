@@ -3,14 +3,15 @@
 import type { CommandName } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccount, useChainId, useSignTypedData } from 'wagmi';
+import { useAccount, useSignTypedData } from 'wagmi';
 import { api } from './api';
 import { signCommand, type SignTypedData } from './signing';
+import { useWalletChainId } from './wallet';
 
 /** Signs a Bulwark command (stop, resume, unwind) in the user's wallet and sends it to the API. */
 export function useCommand() {
   const { address } = useAccount();
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signTypedDataAsync } = useSignTypedData();
   const qc = useQueryClient();
   return async (command: CommandName, minutes = 0) => {

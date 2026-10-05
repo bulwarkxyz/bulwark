@@ -4,7 +4,7 @@ import { describeRule } from '@bulwarkxyz/compiler';
 import type { Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useAccount, useChainId, useSignTypedData } from 'wagmi';
+import { useAccount, useSignTypedData } from 'wagmi';
 import { ApiError, api } from '@/lib/api';
 import { tickerOf } from '@/lib/guard';
 import { MARKETS } from '@/lib/markets';
@@ -35,6 +35,8 @@ import { saveDraft } from '@/lib/draft-store';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
 import { Icon } from './icons';
 import { Select } from './select';
+import { useWalletChainId } from '@/lib/wallet';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 /**
  * The user's rules as they edit them: the signed version plus local changes (rules added by hand,
@@ -45,7 +47,7 @@ export function usePolicyDraft() {
   const review = useReview();
   const signed = me.data?.policy?.policy ?? null;
   const { address } = useAccount();
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signTypedDataAsync } = useSignTypedData();
   const qc = useQueryClient();
   const [draft, setDraft] = useState<PolicyDraft>(() => draftFrom(signed));
@@ -82,7 +84,7 @@ export function usePolicyDraft() {
     } catch (e) {
       const need = e instanceof ApiError && Array.isArray(e.body.needsChoice) ? (e.body.needsChoice as string[]) : [];
       setRefused(need);
-      setMsg({ ok: false, text: need.length ? `Not signed: ${need.length} rule${need.length > 1 ? 's need' : ' needs'} your choice, marked below.` : (e as Error).message });
+      setMsg({ ok: false, text: need.length ? `Not signed: ${need.length} rule${need.length > 1 ? 's need' : ' needs'} your choice, marked below.` : walletErrorText(e) });
     } finally {
       setBusy(false);
     }

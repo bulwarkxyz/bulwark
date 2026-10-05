@@ -16,6 +16,7 @@ import { sendWithTradingKey, tradingKey } from '@/lib/signing';
 import { ticketIntent } from '@/lib/ticket-intent';
 import { fmtBuffer, fmtPct, fmtPx, fmtUsd } from './format';
 import { Icon } from './icons';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 /**
  * The order ticket. Every number field starts empty ("Your …"); the guard preview shows what the
@@ -109,7 +110,7 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
       const wire = orderWire({ asset: asset.assetId, isBuy, limitPx: toWire(px), size: toWire(Math.floor(sizeN * 10 ** asset.szDecimals) / 10 ** asset.szDecimals), reduceOnly, orderType: { limit: { tif: type === 'market' ? 'Ioc' : 'Gtc' } } });
       setResult(await sendWithTradingKey(address, orderAction([wire], attachBuilder ? { b: BUILDER_ADDRESS, f: BUILDER_FEE_TENTHS_BPS } : null)));
     } catch (e) {
-      setResult({ error: (e as Error).message });
+      setResult({ error: walletErrorText(e) });
     } finally {
       setBusy(false);
     }

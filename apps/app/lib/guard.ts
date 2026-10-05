@@ -85,7 +85,9 @@ export const PAUSE_TEXT: Record<PauseReason, string> = {
  * /v1/me tells them apart (agent.validUntil in the past vs. never approved).
  */
 export function pauseText(reason: PauseReason, agent: { approved: boolean; validUntil: number | null } | null | undefined, now = Date.now()): string {
-  if (reason !== 'agent_expired' || !agent) return PAUSE_TEXT[reason];
+  if (reason !== 'agent_expired') return PAUSE_TEXT[reason];
+  // The worker reports agent_expired for a user who never had a key too (CONTRACT.md).
+  if (!agent) return 'You don’t have a guard key yet. Create it in setup.';
   if (agent.validUntil !== null && agent.validUntil < now) return PAUSE_TEXT.agent_expired;
   if (!agent.approved) return 'Your guard key isn’t approved on Hyperliquid. Approve it in setup.';
   return PAUSE_TEXT.agent_expired;
@@ -178,6 +180,8 @@ export interface Crossed {
 
 export interface GuardView {
   state: GuardState;
+  /** The account has no guard key at all (never created, or wiped). */
+  noKey: boolean;
   /** Where the state came from: the guard's own report, or the app's fallback data-age check. */
   source: 'guard' | 'fallback';
   reason: PauseReason | null;
@@ -293,7 +297,7 @@ export function useGuardView(): GuardView {
   const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
   if (reported && !clientOnly) state = FROM_API[reported.state];
 
-  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, noKey: !me.data?.agent, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */

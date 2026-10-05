@@ -8,7 +8,7 @@
    Everything else, including every ordinary button, is neutral. Primary buttons are ink.
    No motion anywhere in the app. Contrast of every pair: scripts/contrast-check.mjs. */
 
-html.dark .bw{
+html.dark .bw,html.dark [data-rk]{
   --bg:#090C10; --surface:#0F141A; --s2:#151C24; --s3:#1C2530;
   --line:#222C37; --line-2:#2F3B49; --field:#5D6B7B;
   --text:#E9EEF3; --text-2:#A9B4C0; --text-3:#8692A0;
@@ -22,7 +22,7 @@ html.dark .bw{
   --focus:#A9B4C0; --field-focus:#8692A0; --selection:rgba(169,180,192,.30); --sk:#1C2530; --scrim:rgba(4,6,8,.72);
   color-scheme:dark;
 }
-html.light .bw{
+html.light .bw,html.light [data-rk]{
   --bg:#F3F4F0; --surface:#FFFFFF; --s2:#F4F6F2; --s3:#E9ECE5;
   --line:#DCE0D7; --line-2:#C2C9BC; --field:#7E8879;
   --text:#0D1116; --text-2:#434D58; --text-3:#56616C;
@@ -395,3 +395,15 @@ html.light .bw{
 .alist-feed li{display:flex;flex-direction:column;gap:2px;padding:9px 0;border-bottom:1px solid var(--line)}
 .alist-feed li:last-child{border-bottom:0}
 .dotcount{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--warn);color:var(--on-warn);font-size:11px;font-weight:700}
+
+/* ---------- wallet modal (RainbowKit, themed in lib/wallet.tsx) ----------
+   The tokens above are defined on [data-rk] too, so the modal follows light and dark. No motion, as in the
+   rest of the app; keyboard focus shows the same neutral ring; it sits above every other layer. */
+[data-rk] *,[data-rk] *::before,[data-rk] *::after{animation:none!important;transition:none!important}
+[data-rk] :focus{outline:none}
+[data-rk] :focus-visible{outline:2px solid var(--focus)!important;outline-offset:2px}
+[data-rk] [role="dialog"]{position:relative;z-index:60}
+/* Type in the app's weights: headings 600, wallet names 500 (RainbowKit's are 800 and 700). */
+[data-rk] [role="dialog"] h1{font-weight:600!important;font-size:16px!important;letter-spacing:0!important}
+[data-rk] [role="dialog"] button div{font-weight:500}
+[data-rk] [role="dialog"] h2,[data-rk] [role="dialog"] h3{font-weight:600!important}
