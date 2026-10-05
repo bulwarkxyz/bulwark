@@ -30,6 +30,7 @@ export const STATE_MAX_AGE_MS = 30_000;
 export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
 export const BACKSTOP_EVERY_MS = 60_000;
 export const OPEN_ORDERS_TTL_MS = 15_000;
+export const CHOICE_NOTICE_WHY = 'A new setting needs your choice';
 /** After Hyperliquid refuses an open-orders request, wait this long before that account asks again. */
 export const OPEN_ORDERS_RETRY_MS = 5_000;
 /** The status is written when it changes, and at least this often while the account is evaluated. */
@@ -349,11 +350,14 @@ export class GuardEngine {
       await store.saveRuleMemory(account, { breaches: decision.breaches, fires: decision.fires });
     // Rules signed before the repeat choice existed keep running as they did (every crossing); ask once per version.
     const unchosen = this.deps.askRepeatChoice ? needsRepeatChoice(policy) : [];
+    // Once per policy version, across restarts: the audit log is checked once per process for a notice already sent.
     if (unchosen.length && c.choiceNoticeFor !== confirmed.hash) {
       c.choiceNoticeFor = confirmed.hash;
+      if (!(await this.choiceNoticeLogged(account, policy.version))) {
       const what = `${unchosen.length} of your stages (${unchosen.join(', ')}) need a choice: act once per fall and then leave the rest to the backstop, or act every time the line is crossed. Until you choose and sign, they act every time the line is crossed, as before.`;
-      await this.audit({ account, at: now, kind: 'alert', why: 'A new setting needs your choice', what, proof: { ruleIds: unchosen, policyVersion: policy.version } });
+      await this.audit({ account, at: now, kind: 'alert', why: CHOICE_NOTICE_WHY, what, proof: { ruleIds: unchosen, policyVersion: policy.version } });
       if (user.telegramChatId) await this.deps.notifier.send(user.telegramChatId, `Bulwark: ${what} Open Guard rules to choose.`).catch(() => undefined);
+      }
     }
     c.lastEvaluatedAt = now;
     await this.checkKey(account, user, c, now);
@@ -390,6 +394,12 @@ export class GuardEngine {
     if (acting) return report('acting');
     if (decision.active.size > 0) return report('at_risk');
     return report('protected');
+  }
+
+  /** Whether the "needs your choice" notice for this policy version is already in the audit log. */
+  private async choiceNoticeLogged(account: Hex, version: number): Promise<boolean> {
+    const recent = await this.deps.store.audit.list(account, 200).catch(() => []);
+    return recent.some((e) => e.kind === 'alert' && e.why === CHOICE_NOTICE_WHY && (e.proof as { policyVersion?: number } | undefined)?.policyVersion === version);
   }
 
   private pausedReason(c: AccountCache, now: number): PausedReason | null {

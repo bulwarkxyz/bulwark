@@ -515,6 +515,16 @@ describe('repeat choice for policies signed before it existed', () => {
     expect(notifier.sent.filter((m) => /need a choice/.test(m.text))).toHaveLength(1);
   });
 
+  it('a worker restart does not ask again for the same version (it was alerting on every deploy)', async () => {
+    await feed(91.5);
+    const deps = (engine as unknown as { deps: ConstructorParameters<typeof GuardEngine>[0] }).deps;
+    engine = new GuardEngine({ ...deps }); // a fresh process: same store, empty memory
+    t += 1000;
+    await feed(91.4);
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.why === 'A new setting needs your choice')).toHaveLength(1);
+    expect(notifier.sent.filter((m) => /need a choice/.test(m.text))).toHaveLength(1);
+  });
+
   it('says nothing once every stage has a choice', async () => {
     const chosen: Policy = { ...policy, version: 2, rules: policy.rules.map((r) => ({ ...r, repeat: { mode: 'everyCrossing' as const } })) };
     store.putPolicy(ACCOUNT, { policy: chosen, hash: policyHash(chosen), signature: '0x00', signatureVerified: true, confirmedAt: t });
