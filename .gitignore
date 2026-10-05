@@ -11,3 +11,6 @@ coverage/
 .vercel/
 .railway/
 *.tsbuildinfo
+
+# Hydromancer data is fetched with your own key and not redistributed
+data/backtests/.hydromancer-cache/

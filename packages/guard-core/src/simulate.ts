@@ -57,7 +57,9 @@ export interface SimInput {
   /**
    * Congestion model: the guard's actions reach the exchange this many path steps after they were
    * decided. A delayed IOC fills (at its limit price) only if the mark is still within its limit;
-   * otherwise it is missed. 0 = immediate.
+   * otherwise it is missed. As in the worker, which runs one evaluation per account at a time and
+   * waits for the exchange's answer, the guard does not evaluate again while actions are in flight
+   * (backstops and liquidation are still checked every step). 0 = immediate.
    */
   delaySteps?: number;
   /** Retry orders that did not fully fill while their stage still holds (the guard's behaviour). Default true. */
@@ -204,6 +206,12 @@ export function simulate(input: SimInput): SimResult {
       liquidatedAt = i;
       steps.push({ step: i, marks, buffer: before.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: before.accountValue, fired: [], actions: [], liquidated: true });
       break;
+    }
+    if (pending.length) {
+      // Waiting for the exchange's answer: no new decision until it arrives.
+      const now_ = assessRisk(s, marks);
+      steps.push({ step: i, marks, buffer: now_.worst?.buffer ?? Number.POSITIVE_INFINITY, accountValue: now_.accountValue, fired: [], actions: [], liquidated: false });
+      continue;
     }
     const d = evaluate(policy, s, marks, { now, baselines, openOrders: [], latched, automationAllowed: input.automationAllowed ?? true, guardOwnedOids: new Set() });
     latched = d.latched;

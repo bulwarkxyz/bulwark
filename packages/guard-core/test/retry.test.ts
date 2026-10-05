@@ -155,6 +155,18 @@ describe('simulate with retries', () => {
     expect(r.liquidatedAt).not.toBeNull();
   });
 
+  it('regression: while an order is in flight the guard decides nothing new, so a stage flickering across its line cannot stack trims', () => {
+    // Below the line, then flickering across it every step while the first order is on its way.
+    const flicker = [90, 85, ...Array.from({ length: 30 }, (_, i) => (i % 2 ? 85 : 86.5))].map((m) => ({ [CL]: m }));
+    const half = policy([{ id: 'stage-1', when: { kind: 'buffer', below: 2.5 }, then: [{ kind: 'reduce', target: { kind: 'all' }, fraction: 0.5 }] }]);
+    const r = simulate({ policy: half, snapshot: account(), path: flicker, now: NOW, feeRate: 0, delaySteps: 10 });
+    const decided = r.steps.filter((s) => orders(s.actions).length).map((s) => s.step);
+    for (let k = 1; k < decided.length; k++) expect(decided[k]! - decided[k - 1]!).toBeGreaterThanOrEqual(10);
+    const unguarded = simulate({ policy: half, snapshot: account(), path: flicker, now: NOW, feeRate: 0 });
+    expect(r.final.positions[0]?.size ?? 0).toBeGreaterThan(0);
+    expect(unguarded.final.positions[0]?.size ?? 0).toBeGreaterThan(0);
+  });
+
   it('the I6 rate cap still applies to stage orders and retries', () => {
     const p = policy([{ id: 'dip', when: { kind: 'priceMove', market: CL, direction: 'down', movePct: 3, from: 'rule_confirmed' }, then: [{ kind: 'reduce', target: { kind: 'all' }, fraction: 0.02 }] }]);
     // Crosses the 3% line every other step, so the stage re-arms and fires 30 times in a minute.
