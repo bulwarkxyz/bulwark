@@ -1,0 +1,9 @@
+# Live guard-key check, KMS custody (testnet stack, throwaway account), 2026-10-05
+# pnpm --filter @bulwarkxyz/ops key-e2e; provisioner credentials for the final DescribeKey
+{"step":"guard key","status":200,"agentAddress":"0x16d3dfb0dbb7976ccbcda8e0aa72ac3d71756b2f"}
+{"step":"me","keyCustody":"kms","newKeyCustody":"kms","refKind":"kms"}
+{"step":"audit","kind":"command","what":"Guard stopped; stored guard key to be wiped"}
+{"step":"audit","kind":"key","what":"Guard key wiped (1 AWS KMS key no longer used, to be disabled and deleted)"}
+{"step":"audit","kind":"key","what":"AWS KMS key for 0x16d3dfb0dbb7976ccbcda8e0aa72ac3d71756b2f disabled; AWS deletes it after 7 days"}
+{"step":"after wipe","agentKeyRef":"wiped"}
+{"step":"aws","keyId":"23ce5cb1-58fa-4664-8dc4-6026b3a7e1ab","keyState":"PendingDeletion","deletionDate":"2026-10-12T11:20:53.818Z","keySpec":"ECC_SECG_P256K1","origin":"AWS_KMS"}
