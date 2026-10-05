@@ -1,0 +1,1 @@
+2026-10-05T03:34:08.434337912Z [INFO]  region="asia-southeast1-eqsg3a" signer="local" at="2026-10-05T03:33:58.726Z" sign_ms={"n":30,"p50":1.1,"p90":1.9,"max":8} tick_to_signed_and_sent_ms={"n":30,"p50":1.2,"p90":1.9,"max":2.5} post_round_trip_ms={"n":30,"p50":87.6,"p90":92.1,"max":113.1} tick_to_exchange_response_ms={"n":30,"p50":88.7,"p90":93.4,"max":114}
