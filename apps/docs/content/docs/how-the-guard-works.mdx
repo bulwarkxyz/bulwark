@@ -1,0 +1,64 @@
+---
+title: How the guard works
+description: Margin pools, the buffer, stages, backstops, and when the guard holds off.
+---
+
+## Margin pools and the buffer
+
+Hyperliquid liquidates a **pool**, not a position:
+
+| Account mode | Pools |
+|---|---|
+| Standard | One cross pool per dex (the main dex, xyz, …), plus one pool per isolated position |
+| Unified | One pool per collateral token, shared across dexes, plus isolated positions |
+| Portfolio margin | Shown read-only. The guard does not act on it |
+
+For each pool the guard computes **equity** and **maintenance margin** the way Hyperliquid does ([margining](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margining), [liquidations](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations)) and tracks the **buffer**:
+
+> buffer = pool equity ÷ maintenance margin. Liquidation happens at 1×.
+
+The model was checked against Hyperliquid's own numbers on live accounts: over one hour and 15,621 comparisons it matched to floating-point rounding.
+
+## Stages
+
+Your rules set lines on the buffer and what happens at each. Typical actions:
+
+- **Alert you.**
+- **Move idle USDC in:** the exact amount you set, from your own idle balances (spot, or another dex's free margin), once each time the line is crossed. It never takes another pool below your highest line.
+- **Trim:** cut a position by the share you set, or trim until the buffer is back at the line you set.
+- **Close** a position or everything.
+- **Cancel** your orders that would add to a position.
+
+A stage fires once and stays quiet until the buffer recovers above its line. Orders are reduce-only IOC orders, priced no further from the mark than the slippage limit you set.
+
+Rules can also watch account drawdown, a market's price move, or a position's leverage, and can be limited to fixed windows (weekend, overnight, US session).
+
+## Backstops on the exchange
+
+For every guarded position, the guard keeps a **reduce-only stop order resting on Hyperliquid** at the price where the pool would reach your lowest line. It triggers on Hyperliquid's mark price even if Bulwark is down. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone.
+
+## When the guard holds off
+
+The guard acts only on fresh data: mark prices less than 10 seconds old and account state less than 30 seconds old. Otherwise it does nothing, records why in your audit log, and alerts you.
+
+## The checks before every signature
+
+Every action passes seven checks twice: once when it is decided, and again in the signer just before signing.
+
+| | Check |
+|---|---|
+| I1 | Every order is reduce-only, opposes the open position, and is no larger than it |
+| I2 | Nothing raises leverage or changes margin mode; isolated margin can only be added |
+| I3 | Funds move only between your own balances, only into a pool that needs margin, and never take a source pool below your highest line |
+| I4 | Only under a policy whose hash matches your verified signature, with the kill switch off and automation allowed in your region |
+| I5 | Every action traces to a rule in the policy you signed |
+| I6 | At most 20 guard actions per minute; orders meet the $10 minimum unless closing |
+| I7 | A builder code is attached only when enabled and approved; if the exchange rejects it, the order is retried without it |
+
+## Your commands
+
+- **Kill switch:** stops the guard at once and cancels only the orders it placed. Your positions and your own orders are left alone.
+- **Panic unwind:** closes every position with reduce-only orders over the time you choose (5 minutes to 7 days): a TWAP for positions of $100 or more, an IOC below that.
+- **Wipe guard key:** stops the guard and destroys your stored guard key. (Available through the API today; the button arrives with the app's next design update.)
+
+Each command is signed in your wallet and must reach the server within 60 seconds of signing.

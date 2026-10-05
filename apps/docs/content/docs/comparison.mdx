@@ -1,0 +1,16 @@
+---
+title: How Bulwark differs
+description: Where Bulwark sits next to existing tools, stated as narrowly as the evidence allows.
+---
+
+Bulwark is the first trading front end for HIP-3 stock and commodity perps whose guard watches your **whole account's cross margin** and acts in stages: it trims, tops up from your idle balance, then trims harder. Existing tools work per isolated position (DeFi Saver, Keel) or only alert.
+
+| | What it watches | What it does |
+|---|---|---|
+| **Bulwark** | Your whole account's margin, per pool: cross and isolated, every dex you hold | In stages you set: trims, tops up from your idle balance, then trims harder; resting stops on the exchange as a backstop |
+| [DeFi Saver](https://app.defisaver.com/whats-new) | One isolated position at a time | Holds a target leverage band (up to 10×) and de-leverages when it drifts. Whether it supports the xyz markets is unverified |
+| [Keel](https://github.com/Raga-vibe/keel) | Isolated HIP-3 positions; cross positions get an alert only | Adds margin when liquidation is less than 25% away; closes 25% when it is less than 10% away and there is no collateral |
+
+What Bulwark does **not** claim: that no one else automates de-risking on Hyperliquid, or that the guard prevents liquidation.
+
+From their public pages and code as of October 2026. If we have this wrong, tell us and we will correct it.

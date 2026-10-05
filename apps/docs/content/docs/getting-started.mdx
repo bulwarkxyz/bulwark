@@ -1,0 +1,44 @@
+---
+title: Getting started
+description: The setup steps, in order. Each signature is shown in your wallet; none of them moves your funds.
+---
+
+<Steps>
+
+<Step>
+### Connect and sign in
+
+Connect the wallet you trade with on Hyperliquid and sign the sign-in message. Signing in proves you own the address and authorises nothing.
+</Step>
+
+<Step>
+### Confirm where you are
+
+Enter the country you live in and your citizenship. Bulwark also checks your connection's country and applies the strictest of the three. See [Regions](/regions).
+</Step>
+
+<Step>
+### Fund your Hyperliquid account
+
+Bulwark trades from your own Hyperliquid account. Deposit USDC there the usual way; nothing is held by Bulwark.
+</Step>
+
+<Step>
+### Create and approve your guard key
+
+Bulwark creates a guard key for you and stores it encrypted on its server (see [Key storage](/key-storage)). You approve it on Hyperliquid as a named agent (`bulwark-guard`), optionally with an expiry. Hyperliquid lets agents trade but never withdraw.
+</Step>
+
+<Step>
+### Approve a trading key (optional)
+
+For your own orders, the app can create a separate key that stays in your browser, so you don't sign every order in your wallet. Like every Hyperliquid agent, it cannot withdraw.
+</Step>
+
+<Step>
+### Write and sign your rules
+
+Set your buffer lines and what happens at each, or write a rule in plain words and let the AI translator turn it into an exact rule. Every number is one you type. You sign the policy in your wallet; from then on the guard runs it.
+</Step>
+
+</Steps>

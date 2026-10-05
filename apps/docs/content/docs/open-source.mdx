@@ -1,0 +1,15 @@
+---
+title: Open source
+description: The guard's engine is a public library, so the checks it runs can be read and tested.
+---
+
+The guard engine, `@bulwarkxyz/guard-core`, is open source (MIT). It contains:
+
+- the margin model for standard, unified and portfolio-margin accounts (checked against Hyperliquid's own numbers on live accounts),
+- the rule schema and evaluator,
+- the seven checks (I1–I7) run before every signature,
+- the backstop planner and the simulator.
+
+The rest of the stack is in the same public repository: the signer (encrypted-at-rest keys and the KMS path), the executor that re-runs the checks in front of the signer, the API, the guard worker, the trading app, these docs, and the [crash-day replay script](/backtests#reproduce).
+
+Repository: `github.com/bulwarkxyz/bulwark`.

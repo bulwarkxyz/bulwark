@@ -1,0 +1,35 @@
+---
+title: Key storage and security
+description: Where your guard key lives, what it can and cannot do, and what a server compromise would mean.
+---
+
+<Callout type="warn" title="Read this before approving a guard key">
+  Your guard key is stored **encrypted on Bulwark's server**. If that server were compromised, someone could place trades on your account with it. They could **not withdraw** your funds. Hardware-backed key storage is planned and not yet in use.
+</Callout>
+
+## What the guard key is
+
+When you set up the guard, Bulwark creates a key just for you and you approve it on Hyperliquid as a named agent (`bulwark-guard`). Hyperliquid lets agent keys place and cancel orders and move funds between your own balances, but **never withdraw** ([Hyperliquid: API wallets](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/nonces-and-api-wallets)).
+
+Reduce-only is **our engine's limit, not Hyperliquid's**: the key itself could place any trade. That is why the [seven checks](/how-the-guard-works#the-checks-before-every-signature) run in open code before every signature.
+
+## How it is stored
+
+- **One key per user**, generated on Bulwark's signing service.
+- **Encrypted at rest** with AES-256-GCM under a master key that exists only as a secret on the signing service. Each encrypted key is bound to your account and network, so it can't be moved to another user.
+- **Decrypted only to sign**: the key is decrypted for a single signature and the memory is cleared right after. Every signature is checked to recover to your key's address.
+- **Never returned**: no part of the API can read or return key material. The web app and the API only ever see the key's address.
+
+## Rotation and removal
+
+- **Replace your key:** a new key is created; it takes over only once you approve it on Hyperliquid, and the old one is then destroyed.
+- **Wipe your key:** a signed command stops the guard and destroys your stored key. To also remove it from Hyperliquid, approve a different key under the same name or let its expiry pass.
+- **Expiry:** when you approve the key on Hyperliquid you can set how long the approval lasts.
+
+## Your trading key
+
+The optional trading key for your own orders is created in your browser and stays there (it is not sent to Bulwark). Like every Hyperliquid agent, it cannot withdraw. Anyone with access to your browser profile could trade with it; you can forget it in Settings.
+
+## Planned: hardware-backed keys
+
+Bulwark is built to hold guard keys in AWS KMS, where keys are created inside the service and cannot be exported. That path is implemented and tested but **not active**. Until it is, nothing in Bulwark should describe your guard key as hardware-backed; if you see such wording, tell us.

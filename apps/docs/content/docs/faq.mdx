@@ -1,0 +1,28 @@
+---
+title: FAQ
+description: Short answers.
+---
+
+### Can the guard stop every liquidation?
+
+No. A price can gap past every stage before any order fills. The guard lowers the chance and the damage; it cannot remove the risk.
+
+### What happens if your servers are down?
+
+Reduce-only stop orders already rest on Hyperliquid at your lowest line and trigger on the exchange's mark price without us.
+
+### Who decides the numbers in my rules?
+
+You do. The app and the AI never suggest limits.
+
+### Can Bulwark take my funds?
+
+No. Hyperliquid does not let agent keys withdraw, and our engine only sends reduce-only orders and moves USDC between your own balances. Your guard key is stored encrypted on our server: if our server were compromised, someone could place trades on your account, but could not withdraw. Hardware-backed key storage is planned.
+
+### Which AI does the translating?
+
+Claude, by Anthropic. It sees your sentence, the market list and your current rules, and nothing else.
+
+### Is it live?
+
+It is a testnet preview today, with no fees. Mainnet follows after a small canary run on our own accounts.

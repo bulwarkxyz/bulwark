@@ -1,0 +1,14 @@
+---
+title: Audit log
+description: Everything the guard does and everything you sign, in a log that can't be quietly edited.
+---
+
+Every guard action, every action its checks refused, every time it held off, every policy and command you signed, and every guard-key event goes into your audit log, with:
+
+- **why** it happened (the rule, the line, the reason),
+- **what** happened (the order, the fill, the amount moved),
+- **proof** (order ids, fills, signatures, hashes).
+
+## Tamper evidence
+
+Each entry includes the hash of the entry before it, one chain per account. Changing or deleting any entry breaks every hash after it. The database refuses updates and deletes on the log, and the app **recomputes the whole chain in your browser** and shows whether it is intact.

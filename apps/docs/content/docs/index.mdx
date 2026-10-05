@@ -1,0 +1,26 @@
+---
+title: What Bulwark is
+description: A trading app for stock and commodity perpetuals on Hyperliquid, with a guard that watches your whole account's margin and steps in before liquidation.
+---
+
+Bulwark lets you trade the trade.xyz markets on Hyperliquid (oil, metals, indices and single stocks, around the clock) and adds a **guard**: a service that watches your account's margin on every price tick and, in stages you set, trims positions or moves your own idle USDC into the pool that needs it, before Hyperliquid would liquidate you.
+
+The guard only ever reduces risk. It sends reduce-only orders, cancels orders that would add to a position, and moves funds between your own balances. It cannot open or grow a position and it cannot withdraw.
+
+<Callout type="warn" title="Testnet preview">
+  Bulwark currently runs on Hyperliquid **testnet**. Balances and orders there are not real money, and no fee is charged.
+</Callout>
+
+## What the guard watches
+
+Liquidation on Hyperliquid is decided per **margin pool**, not per chart: every cross position on a dex shares one pool, and each isolated position has its own. The guard computes each pool the way Hyperliquid does and acts on the pool that is in trouble. See [How the guard works](/how-the-guard-works).
+
+## What you control
+
+- **The numbers.** Every line and amount in your rules is a number you typed. Neither the app nor the AI translator suggests limits.
+- **The rules.** You sign each version of your rules in your wallet; the guard runs only the version you signed.
+- **The stop.** A signed kill switch stops the guard at once and cancels everything it placed.
+
+## What it cannot do
+
+It cannot guarantee you won't be liquidated. Prices can gap past every stage, and the guard can be late or unavailable. Read [Risks](/risks) before relying on it.

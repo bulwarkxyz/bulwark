@@ -1,0 +1,36 @@
+---
+title: Risks
+description: What can go wrong, including with the guard switched on.
+---
+
+Perpetual futures are leveraged. You can lose more than the margin you put in a single position, and you can lose all the funds in a margin pool. Bulwark is software: it gives no investment advice and holds no funds.
+
+## The guard can fail to protect you
+
+- **Gaps.** A price can move past every stage before any order fills, especially when a stock's home market reopens or news lands while liquidity is thin.
+- **Fill prices.** Guard orders are limited to your slippage setting. In a fast market they may fill only partly or not at all, and a filled trim still realises a loss.
+- **Latency and outages.** The guard can be late because of network delays, a slow or unavailable Hyperliquid API, congestion during a cascade, or Bulwark's own servers being down. The resting backstop stops on Hyperliquid help in the last case only if they were placed before the outage.
+- **Holding off.** When prices or account data are stale, the guard deliberately does nothing rather than act on bad data.
+- **Your settings.** The guard does what your rules say. Lines close to liquidation, small top-ups or no stages at all may protect little. Use the [simulator](/simulator) to see what your rules do.
+- **Survival is not safety.** Avoiding the liquidation event can still leave you with a small fraction of your equity, as the [silver replay](/backtests) shows.
+
+## Market and platform risks
+
+- **HIP-3 markets** are run by their deployer (trade.xyz) on Hyperliquid, with their own oracles, trading hours, halts and rules. Read trade.xyz's [perpetuals risks and disclaimers](https://docs.trade.xyz/legal-and-disclaimers/perpetuals-risks-and-disclaimers.md).
+- **Mark price** drives liquidations and the guard. An oracle error or a bad print that moves the mark can trigger both.
+- **Hyperliquid** itself can halt, change its rules, or suffer an incident. Bulwark cannot protect against that.
+
+## Key and software risks
+
+- **Guard key custody.** Your guard key is stored encrypted on Bulwark's server. A compromise of that server could let someone **trade** on your account (not withdraw). See [Key storage](/key-storage).
+- **Trading key.** The optional browser trading key can trade for anyone with access to your browser profile.
+- **Software errors.** Despite tests and the checks before every signature, the guard could contain a bug.
+- **The AI translator** can misread a sentence. Nothing applies until you have read the exact rule and signed it.
+
+## Availability and law
+
+Bulwark is not available in the United States, Canada, the United Kingdom, Russia, Belarus, or sanctioned regions; in the EU the automatic guard is off ([Regions](/regions)). You are responsible for using it lawfully where you are.
+
+## Testnet preview
+
+The current preview runs on Hyperliquid testnet, where liquidity and prices differ from mainnet.

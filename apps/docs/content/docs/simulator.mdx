@@ -1,0 +1,17 @@
+---
+title: Simulator
+description: Replay a price move on your real account with your signed rules, using the same code the guard runs.
+---
+
+The simulator takes your current account and your signed rules, moves the prices you choose, and runs the **same evaluation code the guard runs** step by step, applying the guard's own actions as it goes.
+
+It shows, for the same path, your account **without the guard** and **with your rules**: whether a pool is liquidated, the buffer along the path, the account value at the end, every action the guard would take, and the fees those orders would pay.
+
+## Assumptions
+
+- Guard orders fill at the worst price your slippage limit allows.
+- Resting backstop stops fill when the mark crosses them.
+- Your realised fee rate (from your own fills) is charged on each fill; with no fills yet, no fee is charged.
+- Funding, order-book depth and exchange congestion are **not** modelled.
+
+The simulator is for understanding your rules. It is not a forecast.

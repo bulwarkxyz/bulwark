@@ -1,0 +1,41 @@
+---
+title: Rules and the AI translator
+description: What a rule is, how the translator turns your words into one, and why it can only add protection.
+---
+
+## A rule
+
+A rule is a trigger and one or more actions, optionally limited to a fixed window:
+
+| Triggers | Actions |
+|---|---|
+| Buffer below a line | Alert |
+| Account down by a share since the window opened or since you signed | Move idle USDC into the pool (the amount you set) |
+| A market moving up or down by a share | Cut a position by a share, or close it |
+| A position's leverage above a level | Trim until the buffer is back at a line, or a market back to a leverage |
+| | Cancel orders that would add to a position |
+
+Windows are a fixed table, not numbers: **weekend** (Friday US close to Monday US open), **overnight** (US close to the next US open) and **US session** (9:30–16:00 New York time on weekdays).
+
+## Every number is yours
+
+The app never pre-fills a number and never suggests one. Every line, share and amount in your rules is a number you typed.
+
+## The AI translator
+
+You can write a rule in a sentence, for example *"close gold if it falls [your number]% overnight"*. An AI model (Claude, by Anthropic) turns it into one exact rule. The app labels it as an AI translator.
+
+- **What it sees:** your sentence, the market list and your current rules. No keys, and no access to the exchange.
+- **Numbers:** every number in a draft must be one you typed; otherwise the draft is refused before you see it.
+- **Only adds protection:** a draft can add a rule. It cannot change, loosen or remove an existing rule or your slippage limit. Loosening is a manual edit with its own signature.
+- **Asks or refuses:** if a number, market or action is missing, it asks one question. If the request isn't a protective rule (raising leverage, opening positions, sending funds), it refuses.
+- **What you see:** the rule shown back to you is generated from the rule's structure, not the model's wording, so every number on screen comes from the rule.
+- **You sign it:** nothing applies until you sign the new policy version in your wallet.
+
+<Callout type="info" title="Status">
+  The translator is built and tested with a stand-in model; it switches on in the testnet preview when its API key is configured. Until then, use the stage editor.
+</Callout>
+
+## Signing a policy
+
+A policy is your full set of rules plus your slippage limit, with a version number. You sign its hash (EIP-712) in your wallet. The guard acts only under the policy whose hash matches your stored signature (check I4).

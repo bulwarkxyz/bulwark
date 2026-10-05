@@ -1,0 +1,23 @@
+{
+  "title": "Bulwark",
+  "pages": [
+    "---Start---",
+    "index",
+    "getting-started",
+    "---How it works---",
+    "how-the-guard-works",
+    "rules",
+    "simulator",
+    "audit-log",
+    "---Trust---",
+    "key-storage",
+    "risks",
+    "backtests",
+    "comparison",
+    "open-source",
+    "---Reference---",
+    "fees",
+    "regions",
+    "faq"
+  ]
+}

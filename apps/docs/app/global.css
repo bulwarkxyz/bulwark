@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* Bulwark palette on Fumadocs' variables: slate neutrals, guard lime only for emphasis. */
+@theme {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+:root {
+  --color-fd-background: #ffffff;
+  --color-fd-foreground: #0d1116;
+  --color-fd-muted: #f4f6f2;
+  --color-fd-muted-foreground: #4a5562;
+  --color-fd-card: #f9faf8;
+  --color-fd-card-foreground: #0d1116;
+  --color-fd-border: #dce0d7;
+  --color-fd-primary: #3c5e00;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-accent: #eef3e3;
+  --color-fd-accent-foreground: #0d1116;
+  --color-fd-ring: #3c5e00;
+}
+.dark {
+  --color-fd-background: #090c10;
+  --color-fd-foreground: #e9eef3;
+  --color-fd-muted: #151c24;
+  --color-fd-muted-foreground: #a9b4c0;
+  --color-fd-card: #0f141a;
+  --color-fd-card-foreground: #e9eef3;
+  --color-fd-popover: #0f141a;
+  --color-fd-popover-foreground: #e9eef3;
+  --color-fd-secondary: #151c24;
+  --color-fd-secondary-foreground: #e9eef3;
+  --color-fd-border: #222c37;
+  --color-fd-primary: #c6f25a;
+  --color-fd-primary-foreground: #0b1300;
+  --color-fd-accent: #1c2530;
+  --color-fd-accent-foreground: #e9eef3;
+  --color-fd-ring: #c6f25a;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
