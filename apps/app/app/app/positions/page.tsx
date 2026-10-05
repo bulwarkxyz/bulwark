@@ -8,7 +8,7 @@ import { Icon } from '@/components/app/icons';
 import { PositionCards, PositionsTable, poolState } from '@/components/app/positions-table';
 import { useSignedIn } from '@/lib/api';
 import { useCommand } from '@/lib/commands';
-import { PAUSE_TEXT, STATE_STALE_MS, describeAction, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
+import { STATE_STALE_MS, describeAction, orderKindLabel, tickerOf, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
@@ -70,7 +70,7 @@ export default function PositionsPage() {
         <div className="banner b-crit">
           {Icon.alert()}
           <span>
-            <b>The guard is paused. {g.source === 'guard' ? (g.reason ? PAUSE_TEXT[g.reason] : '') : g.ageMs !== null && g.ageMs > STATE_STALE_MS ? `Account data is ${Math.round(g.ageMs / 1000)} s old.` : 'The app can’t reach Hyperliquid’s data.'}</b> It will not act on stale numbers and resumes by itself when fresh data arrives. Its resting backstop orders stay on Hyperliquid and still fill. If you need to act now, use Unwind or close a position yourself.
+            <b>The guard is paused. {g.source === 'guard' ? (g.reasonText ?? '') : g.ageMs !== null && g.ageMs > STATE_STALE_MS ? `Account data is ${Math.round(g.ageMs / 1000)} s old.` : 'The app can’t reach Hyperliquid’s data.'}</b> It will not act on stale numbers and resumes by itself when fresh data arrives. Its resting backstop orders stay on Hyperliquid and still fill. If you need to act now, use Unwind or close a position yourself.
           </span>
         </div>
       ) : null}

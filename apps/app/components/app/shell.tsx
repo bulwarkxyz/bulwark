@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { GUARD_LABEL, PAUSE_TEXT, STATE_STALE_MS, useClock, useGuardView, type GuardView } from '@/lib/guard';
+import { GUARD_LABEL, STATE_STALE_MS, useClock, useGuardView, type GuardView } from '@/lib/guard';
 import { NETWORK } from '@/lib/env';
 import { useAccountView, useStreamStatus, useXyzMarkets } from '@/lib/hl';
 import { useViewer } from '@/lib/review';
@@ -109,7 +109,7 @@ function StateNote({ g }: { g: GuardView }) {
       if (g.source === 'guard')
         return (
           <span className="small">
-            {g.reason ? PAUSE_TEXT[g.reason] : 'The guard is paused.'} It holds off until this clears, then resumes by itself.{' '}
+            {g.reasonText ?? 'The guard is paused.'} It holds off until this clears, then resumes by itself.{' '}
             {g.reason === 'agent_expired' ? <Link href="/app/onboarding?step=4" style={{ textDecoration: 'underline' }}>Approve again</Link> : null}
           </span>
         );

@@ -2,7 +2,7 @@
 // Design-review screenshots against a review-mode build (NEXT_PUBLIC_REVIEW_MODE=1): every screen at
 // desktop 1440 and phone 390, dark and light, in each state.
 // Usage: node scripts/review-shots.mjs <baseUrl> <outDir> --routes /app/trade/CL,/app/positions
-//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full]
+//        [--watch 0x…] [--states live,empty,loading,error,closed] [--full] [--tab 'Guard actions']
 // "live" uses ?watch=&rules=example (a public account read-only with example rules, labelled on screen).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,6 +23,7 @@ const watch = flag('--watch');
 const routes = (flag('--routes') ?? '/app/trade/CL').split(',');
 const states = (flag('--states') ?? 'live').split(',');
 const full = has('--full');
+const tab = flag('--tab'); // open this tab (by its label) before the shot
 const base = args[0] ?? 'http://localhost:3227';
 const out = args[1] ?? 'review-shots';
 const sizes = [
@@ -50,11 +51,15 @@ for (const theme of ['dark', 'light']) {
           // Not networkidle: the order book and trades stream over a WebSocket that never goes idle.
           await page.goto(`${base}${route}${route.includes('?') ? '&' : '?'}${q}`, { waitUntil: 'load', timeout: 90_000 });
           await page.waitForTimeout(4000);
+          if (tab) {
+            await page.getByRole('tab', { name: tab }).first().click({ timeout: 5000 });
+            await page.waitForTimeout(800);
+          }
         } catch (e) {
           console.log(`FAILED ${route} ${state} ${size.name} ${theme}: ${e.message.split('\n')[0]}`);
           continue;
         }
-        const name = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replace('=', '')}-${state}-${size.name}-${theme}.png`;
+        const name = `${route.replace(/^\//, '').replaceAll('/', '_').replace('?', '_').replaceAll('=', '').replaceAll('&', '_').replaceAll(':', '-')}${tab ? `-tab-${tab.toLowerCase().replaceAll(' ', '-')}` : ''}-${state}-${size.name}-${theme}.png`;
         try {
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
           if (overflow > 0) errors.push(`horizontal overflow ${overflow}px`);

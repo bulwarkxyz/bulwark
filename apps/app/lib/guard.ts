@@ -80,6 +80,16 @@ export const PAUSE_TEXT: Record<PauseReason, string> = {
   signer_error: 'The guard’s signer failed.',
   agent_expired: 'Your guard key’s approval on Hyperliquid has expired. Approve it again in setup.',
 };
+/**
+ * The guard reports agent_expired both when an approval has run out and before a key was ever approved;
+ * /v1/me tells them apart (agent.validUntil in the past vs. never approved).
+ */
+export function pauseText(reason: PauseReason, agent: { approved: boolean; validUntil: number | null } | null | undefined, now = Date.now()): string {
+  if (reason !== 'agent_expired' || !agent) return PAUSE_TEXT[reason];
+  if (agent.validUntil !== null && agent.validUntil < now) return PAUSE_TEXT.agent_expired;
+  if (!agent.approved) return 'Your guard key isn’t approved on Hyperliquid. Approve it in setup.';
+  return PAUSE_TEXT.agent_expired;
+}
 
 /**
  * The guard's own orders resting on the exchange (GET /v1/guard-orders). This is what the positions
@@ -166,6 +176,8 @@ export interface GuardView {
   /** Where the state came from: the guard's own report, or the app's fallback data-age check. */
   source: 'guard' | 'fallback';
   reason: PauseReason | null;
+  /** The pause reason in words, for this user (see pauseText). */
+  reasonText: string | null;
   /** The guard's last evaluation and last status write (from the API), ms since epoch. */
   lastEvaluatedAt: number | null;
   statusUpdatedAt: number | null;
@@ -276,7 +288,7 @@ export function useGuardView(): GuardView {
   const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
   if (reported && !clientOnly) state = FROM_API[reported.state];
 
-  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */
