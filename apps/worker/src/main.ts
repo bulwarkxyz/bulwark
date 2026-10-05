@@ -175,10 +175,14 @@ async function main() {
     onUserState: (u: string, states: Parameters<GuardEngine['onUserState']>[1], at: number) => arbiter.native(u, states, at),
     onSpotState: (u: string, spot: Parameters<GuardEngine['onSpotState']>[1], at: number) => void engine.onSpotState(u, spot, at),
   };
+  // Only accounts with signed rules are watched: the app reads everyone else's state from Hyperliquid itself.
+  // Watching every account that ever signed in spent the REST budget on accounts with nothing to guard.
   async function syncUsers() {
     for (const u of await store.users()) {
       const k = u.account.toLowerCase();
       if (tracked.has(k)) continue;
+      const confirmed = await store.policy(u.account);
+      if (!confirmed || confirmed.policy.rules.length === 0) continue;
       tracked.add(k);
       // Hyperliquid allows 10 users per IP across user subscriptions; beyond that, Hydromancer and REST.
       if (nativeWs.size >= MAX_USERS_PER_CONNECTION) continue;
