@@ -1,10 +1,12 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useState } from 'react';
 import { createSiweMessage } from 'viem/siwe';
 import { useAccount, useChainId, useConnect, useDisconnect, useSignMessage } from 'wagmi';
 import { api, setSessionToken, useSignedIn } from '@/lib/api';
+import { useReview, useViewer } from '@/lib/review';
 import { shortAddr } from './format';
 
 /** Sign-in with Ethereum against the Bulwark API. The message says it authorises no transaction. */
@@ -36,25 +38,34 @@ export function useSignIn() {
 export function ConnectButton() {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending } = useConnect();
-  const { disconnect } = useDisconnect();
   const signIn = useSignIn();
   const [err, setErr] = useState<string | null>(null);
   const signedIn = useSignedIn();
+  const review = useReview();
+  const viewer = useViewer();
 
+  if (review.on && review.watch && viewer.connected) {
+    return (
+      <Link className="wallet" href="/app/account" title="Review build: a public account shown read-only">
+        <span className="num small">{shortAddr(review.watch)}</span>
+        <span className="tag">Watching</span>
+      </Link>
+    );
+  }
   if (!isConnected) {
     const injected = connectors[0];
     return (
-      <button type="button" className="btn btn-sm btn-primary" disabled={!injected || isPending} onClick={() => injected && connect({ connector: injected })}>
+      <button type="button" className="btn btn-sm btn-ink" disabled={!injected || isPending} onClick={() => injected && connect({ connector: injected })}>
         {isPending ? 'Connecting…' : 'Connect wallet'}
       </button>
     );
   }
   return (
-    <div className="row" style={{ gap: 8 }}>
+    <div className="row nw" style={{ gap: 8 }}>
       {!signedIn ? (
         <button
           type="button"
-          className="btn btn-sm"
+          className="btn btn-sm btn-ink"
           onClick={() => {
             setErr(null);
             signIn().catch((e: Error) => setErr(e.message));
@@ -63,19 +74,29 @@ export function ConnectButton() {
           Sign in
         </button>
       ) : null}
-      <button
-        type="button"
-        className="chip"
-        style={{ height: 34 }}
-        onClick={() => {
-          setSessionToken(null);
-          disconnect();
-        }}
-        title="Disconnect"
-      >
-        <span className="num">{shortAddr(address as string)}</span>
-      </button>
-      {err ? <span className="err" style={{ fontSize: 12 }}>{err}</span> : null}
+      <Link className="wallet" href="/app/account" title="Account">
+        <span className="num small">{shortAddr(address as string)}</span>
+      </Link>
+      {err ? <span className="err hide-sm" style={{ fontSize: 12 }}>{err}</span> : null}
     </div>
+  );
+}
+
+/** Disconnect and forget the session (Account and Settings). */
+export function DisconnectButton() {
+  const { isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  if (!isConnected) return null;
+  return (
+    <button
+      type="button"
+      className="btn btn-sm"
+      onClick={() => {
+        setSessionToken(null);
+        disconnect();
+      }}
+    >
+      Disconnect
+    </button>
   );
 }

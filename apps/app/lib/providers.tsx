@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { arbitrum, mainnet } from 'wagmi/chains';
 import { injected } from 'wagmi/connectors';
+import { ReviewProvider } from './review';
 
 /**
  * Browser wallets only (EIP-6963 discovery through the injected connector). Hyperliquid's user-signed
@@ -21,7 +22,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } } }));
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ReviewProvider>{children}</ReviewProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }

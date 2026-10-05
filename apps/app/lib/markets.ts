@@ -16,10 +16,14 @@ export interface Market {
   session: SessionKind;
   /** Off-hours mark bound and number of re-anchors, where trade.xyz publishes them. */
   bound?: { pct: number; resets: number };
+  /** Names other front ends use for the same market (the API coin is unchanged). */
+  aliases?: string[];
 }
 
 export const MARKETS: Market[] = [
-  { coin: 'xyz:CL', ticker: 'CL', name: 'WTI crude oil', category: 'Commodities', session: 'futures', bound: { pct: 5, resets: 2 } },
+  // Checked against mainnet and testnet meta on 5 Oct 2026: the API coin is still xyz:CL; Hyperliquid's
+  // app and trade.xyz now display it as WTIOIL (app.hyperliquid.xyz/trade/xyz:CL redirects to xyz:WTIOIL).
+  { coin: 'xyz:CL', ticker: 'CL', name: 'WTI crude oil', category: 'Commodities', session: 'futures', bound: { pct: 5, resets: 2 }, aliases: ['WTIOIL'] },
   { coin: 'xyz:BRENTOIL', ticker: 'BRENTOIL', name: 'Brent crude oil', category: 'Commodities', session: 'futuresBrent', bound: { pct: 5, resets: 2 } },
   { coin: 'xyz:GOLD', ticker: 'GOLD', name: 'Gold', category: 'Commodities', session: 'futures', bound: { pct: 4, resets: 2 } },
   { coin: 'xyz:SILVER', ticker: 'SILVER', name: 'Silver', category: 'Commodities', session: 'futures', bound: { pct: 4, resets: 2 } },
@@ -32,6 +36,11 @@ export const MARKETS: Market[] = [
 ];
 
 export const marketByCoin = (coin: string) => MARKETS.find((m) => m.coin === coin);
+/** A ticker from a URL, matching aliases too (WTIOIL → CL). */
+export const marketByTicker = (t: string) => {
+  const up = t.toUpperCase();
+  return MARKETS.find((m) => m.ticker === up || m.aliases?.includes(up));
+};
 
 interface ZonedParts {
   weekday: number; // 0 Sun … 6 Sat

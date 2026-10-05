@@ -120,17 +120,17 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
       {stages.map((s, i) => {
         const k = KINDS.find((x) => x.kind === s.kind)!;
         return (
-          <div key={i} className="stage armed" style={{ gridTemplateColumns: '28px minmax(0,1fr)' }}>
+          <div key={i} className="stage" style={{ gridTemplateColumns: '28px minmax(0,1fr)' }}>
             <span className="n">{i + 1}</span>
             <div className="row" style={{ alignItems: 'flex-end' }}>
-              <div className="field" style={{ width: 150 }}>
+              <div className="field" style={{ width: 130 }}>
                 <label htmlFor={`line-${i}`}>When buffer is below</label>
                 <div className="input">
                   <input id={`line-${i}`} inputMode="decimal" placeholder="Your line" value={s.line} onChange={(e) => set(i, { line: e.target.value })} />
                   <span className="faint">×</span>
                 </div>
               </div>
-              <div className="field" style={{ flex: 1, minWidth: 200 }}>
+              <div className="field" style={{ flex: 1, minWidth: 180 }}>
                 <label htmlFor={`act-${i}`}>Do this</label>
                 <div className="input">
                   <select id={`act-${i}`} value={s.kind} onChange={(e) => set(i, { kind: e.target.value as Kind, param: '' })}>
@@ -177,14 +177,16 @@ export function StageForm({ onDone }: { onDone?: () => void }) {
           Your {kept.length} other rule{kept.length > 1 ? 's are' : ' is'} kept as {kept.length > 1 ? 'they are' : 'it is'}.
         </span>
       ) : null}
-      <div className="callout guard">
-        <span style={{ fontSize: 13 }}>The guard only ever reduces risk: reduce-only orders, cancels of orders that would add to a position, and moves of your own idle USDC. It cannot open or grow a position and cannot withdraw.</span>
+      <div className="disclose">
+        <span>
+          The guard only ever reduces risk: reduce-only orders, cancels of orders that would add to a position, and moves of your own idle USDC. It cannot open or grow a position and cannot withdraw. <b>Reduce-only is enforced by our engine, not by Hyperliquid.</b>
+        </span>
       </div>
-      <button type="button" className="btn btn-primary" disabled={Boolean(problem) || busy} onClick={confirm}>
+      <button type="button" className="btn btn-ink" disabled={Boolean(problem) || busy} onClick={confirm}>
         {busy ? 'Waiting for signature…' : 'Sign and turn on'}
       </button>
       {problem ? <span className="faint" style={{ fontSize: 12 }}>{problem}</span> : null}
-      {msg ? <span className={msg.ok ? 'ok-text' : 'err'} style={{ fontSize: 13 }}>{msg.text}</span> : null}
+      {msg ? <span className={msg.ok ? '' : 'err'} style={{ fontSize: 13 }}>{msg.text}</span> : null}
     </div>
   );
 }

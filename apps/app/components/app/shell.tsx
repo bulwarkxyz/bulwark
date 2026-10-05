@@ -2,125 +2,315 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAccount } from 'wagmi';
-import { useAccountView } from '@/lib/hl';
-import { useMe } from '@/lib/me';
-import { BrandMark, Icon } from './icons';
-import { fmtBuffer, fmtUsd, shortAddr } from './format';
+import { GUARD_LABEL, STATE_STALE_MS, useGuardView, type GuardView } from '@/lib/guard';
+import { NETWORK } from '@/lib/env';
+import { useAccountView, useXyzMarkets } from '@/lib/hl';
+import { useViewer } from '@/lib/review';
+import { BufferMeter, GuardChip } from './guard-ui';
 import { ConnectButton } from './connect';
-import { NetworkBadge } from './network-badge';
+import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
+import { BrandMark, Icon } from './icons';
 
 const NAV = [
-  { href: '/app', label: 'Markets', icon: Icon.markets, tab: true },
-  { href: '/app/trade/CL', label: 'Trade', icon: Icon.trade, tab: true, match: '/app/trade' },
-  { href: '/app/positions', label: 'Positions', icon: Icon.positions, tab: true },
-  { href: '/app/rules', label: 'Guard rules', icon: Icon.shield, tab: true, tabLabel: 'Guard' },
-  { href: '/app/simulator', label: 'Simulator', icon: Icon.simulator },
-  { href: '/app/account', label: 'Account', icon: Icon.account },
-  { href: '/app/audit', label: 'Audit log', icon: Icon.audit },
-  { href: '/app/settings', label: 'Settings', icon: Icon.settings },
+  { href: '/app/trade/CL', label: 'Trade', match: '/app/trade' },
+  { href: '/app', label: 'Markets' },
+  { href: '/app/positions', label: 'Positions' },
+  { href: '/app/rules', label: 'Guard rules' },
+  { href: '/app/simulator', label: 'Simulator' },
+  { href: '/app/audit', label: 'Audit log' },
 ];
+const TABS = [
+  { href: '/app', label: 'Markets', icon: Icon.markets },
+  { href: '/app/trade/CL', label: 'Trade', icon: Icon.trade, match: '/app/trade' },
+  { href: '/app/positions', label: 'Positions', icon: Icon.positions },
+  { href: '/app/rules', label: 'Guard', icon: Icon.shield },
+  { href: '/app/settings', label: 'More', icon: Icon.more, also: ['/app/account', '/app/audit', '/app/simulator'] },
+];
+const isOn = (path: string, item: { href: string; match?: string; also?: string[] }) =>
+  item.href === '/app' ? path === '/app' : path.startsWith(item.match ?? item.href) || Boolean(item.also?.some((p) => path.startsWith(p)));
 
-function active(path: string, item: (typeof NAV)[number]) {
-  if (item.href === '/app') return path === '/app';
-  return path.startsWith(item.match ?? item.href);
-}
-
-/** The highest of the user's lines that the buffer is still above (the next one it would cross). */
-function nextLine(lines: number[], buffer: number | undefined): string | null {
-  if (!lines.length) return null;
-  const below = lines.filter((l) => buffer === undefined || l < buffer);
-  return `${below.length ? Math.max(...below) : Math.min(...lines)}×`;
-}
-
-function GuardMini() {
-  const { address } = useAccount();
-  const me = useMe();
-  const view = useAccountView(address);
-  const lines = me.data?.policy?.policy.rules.filter((r) => r.when.kind === 'buffer').map((r) => (r.when as { below: number }).below) ?? [];
-  const worst = view.data?.risk.worst;
-  const armed = Boolean(me.data?.policy) && me.data?.user?.region === 'allowed' && !me.data?.user?.killSwitch && me.data?.agent?.approved;
-  const state = !address ? 'Not connected' : !me.data?.policy ? 'No rules yet' : me.data?.user?.killSwitch ? 'Stopped' : me.data?.user?.region === 'guardOff' ? 'Alerts only' : armed ? 'Guard armed' : 'Not armed';
+/** Testnet label, part 1 of 3: a band that cannot be dismissed. */
+export function NetBand() {
+  if (NETWORK !== 'testnet') return null;
   return (
-    <div className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <span className={`chip ${armed ? 'chip-guard' : me.data?.user?.killSwitch ? 'chip-crit' : ''}`} style={{ alignSelf: 'flex-start' }}>
-        <i />
-        {state}
+    <div className="netband" role="note">
+      <span className="nettag">TESTNET</span>
+      <span>Test funds only. Thin order books, tiny open interest and zero funding are normal on testnet, not a fault.</span>
+    </div>
+  );
+}
+
+function TopNav({ focused }: { focused: boolean }) {
+  const path = usePathname();
+  return (
+    <header className="topnav">
+      {/* The site root is the landing page (a separate zone). */}
+      <a className="brand" href="/">
+        <BrandMark />
+        Bulwark
+      </a>
+      {focused ? (
+        <span className="small t2 hide-sm">Set up</span>
+      ) : (
+        <nav className="nav" aria-label="Main">
+          {NAV.map((n) => (
+            <Link key={n.href} href={n.href} className={isOn(path, n) ? 'on' : ''} aria-current={isOn(path, n) ? 'page' : undefined}>
+              {n.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+      <span className="sp" />
+      {/* Testnet label, part 2 of 3. */}
+      {NETWORK === 'testnet' ? <span className="chip chip-net chip-sm">TESTNET</span> : null}
+      <ConnectButton />
+      {focused ? (
+        <Link className="btn btn-sm btn-ghost" href="/app">
+          Exit
+        </Link>
+      ) : (
+        <Link className="btn btn-sm btn-ghost hide-sm" href="/app/settings" aria-label="Settings">
+          {Icon.settings(16)}
+        </Link>
+      )}
+    </header>
+  );
+}
+
+function nextText(g: GuardView) {
+  if (g.crossed && (g.state === 'acting' || g.state === 'risk')) {
+    return (
+      <span className={g.state === 'risk' ? 'ct' : 'wt'}>
+        Below your <span className="num">{g.crossed.line}×</span> line on {g.crossed.ticker}: {g.crossed.does}
       </span>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <span className="faint">Buffer</span>
-        <span className="num" style={{ color: 'var(--guard-text)', fontWeight: 600 }}>{worst ? fmtBuffer(worst.buffer) : '—'}</span>
+    );
+  }
+  if (!g.next) return null;
+  const d = g.next.does;
+  return (
+    <>
+      {d.charAt(0).toUpperCase() + d.slice(1)} at <span className="num">{g.next.line}×</span> · {g.next.ticker} <span className="num">{fmtPx(g.next.price)}</span>{' '}
+      <span className="num t3">{fmtPct(g.next.move * 100, 1)}</span>
+    </>
+  );
+}
+
+function StateNote({ g }: { g: GuardView }) {
+  switch (g.state) {
+    case 'disconnected':
+      return <span className="small t2">Connect a wallet to see your margin buffer and what the guard will do. Market data is live.</span>;
+    case 'norules':
+      return (
+        <span className="small t2">
+          The guard is not armed. <Link href="/app/rules" style={{ textDecoration: 'underline' }}>Write your first rule</Link>.
+        </span>
+      );
+    case 'paused':
+      return <span className="small">{g.ageMs !== null && g.ageMs > STATE_STALE_MS ? `Account data is ${Math.round(g.ageMs / 1000)} s old. ` : 'Can’t reach Hyperliquid’s data. '}The guard acts only on fresh data and holds off until it returns.</span>;
+    case 'stopped':
+      return (
+        <span className="small ct">
+          Your positions are not protected. <Link href="/app/settings" style={{ textDecoration: 'underline' }}>Resume</Link>
+        </span>
+      );
+    case 'alertsonly':
+      return <span className="small t2">In your region the guard sends alerts but does not trade.</span>;
+    case 'unsupported':
+      return <span className="small t2">Portfolio margin is shown read-only. The guard does not act on it.</span>;
+    default:
+      return null;
+  }
+}
+
+function useFigures() {
+  const { address } = useViewer();
+  const view = useAccountView(address);
+  const risk = view.data?.risk;
+  if (!risk) return null;
+  const upnl = risk.pools.reduce((s, p) => s + p.positions.reduce((t, r) => t + r.unrealizedPnl, 0), 0);
+  const available = risk.idle.reduce((s, i) => s + i.available, 0);
+  return { value: risk.accountValue, upnl, available };
+}
+
+/** Persistent chrome: guard state, lowest buffer, next guard action, account figures. */
+function GuardBar() {
+  const g = useGuardView();
+  const f = useFigures();
+  const armed = g.state === 'protected' || g.state === 'acting' || g.state === 'risk';
+  return (
+    <div className="gbar" aria-label="Guard and account">
+      <Link href="/app/positions" aria-label={`Guard: ${GUARD_LABEL[g.state]}`}>
+        <GuardChip state={g.state} />
+      </Link>
+      {g.state === 'loading' ? (
+        <>
+          <div className="fig">
+            <span className="lbl">Lowest buffer</span>
+            <span className="sk" style={{ width: 150 }} />
+          </div>
+          <div className="fig">
+            <span className="lbl">Next guard action</span>
+            <span className="sk" style={{ width: 190 }} />
+          </div>
+        </>
+      ) : armed || (g.worst && g.state !== 'disconnected') ? (
+        <>
+          <div className="fig">
+            <span className="lbl">Lowest buffer{g.worst ? ` · ${g.worst.positions.length === 1 ? g.worst.positions[0]!.position.coin.replace(/^[a-z]+:/, '') : 'cross'} pool` : ''}</span>
+            <div className="row nw" style={{ gap: 10 }}>
+              <span className="num">{g.worst ? fmtBuffer(g.worst.buffer) : '—'}</span>
+              <BufferMeter size="mini" buffer={g.worst?.buffer ?? null} lines={g.lines} state={g.state} />
+            </div>
+          </div>
+          {armed ? (
+            <div className="fig">
+              <span className="lbl">{g.crossed && g.state !== 'protected' ? 'Guard now' : 'Next guard action'}</span>
+              <span className="small">{nextText(g) ?? <span className="t2">No line within reach of any position</span>}</span>
+            </div>
+          ) : (
+            <StateNote g={g} />
+          )}
+        </>
+      ) : (
+        <StateNote g={g} />
+      )}
+      {g.exampleRules ? <span className="tag">Example rules</span> : null}
+      {f && g.state !== 'loading' ? (
+        <>
+          <span className="sep" />
+          <div className="fig">
+            <span className="lbl">Account value</span>
+            <span className="num">{fmtUsd(f.value)}</span>
+          </div>
+          <div className="fig">
+            <span className="lbl">Unrealised PnL</span>
+            <span className={`num ${upDown(f.upnl)}`}>{fmtSignedUsd(f.upnl)}</span>
+          </div>
+          <div className="fig">
+            <span className="lbl">Available</span>
+            <span className="num">{fmtUsd(f.available)}</span>
+          </div>
+        </>
+      ) : null}
+      <span className="sp" />
+      {armed ? (
+        <Link className="btn btn-sm" href="/app/settings#kill-switch">
+          {Icon.stop()}
+          Stop guard
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** Phone: the same reading in two lines under the header. */
+function MobileGuard() {
+  const g = useGuardView();
+  const f = useFigures();
+  const armed = g.state === 'protected' || g.state === 'acting' || g.state === 'risk';
+  return (
+    <Link className="mguard" href="/app/positions" aria-label={`Guard: ${GUARD_LABEL[g.state]}`}>
+      <div className="row nw" style={{ gap: 10 }}>
+        <GuardChip state={g.state} sm />
+        {g.worst && g.state !== 'loading' ? (
+          <>
+            <span className="num small b">{fmtBuffer(g.worst.buffer)}</span>
+            <BufferMeter size="row" buffer={g.worst.buffer} lines={g.lines} state={g.state} />
+          </>
+        ) : null}
+        {g.exampleRules ? <span className="tag">Example</span> : null}
       </div>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <span className="faint">Next line</span>
-        <span className="num">{nextLine(lines, worst?.buffer) ?? '—'}</span>
-      </div>
+      {armed && (g.next || g.crossed) ? (
+        <span className="tiny t2">
+          Next: {nextText(g)}
+          {f ? (
+            <>
+              {' '}
+              · Account <span className="num">{fmtUsd(f.value)}</span>
+            </>
+          ) : null}
+        </span>
+      ) : (
+        <StateNote g={g} />
+      )}
+    </Link>
+  );
+}
+
+/** Testnet label, part 3 of 3, plus how fresh the data is. Engine health is not reported to the app yet. */
+function StatusBar() {
+  const markets = useXyzMarkets();
+  const g = useGuardView();
+  const marketsOk = !markets.isError && Boolean(markets.data);
+  return (
+    <footer className="statusbar">
+      <span className="row" style={{ gap: 6 }}>
+        <span className={`dot ${NETWORK === 'testnet' ? 'dot-net' : 'dot-ok'}`} />
+        {NETWORK === 'testnet' ? 'Testnet' : 'Mainnet'}
+      </span>
+      <span className={`row ${markets.isError ? 'ct' : ''}`} style={{ gap: 6 }}>
+        <span className={`dot ${markets.isError ? 'dot-crit' : 'dot-ok'}`} />
+        {markets.isError ? 'Hyperliquid market data · can’t reach' : marketsOk ? 'Hyperliquid market data · live' : 'Hyperliquid market data · connecting'}
+      </span>
+      {g.ageMs !== null ? (
+        <span className={`row ${g.state === 'paused' ? 'ct' : ''}`} style={{ gap: 6 }}>
+          <span className={`dot ${g.state === 'paused' ? 'dot-crit' : 'dot-ok'}`} />
+          Account data · {Math.max(0, Math.round(g.ageMs / 1000))} s old
+        </span>
+      ) : null}
+      <span className="sp" />
+      <span className="hide-sm">Times in UTC</span>
+    </footer>
+  );
+}
+
+function MobileTabBar() {
+  const path = usePathname();
+  return (
+    <nav className="mtabbar" aria-label="Main">
+      {TABS.map((t) => (
+        <Link key={t.href} href={t.href} className={isOn(path, t) ? 'on' : ''} aria-current={isOn(path, t) ? 'page' : undefined}>
+          {t.icon(20)}
+          {t.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function SetupBar() {
+  const g = useGuardView();
+  const armed = g.state === 'protected' || g.state === 'acting' || g.state === 'risk';
+  return (
+    <div className="gbar" style={{ display: 'flex' }}>
+      <GuardChip state={armed ? g.state : 'norules'} label={armed ? undefined : 'Guard not armed yet'} />
+      <span className="small t2">{armed ? 'The guard is armed with your signed rules.' : 'The guard arms when its key is approved and you sign your first rules.'}</span>
     </div>
   );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
-  if (path.startsWith('/app/onboarding')) return <div className="bw page" style={{ minHeight: '100vh' }}>{children}</div>;
+  const focused = path.startsWith('/app/onboarding');
   return (
-    <div className="bw app">
-      <nav className="rail" aria-label="Main">
-        <Link href="/" className="brand">
-          <BrandMark />
-          Bulwark
-        </Link>
-        <div className="nav">
-          {NAV.map((item) => (
-            <Link key={item.href} href={item.href} className={active(path, item) ? 'on' : ''} aria-current={active(path, item) ? 'page' : undefined}>
-              {item.icon()}
-              {item.label}
-            </Link>
-          ))}
-        </div>
-        <div className="rail-foot">
-          <GuardMini />
-          <Link className="btn btn-sm" href="/app/settings#kill-switch">
-            Stop guard
-          </Link>
-        </div>
-      </nav>
-      <main className="main">
-        {children}
-        <nav className="tabbar" aria-label="Main">
-          {NAV.filter((n) => n.tab).map((item) => (
-            <Link key={item.href} href={item.href} className={active(path, item) ? 'on' : ''}>
-              {item.icon(20)}
-              {item.tabLabel ?? item.label}
-            </Link>
-          ))}
-          <Link href="/app/settings" className={['/app/settings', '/app/account', '/app/audit', '/app/simulator'].some((p) => path.startsWith(p)) ? 'on' : ''}>
-            {Icon.more()}
-            More
-          </Link>
-        </nav>
-      </main>
+    <div className="bw shell">
+      <NetBand />
+      <TopNav focused={focused} />
+      {focused ? <SetupBar /> : <GuardBar />}
+      {focused ? null : <MobileGuard />}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>{children}</main>
+      <StatusBar />
+      {focused ? null : <MobileTabBar />}
     </div>
   );
 }
 
-/** Top bar used by every screen: title, optional chips, and the wallet. */
+/** Page title row for screens still on the previous layout (the wallet lives in the top nav now). */
 export function TopBar({ title, children }: { title: React.ReactNode; children?: React.ReactNode }) {
-  const { address } = useAccount();
-  const view = useAccountView(address);
   return (
     <header className="topbar">
       <h1>{title}</h1>
-      <NetworkBadge />
       {children}
-      <span className="spacer" />
-      {address && view.data ? (
-        <Link className="chip hide-sm" href="/app/account">
-          <span className="num">{shortAddr(address)}</span>
-          <span className="faint">·</span>
-          <span className="num">{fmtUsd(view.data.risk.accountValue)}</span>
-        </Link>
-      ) : null}
-      <ConnectButton />
     </header>
   );
 }

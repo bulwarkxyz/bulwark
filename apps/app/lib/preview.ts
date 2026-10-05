@@ -1,10 +1,10 @@
-import { assessRisk, priceAtBuffer, tiersForPosition, type AccountSnapshot, type AssetIndex, type Position } from '@bulwarkxyz/guard-core';
+import { assessRisk, guardActsAt, tiersForPosition, type AccountSnapshot, type AssetIndex, type GuardLevel, type Position } from '@bulwarkxyz/guard-core';
 
 export interface OrderPreview {
   bufferBefore: number | null;
   bufferAfter: number;
-  /** Mark at which the pool reaches the user's highest line, if any. */
-  firstLinePx: number | null;
+  /** The first of the user's lines this position would cross, as a price (null with no lines in reach). */
+  guardAt: GuardLevel | null;
   liquidationPx: number | null;
 }
 
@@ -20,9 +20,10 @@ export function previewOrder(args: {
   delta: number;
   mark: number;
   leverage: number;
-  highestLine: number | null;
+  /** The user's buffer lines. */
+  lines: readonly number[];
 }): OrderPreview | null {
-  const { snapshot, assets, coin, delta, mark, leverage, highestLine } = args;
+  const { snapshot, assets, coin, delta, mark, leverage, lines } = args;
   const asset = assets.get(coin);
   if (!asset || !delta || !(mark > 0)) return null;
   const before = assessRisk(snapshot);
@@ -70,7 +71,7 @@ export function previewOrder(args: {
   return {
     bufferBefore: poolBefore ? poolBefore.buffer : null,
     bufferAfter: pool ? pool.buffer : Number.POSITIVE_INFINITY,
-    firstLinePx: pool && row && highestLine ? priceAtBuffer(pool, row, highestLine) : null,
+    guardAt: pool && row && lines.length ? guardActsAt(pool, row, lines) : null,
     liquidationPx: row?.liquidationPx ?? null,
   };
 }

@@ -4,6 +4,7 @@ import type { Policy } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery } from '@tanstack/react-query';
 import { api, sessionToken } from './api';
+import { examplePolicy, useReview } from './review';
 
 export interface Me {
   account: Hex;
@@ -27,9 +28,27 @@ export interface Me {
 
 /** The signed-in user's Bulwark record (null when signed out). */
 export function useMe() {
+  const review = useReview();
   return useQuery({
-    queryKey: ['me'],
-    queryFn: async () => (sessionToken() ? api<Me>('/v1/me') : null),
+    queryKey: ['me', review.on ? `${review.watch ?? ''}|${review.exampleRules}|${review.state}` : 'live'],
+    queryFn: async (): Promise<Me | null> => {
+      if (review.on && review.state !== 'empty' && review.watch) return reviewMe(review.watch, review.exampleRules);
+      return sessionToken() ? api<Me>('/v1/me') : null;
+    },
     refetchInterval: 30_000,
   });
+}
+
+/** Review builds only: a watched account as if it had finished onboarding (see lib/review.tsx). */
+function reviewMe(account: Hex, exampleRules: boolean): Me {
+  return {
+    account,
+    user: { account, agentKeyRef: 'review', agentAddress: null, region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false },
+    agent: { address: account, approved: true, validUntil: null },
+    builder: { address: account, feeTenthsBps: 30, approvedMaxTenthsBps: 0 },
+    keyCustody: 'sealed',
+    keyStatus: 'ready',
+    pendingAgent: null,
+    policy: exampleRules ? { version: 3, hash: 'example', confirmedAt: Date.UTC(2026, 9, 4, 14, 2), policy: examplePolicy(account) } : null,
+  };
 }

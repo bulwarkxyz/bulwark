@@ -1,0 +1,218 @@
+[
+ {
+  "fg": "text",
+  "bg": "bg",
+  "min": 4.5,
+  "use": "body"
+ },
+ {
+  "fg": "text",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "body"
+ },
+ {
+  "fg": "text-2",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "labels"
+ },
+ {
+  "fg": "text-2",
+  "bg": "s2",
+  "min": 4.5,
+  "use": "labels"
+ },
+ {
+  "fg": "text-3",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "captions"
+ },
+ {
+  "fg": "text-3",
+  "bg": "s3",
+  "min": 4.5,
+  "use": "captions"
+ },
+ {
+  "fg": "guard-text",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "protected in text"
+ },
+ {
+  "fg": "guard-ink",
+  "bg": "guard",
+  "min": 4.5,
+  "use": "protected chip"
+ },
+ {
+  "fg": "on-ink",
+  "bg": "ink",
+  "min": 4.5,
+  "use": "primary button"
+ },
+ {
+  "fg": "on-long",
+  "bg": "long",
+  "min": 4.5,
+  "use": "long button"
+ },
+ {
+  "fg": "on-short",
+  "bg": "short",
+  "min": 4.5,
+  "use": "short button"
+ },
+ {
+  "fg": "on-crit",
+  "bg": "crit",
+  "min": 4.5,
+  "use": "danger button"
+ },
+ {
+  "fg": "on-net",
+  "bg": "net",
+  "min": 4.5,
+  "use": "testnet chip"
+ },
+ {
+  "fg": "long",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "long text"
+ },
+ {
+  "fg": "long",
+  "bg": "s3",
+  "min": 4.5,
+  "use": "long text"
+ },
+ {
+  "fg": "short",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "short text"
+ },
+ {
+  "fg": "short",
+  "bg": "s3",
+  "min": 4.5,
+  "use": "short text"
+ },
+ {
+  "fg": "warn",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "guard lines"
+ },
+ {
+  "fg": "crit",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "liquidation"
+ },
+ {
+  "fg": "net",
+  "bg": "surface",
+  "min": 4.5,
+  "use": "testnet tags"
+ },
+ {
+  "fg": "warn",
+  "bg": "warn-soft@s2",
+  "min": 4.5,
+  "use": "acting chip"
+ },
+ {
+  "fg": "crit",
+  "bg": "crit-soft@s2",
+  "min": 4.5,
+  "use": "risk chip"
+ },
+ {
+  "fg": "long",
+  "bg": "long-soft@surface",
+  "min": 4.5,
+  "use": "side chip"
+ },
+ {
+  "fg": "short",
+  "bg": "short-soft@surface",
+  "min": 4.5,
+  "use": "side chip"
+ },
+ {
+  "fg": "text",
+  "bg": "net-soft@bg",
+  "min": 4.5,
+  "use": "testnet band"
+ },
+ {
+  "fg": "text",
+  "bg": "guard-zone@s2",
+  "min": 4.5,
+  "use": "guard preview"
+ },
+ {
+  "fg": "guard-g",
+  "bg": "s3",
+  "min": 3.0,
+  "use": "meter pointer (graphic)"
+ },
+ {
+  "fg": "field",
+  "bg": "s2",
+  "min": 3.0,
+  "use": "input border (graphic)"
+ },
+ {
+  "fg": "focus",
+  "bg": "surface",
+  "min": 3.0,
+  "use": "focus ring (graphic)"
+ },
+ {
+  "fg": "guard-edge",
+  "bg": "surface",
+  "min": 3.0,
+  "use": "protected chip edge, light (graphic)"
+ },
+ {
+  "fg": "on-warn",
+  "bg": "warn",
+  "min": 4.5,
+  "use": "guard price tag on the chart axis"
+ },
+ {
+  "fg": "text-2",
+  "bg": "bg",
+  "min": 4.5,
+  "use": "labels on the ground"
+ },
+ {
+  "fg": "text-3",
+  "bg": "bg",
+  "min": 4.5,
+  "use": "stat labels on the guard bar"
+ },
+ {
+  "fg": "text-3",
+  "bg": "s2",
+  "min": 4.5,
+  "use": "placeholders in inputs"
+ },
+ {
+  "fg": "text",
+  "bg": "crit-soft@s2",
+  "min": 4.5,
+  "use": "error banner body text"
+ },
+ {
+  "fg": "text",
+  "bg": "warn-soft@s2",
+  "min": 4.5,
+  "use": "acting banner body text"
+ }
+]

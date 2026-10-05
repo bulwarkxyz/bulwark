@@ -27,6 +27,8 @@ export interface MarketCtx {
   prevDay: number;
   change: number;
   fundingAprPct: number;
+  /** Funding rate per hour in percent, as Hyperliquid quotes it (paid every hour). */
+  fundingHourlyPct: number;
   openInterestUsd: number;
   dayVolumeUsd: number;
   maxLeverage: number;
@@ -55,6 +57,7 @@ export function useXyzMarkets() {
           change: prev ? mark / prev - 1 : 0,
           // funding is per hour; APR = hourly × 24 × 365
           fundingAprPct: Number(c.funding) * 24 * 365 * 100,
+          fundingHourlyPct: Number(c.funding) * 100,
           openInterestUsd: Number(c.openInterest) * mark,
           dayVolumeUsd: Number(c.dayNtlVlm),
           maxLeverage: u.maxLeverage,
@@ -102,15 +105,59 @@ export function useAccountView(address: Hex | undefined) {
   });
 }
 
-export function useCandles(coin: string, interval: '1h' | '15m' | '1d', hours: number) {
+export interface Candle {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+}
+
+export function useCandles(coin: string, interval: '5m' | '15m' | '1h' | '4h' | '1d', hours: number) {
   return useQuery({
     queryKey: ['candles', NETWORK, coin, interval, hours],
-    queryFn: async () => {
+    queryFn: async (): Promise<Candle[]> => {
       const end = Date.now();
-      const rows = await info.request<Array<{ t: number; c: string; h: string; l: string }>>({ type: 'candleSnapshot', req: { coin, interval, startTime: end - hours * 3_600_000, endTime: end } });
-      return rows.map((r) => ({ t: r.t, c: Number(r.c), h: Number(r.h), l: Number(r.l) }));
+      const rows = await info.request<Array<{ t: number; o: string; c: string; h: string; l: string }>>({ type: 'candleSnapshot', req: { coin, interval, startTime: end - hours * 3_600_000, endTime: end } });
+      return rows.map((r) => ({ t: r.t, o: Number(r.o), h: Number(r.h), l: Number(r.l), c: Number(r.c) }));
     },
     refetchInterval: 60_000,
+  });
+}
+
+export interface BookLevel {
+  px: number;
+  sz: number;
+}
+
+/** Top of the order book (l2Book), polled. Bids best first, asks best first. */
+export function useBook(coin: string) {
+  return useQuery({
+    queryKey: ['book', NETWORK, coin],
+    queryFn: async () => {
+      const r = await info.request<{ levels: [Array<{ px: string; sz: string }>, Array<{ px: string; sz: string }>]; time: number }>({ type: 'l2Book', coin });
+      const side = (xs: Array<{ px: string; sz: string }>): BookLevel[] => xs.map((x) => ({ px: Number(x.px), sz: Number(x.sz) }));
+      return { bids: side(r.levels[0] ?? []), asks: side(r.levels[1] ?? []), time: r.time };
+    },
+    refetchInterval: 2_000,
+  });
+}
+
+export interface Trade {
+  px: number;
+  sz: number;
+  side: 'B' | 'A';
+  time: number;
+}
+
+export function useTrades(coin: string) {
+  return useQuery({
+    queryKey: ['trades', NETWORK, coin],
+    queryFn: async (): Promise<Trade[]> => {
+      const rows = await info.request<Array<{ px: string; sz: string; side: 'B' | 'A'; time: number }>>({ type: 'recentTrades', coin });
+      return rows.map((r) => ({ px: Number(r.px), sz: Number(r.sz), side: r.side, time: r.time })).sort((a, b) => b.time - a.time);
+    },
+    refetchInterval: 3_000,
   });
 }
 

@@ -1,6 +1,60 @@
 const base = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 
 export const Icon = {
+  shieldCheck: (s = 13) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2.2}>
+      <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
+      <path d="M8.5 12l2.5 2.5 4.5-5" />
+    </svg>
+  ),
+  shieldAlert: (s = 13) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2.2}>
+      <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  ),
+  pause: (s = 13) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2.2}>
+      <path d="M9 5v14M15 5v14" />
+    </svg>
+  ),
+  stop: (s = 12) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2.4}>
+      <rect x="6" y="6" width="12" height="12" rx="1" />
+    </svg>
+  ),
+  moon: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />
+    </svg>
+  ),
+  alert: (s = 16) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5M12 16h.01" />
+    </svg>
+  ),
+  lock: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  ),
+  lines: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2}>
+      <path d="M4 6h16M4 12h10M4 18h7" />
+    </svg>
+  ),
+  check: (s = 12) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2.4}>
+      <path d="M5 12l4 4 10-10" />
+    </svg>
+  ),
+  caret: (s = 12) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base} strokeWidth={2}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  ),
   shield: (s = 18) => (
     <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
       <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
@@ -68,10 +122,11 @@ export const Icon = {
   ),
 };
 
+/** The logo is neutral: lime means "protected" and nothing else. */
 export function BrandMark() {
   return (
-    <span className="mark">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <span className="mark" style={{ display: 'grid', placeItems: 'center' }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
       </svg>
     </span>

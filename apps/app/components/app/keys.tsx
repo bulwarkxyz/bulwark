@@ -97,7 +97,7 @@ export function GuardKeyCard() {
     <section className="card" aria-labelledby="gk-h">
       <div className="card-h">
         <h2 id="gk-h">Guard key</h2>
-        <span className={`chip ${agent?.approved ? 'chip-guard' : ''}`} style={{ marginLeft: 'auto' }}>
+        <span className="chip" style={{ marginLeft: 'auto' }}>
           <i />
           {agent?.approved ? 'Approved' : agent ? 'Created, not approved' : 'Not created'}
         </span>
@@ -132,7 +132,7 @@ export function GuardKeyCard() {
                 <span className="faint">days</span>
               </div>
             </div>
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={approve}>
+            <button type="button" className="btn btn-ink" disabled={busy} onClick={approve}>
               {busy ? 'Waiting for signature…' : 'Approve guard key'}
             </button>
           </>
@@ -180,7 +180,7 @@ export function TradingKeyCard() {
     <section className="card" aria-labelledby="tk-h">
       <div className="card-h">
         <h2 id="tk-h">Trading key (this browser)</h2>
-        <span className={`chip ${approved ? 'chip-guard' : ''}`} style={{ marginLeft: 'auto' }}>
+        <span className="chip" style={{ marginLeft: 'auto' }}>
           <i />
           {approved ? 'Approved' : key ? 'Not approved' : 'None'}
         </span>
@@ -204,7 +204,7 @@ export function TradingKeyCard() {
                 <span className="faint">days</span>
               </div>
             </div>
-            <button type="button" className="btn btn-primary" disabled={busy || !address} onClick={approve}>
+            <button type="button" className="btn btn-ink" disabled={busy || !address} onClick={approve}>
               {busy ? 'Waiting for signature…' : key ? 'Approve trading key' : 'Create and approve'}
             </button>
           </>
@@ -255,7 +255,7 @@ export function BuilderCard() {
     <section className="card" aria-labelledby="bf-h">
       <div className="card-h">
         <h2 id="bf-h">Bulwark fee</h2>
-        <span className={`chip ${ok ? 'chip-guard' : ''}`} style={{ marginLeft: 'auto' }}>
+        <span className="chip" style={{ marginLeft: 'auto' }}>
           <i />
           {ok ? `Approved up to ${(approvedMax / 1000).toFixed(3)}%` : 'Not approved'}
         </span>
@@ -265,7 +265,7 @@ export function BuilderCard() {
           Bulwark charges 3 bps (0.03%) on orders placed through it, through Hyperliquid's builder code. You approve a cap of {BUILDER_APPROVE_MAX_RATE} ({BUILDER_APPROVE_MAX_TENTHS_BPS / 10} bps) and can lower it to zero at any time. {NETWORK === 'testnet' ? 'This is testnet.' : ''}
         </span>
         {!ok ? (
-          <button type="button" className="btn btn-primary" disabled={busy || !me.data} onClick={approve}>
+          <button type="button" className="btn btn-ink" disabled={busy || !me.data} onClick={approve}>
             {busy ? 'Waiting for signature…' : `Approve fee cap ${BUILDER_APPROVE_MAX_RATE}`}
           </button>
         ) : null}
@@ -284,7 +284,7 @@ export function TelegramCard() {
     <section className="card" aria-labelledby="tg-h">
       <div className="card-h">
         <h2 id="tg-h">Telegram alerts</h2>
-        <span className={`chip ${linked ? 'chip-guard' : ''}`} style={{ marginLeft: 'auto' }}>
+        <span className="chip" style={{ marginLeft: 'auto' }}>
           <i />
           {linked ? 'Linked' : 'Not linked'}
         </span>
@@ -338,7 +338,7 @@ export function KillSwitchCard() {
     <section className="card" id="kill-switch" aria-labelledby="ks-h">
       <div className="card-h">
         <h2 id="ks-h">Kill switch</h2>
-        <span className={`chip ${!me.data?.user ? '' : stopped ? 'chip-crit' : 'chip-guard'}`} style={{ marginLeft: 'auto' }}>
+        <span className={`chip ${me.data?.user && stopped ? 'chip-crit' : ''}`} style={{ marginLeft: 'auto' }}>
           <i />
           {!me.data?.user ? 'Not set up' : stopped ? 'Guard stopped' : 'Guard running'}
         </span>
@@ -347,7 +347,7 @@ export function KillSwitchCard() {
         <span className="muted" style={{ fontSize: 13 }}>
           Stopping takes effect at once: the guard sends nothing more and cancels its own resting orders. Your positions and your own orders are left as they are. You sign the command in your wallet.
         </span>
-        <button type="button" className={`btn ${stopped ? 'btn-primary' : 'btn-danger'}`} disabled={busy || !me.data?.user} onClick={() => run(stopped ? 'resume' : 'stop')}>
+        <button type="button" className={`btn ${stopped ? 'btn-ink' : 'btn-crit'}`} disabled={busy || !me.data?.user} onClick={() => run(stopped ? 'resume' : 'stop')}>
           {busy ? 'Waiting for signature…' : stopped ? 'Sign and resume guard' : 'Sign and stop guard'}
         </button>
         <Status msg={msg} />
