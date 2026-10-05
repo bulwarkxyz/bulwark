@@ -53,6 +53,8 @@ export interface GuardStore {
   removeGuardOrders(account: string, oids: readonly number[]): Promise<void>;
   recentActions(account: string, since: number): Promise<number[]>;
   addAction(account: string, at: number): Promise<void>;
+  /** Links a Telegram chat with a one-time code; returns the account, or null if the code is unknown, used or expired. */
+  redeemTelegramCode(code: string, chatId: string, now: number): Promise<string | null>;
   readonly audit: AuditStore;
 }
 
@@ -110,5 +112,17 @@ export class MemoryStore implements GuardStore {
   }
   async addAction(account: string, at: number) {
     this.a.set(this.k(account), [...(this.a.get(this.k(account)) ?? []).filter((t) => t >= at - 3_600_000), at]);
+  }
+  private readonly codes = new Map<string, { account: string; expiresAt: number; used: boolean }>();
+  putTelegramCode(code: string, account: string, expiresAt: number) {
+    this.codes.set(code, { account: this.k(account), expiresAt, used: false });
+  }
+  async redeemTelegramCode(code: string, chatId: string, now: number) {
+    const c = this.codes.get(code);
+    if (!c || c.used || c.expiresAt < now) return null;
+    c.used = true;
+    const u = this.u.get(c.account);
+    if (u) this.u.set(c.account, { ...u, telegramChatId: chatId });
+    return c.account;
   }
 }

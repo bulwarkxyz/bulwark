@@ -35,6 +35,7 @@ export class HyperliquidStream {
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private backoff = 500;
   private closed = false;
+  private isOpen = false;
   lastMessageAt = 0;
 
   constructor(
@@ -74,13 +75,15 @@ export class HyperliquidStream {
 
   private add(sub: Record<string, unknown>) {
     this.subs.push(sub);
-    this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: sub }));
+    // While connecting, subscriptions wait and are sent on open with the rest.
+    if (this.isOpen) this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: sub }));
   }
 
   private connect() {
     const s = this.factory(this.url);
     this.socket = s;
     s.on('open', () => {
+      this.isOpen = true;
       this.backoff = 500;
       for (const sub of this.subs) s.send(JSON.stringify({ method: 'subscribe', subscription: sub }));
       if (this.heartbeat) clearInterval(this.heartbeat);
@@ -89,6 +92,7 @@ export class HyperliquidStream {
     });
     s.on('message', (raw) => this.dispatch(String(raw)));
     s.on('close', () => {
+      this.isOpen = false;
       this.handlers.onStatus?.('closed', this.now());
       if (this.heartbeat) clearInterval(this.heartbeat);
       if (this.closed) return;

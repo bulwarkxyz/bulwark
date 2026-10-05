@@ -76,3 +76,11 @@ $$ language plpgsql;
 drop trigger if exists audit_log_no_change on audit_log;
 create trigger audit_log_no_change before update or delete on audit_log
   for each row execute function audit_log_append_only();
+
+-- One-time codes the app shows the user; the bot links a Telegram chat to the account with them.
+create table if not exists telegram_links (
+  code        text primary key,
+  account     text not null references users (account),
+  expires_at  bigint not null,
+  used_at     bigint
+);

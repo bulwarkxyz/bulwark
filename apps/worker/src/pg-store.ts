@@ -111,4 +111,15 @@ export class PgStore implements GuardStore {
   async addAction(account: string, at: number) {
     await this.sql`insert into actions (account, at) values (${this.k(account)}, ${at})`;
   }
+  async createTelegramCode(code: string, account: string, expiresAt: number) {
+    await this.sql`insert into telegram_links (code, account, expires_at) values (${code}, ${this.k(account)}, ${expiresAt})`;
+  }
+  async redeemTelegramCode(code: string, chatId: string, now: number) {
+    return this.sql.begin(async (tx) => {
+      const [row] = await tx`update telegram_links set used_at = ${now} where code = ${code} and used_at is null and expires_at >= ${now} returning account`;
+      if (!row) return null;
+      await tx`update users set telegram_chat_id = ${chatId} where account = ${row.account}`;
+      return row.account as string;
+    }) as Promise<string | null>;
+  }
 }

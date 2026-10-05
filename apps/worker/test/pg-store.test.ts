@@ -16,7 +16,7 @@ describe.skipIf(!url)('postgres store', () => {
   const store = new PgStore(sql);
 
   beforeAll(async () => {
-    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log cascade`;
+    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links cascade`;
     await migrate(sql);
     await migrate(sql); // idempotent
     await store.upsertUser({ account: A, agentKeyRef: 'kms:key-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
@@ -46,6 +46,15 @@ describe.skipIf(!url)('postgres store', () => {
     expect(await store.guardOrders(A)).toEqual([]);
     await store.addAction(A, 100);
     expect(await store.recentActions(A, 50)).toEqual([100]);
+  });
+
+  it('redeems a Telegram link code once, before it expires', async () => {
+    await store.createTelegramCode('LINK01', A, 2000);
+    expect(await store.redeemTelegramCode('LINK01', '77', 1000)).toBe(A);
+    expect((await store.user(A))?.telegramChatId).toBe('77');
+    expect(await store.redeemTelegramCode('LINK01', '78', 1000)).toBeNull();
+    await store.createTelegramCode('OLD', A, 10);
+    expect(await store.redeemTelegramCode('OLD', '79', 1000)).toBeNull();
   });
 
   it('chains the audit log, survives concurrent appends, and refuses edits and deletes', async () => {
