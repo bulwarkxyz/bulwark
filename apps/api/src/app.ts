@@ -174,6 +174,9 @@ export function createApp(deps: ApiDeps) {
     return c.json({ version: policy.version, hash });
   });
 
+  // -------------------------------------------------------------- guard orders (the guard's own resting backstops)
+  app.get('/v1/guard-orders', async (c) => c.json(await deps.store.guardOrders(c.get('account'))));
+
   // -------------------------------------------------------------- audit
   app.get('/v1/audit', async (c) => c.json(await deps.store.audit.list(c.get('account'), Math.min(500, Number(c.req.query('limit') ?? 100)))));
 
