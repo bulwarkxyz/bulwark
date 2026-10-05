@@ -2,9 +2,9 @@ import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 
 function Mark() {
   return (
-    <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#C6F25A" />
-      <path d="M16 7l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9v-6l8-3z" fill="none" stroke="#0B1300" strokeWidth="2.4" strokeLinejoin="round" />
+    // The Bulwark mark in ink: lime is reserved for the protected state.
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
     </svg>
   );
 }
@@ -19,6 +19,7 @@ export function baseOptions(): BaseLayoutProps {
       ),
       url: '/',
     },
+    githubUrl: 'https://github.com/bulwarkxyz/bulwark',
     links: [
       { text: 'Home', url: '/../', external: true },
       { text: 'Open the app', url: '/../app', external: true },
