@@ -1,4 +1,4 @@
-import type { GuardStore } from './store.js';
+import type { GuardStore } from '@bulwarkxyz/store';
 
 /**
  * Long-polling Telegram bot (no Mini App). It does two things: `/start` explains how to link, and

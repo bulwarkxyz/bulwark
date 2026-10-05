@@ -15,9 +15,9 @@ import {
   type RawSpotState,
 } from '@bulwarkxyz/guard-core';
 import type { BuilderWire, Hex, Network, NonceManager } from '@bulwarkxyz/hyperliquid';
-import type { AuditInput } from './audit.js';
+import type { AuditInput } from '@bulwarkxyz/store';
 import { formatRun, type Notifier } from './notify.js';
-import type { GuardStore } from './store.js';
+import type { GuardStore } from '@bulwarkxyz/store';
 
 /** Engine constants (not user thresholds). */
 export const MARK_MAX_AGE_MS = 10_000;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryStore } from '../src/store.js';
+import { MemoryStore } from '@bulwarkxyz/store';
 import { TelegramBot } from '../src/telegram-bot.js';
 import { ConsoleNotifier, TelegramNotifier, formatRun } from '../src/notify.js';
 

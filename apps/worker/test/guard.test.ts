@@ -4,10 +4,10 @@ import { buildAssetIndex, dexCollateral, maintenanceMargin, policyHash, type Pol
 import { NonceManager, parseExchangeResponse, type Hex, type SignedRequest } from '@bulwarkxyz/hyperliquid';
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { verifyChain } from '../src/audit.js';
+import { verifyChain } from '@bulwarkxyz/store';
 import { BACKSTOP_EVERY_MS, GuardEngine } from '../src/guard.js';
 import { ConsoleNotifier } from '../src/notify.js';
-import { MemoryStore, type GuardUser } from '../src/store.js';
+import { MemoryStore, type GuardUser } from '@bulwarkxyz/store';
 
 const fx = (n: string) => JSON.parse(readFileSync(new URL(`../../../packages/guard-core/test/fixtures/${n}`, import.meta.url), 'utf8'));
 const assets = buildAssetIndex(fx('perpDexs.json'), fx('allPerpMetas.json'));

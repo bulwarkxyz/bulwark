@@ -1,5 +1,5 @@
 {
-  "name": "@bulwarkxyz/worker",
+  "name": "@bulwarkxyz/api",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -7,23 +7,22 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "tsx src/main.ts",
-    "parity": "tsx src/parity.ts"
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "@bulwarkxyz/config": "workspace:*",
-    "@bulwarkxyz/executor": "workspace:*",
     "@bulwarkxyz/guard-core": "workspace:*",
     "@bulwarkxyz/hyperliquid": "workspace:*",
     "@bulwarkxyz/signer": "workspace:*",
-    "@noble/hashes": "^2",
+    "@bulwarkxyz/worker": "workspace:*",
+    "@hono/node-server": "^1",
+    "hono": "^4",
+    "jose": "^6",
     "postgres": "^3",
-    "ws": "^8",
-    "@bulwarkxyz/store": "workspace:*"
+    "viem": "^2"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3"

@@ -19,7 +19,7 @@ import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, type DigestSigner } 
 import postgres from 'postgres';
 import { GuardEngine } from './guard.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
-import { PgStore, migrate } from './pg-store.js';
+import { PgStore, migrate } from '@bulwarkxyz/store';
 import { HyperliquidStream, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
 import { TelegramBot } from './telegram-bot.js';
 
@@ -60,8 +60,22 @@ async function loadAssets(): Promise<{ assets: AssetIndex; collateral: Map<strin
   };
 }
 
+/** Railway's private DNS can take a few seconds to come up after the container starts: retry. */
+async function migrateWithRetry() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await migrate(sql);
+      return;
+    } catch (e) {
+      if (attempt >= 12) throw e;
+      console.error(JSON.stringify({ msg: 'database not reachable yet', attempt, error: String(e) }));
+      await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** attempt)));
+    }
+  }
+}
+
 async function main() {
-  await migrate(sql);
+  await migrateWithRetry();
   let meta = await loadAssets();
   const status = { network, startedAt: new Date().toISOString(), users: 0, lastMarkAt: 0, streams: 0 };
 
