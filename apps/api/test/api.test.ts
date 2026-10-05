@@ -3,7 +3,7 @@ import { MemoryStore } from '@bulwarkxyz/store';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { anthropicProvider } from '@bulwarkxyz/compiler';
+import { REPEAT_QUESTION, anthropicProvider } from '@bulwarkxyz/compiler';
 import { STATUS_MAX_AGE_MS, createApp, retireKmsKeys } from '../src/app.js';
 
 const user = privateKeyToAccount(`0x${'77'.repeat(32)}`);
@@ -190,8 +190,10 @@ describe('AI translator', () => {
   it('asks rather than picks when the sentence does not say once or every time', async () => {
     const token = await signIn();
     await confirm();
+    // The model claims "every time"; the sentence says neither, so the API asks the fixed question and drafts nothing.
     const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing' } }, message: '' }), token, 'If my buffer drops below 2x, alert me');
-    expect(await res.json()).toMatchObject({ kind: 'clarify' });
+    const body = await res.json();
+    expect(body).toEqual({ kind: 'clarify', question: REPEAT_QUESTION });
   });
 
   it('returns a checked draft with a fixed description and the next policy version', async () => {
