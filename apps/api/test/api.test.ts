@@ -134,3 +134,42 @@ describe('telegram', () => {
     expect(await store.redeemTelegramCode(code, '9', now)).toBe(ACCOUNT);
   });
 });
+
+describe('AI translator', () => {
+  const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 3 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
+  const reply = (out: unknown) => ({ messages: { create: async () => ({ content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }) } });
+  const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, now: () => now, translator: reply(out) });
+  const draft = (a: ReturnType<typeof createApp>, token: string, text: string) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text }) });
+  const confirm = () => store.confirmPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x', signatureVerified: true, confirmedAt: now });
+
+  it('is off without a key and needs a signed policy first', async () => {
+    const token = await signIn();
+    expect((await draft(app, token, 'below 2x alert me')).status).toBe(503);
+    expect((await draft(withTranslator({}), token, 'below 2x alert me')).status).toBe(409);
+  });
+
+  it('returns a checked draft with a fixed description and the next policy version', async () => {
+    const token = await signIn();
+    await confirm();
+    const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }, message: '' }), token, 'If my buffer drops below 2x, alert me');
+    expect(await res.json()).toMatchObject({ kind: 'draft', description: 'When the buffer falls below 2×, alert you.', policy: { version: 2 }, rule: { id: 'ai-2' } });
+  });
+
+  it('never shows a draft with a number the user did not type, and logs the rejection', async () => {
+    const token = await signIn();
+    await confirm();
+    const res = await draft(withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 1.5 }, then: [{ kind: 'close', target: { kind: 'all' } }] }, message: '' }), token, 'close everything when it gets risky');
+    const body = (await res.json()) as { kind: string; rule?: unknown };
+    expect(body.kind).toBe('rejected');
+    expect(body.rule).toBeUndefined();
+    expect(store.audit.raw(ACCOUNT).at(-1)).toMatchObject({ kind: 'rule_draft_rejected' });
+  });
+
+  it('caps translations per hour', async () => {
+    const token = await signIn();
+    await confirm();
+    const a = withTranslator({ outcome: 'clarify', rule: null, message: 'Which market?' });
+    for (let i = 0; i < 30; i++) expect((await draft(a, token, 'cut it')).status).toBe(200);
+    expect((await draft(a, token, 'cut it')).status).toBe(429);
+  });
+});

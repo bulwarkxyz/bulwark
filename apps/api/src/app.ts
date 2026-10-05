@@ -14,6 +14,7 @@ import {
   type RawPerpDexs,
   type RawPerpMeta,
 } from '@bulwarkxyz/guard-core';
+import { compileRule, describeRule, type MarketRef, type MessagesClient } from '@bulwarkxyz/compiler';
 import type { Hex, InfoClient } from '@bulwarkxyz/hyperliquid';
 import type { ApiStore } from '@bulwarkxyz/store';
 import { Hono, type Context } from 'hono';
@@ -30,8 +31,13 @@ export interface ApiDeps {
   siweDomain: string;
   /** Creates a per-user KMS key; absent until AWS access exists. */
   provisionAgent?: (account: Hex) => Promise<{ keyId: string; address: Hex }>;
+  /** Claude client for the plain-language translator; absent without ANTHROPIC_API_KEY. */
+  translator?: MessagesClient;
   now: () => number;
 }
+
+/** Translator calls per account per hour (cost cap). */
+export const DRAFTS_PER_HOUR = 30;
 
 type Env = { Variables: { account: Hex } };
 
@@ -43,6 +49,15 @@ const SESSION_HOURS = 12;
 export function createApp(deps: ApiDeps) {
   const app = new Hono<Env>();
   const nonces = new Map<string, { nonce: string; exp: number }>();
+  const draftTimes = new Map<string, number[]>();
+  let marketCache: { at: number; markets: MarketRef[] } | null = null;
+  const markets = async (): Promise<MarketRef[]> => {
+    if (marketCache && deps.now() - marketCache.at < 10 * 60_000) return marketCache.markets;
+    const assets = buildAssetIndex((await deps.info.perpDexs()) as RawPerpDexs, (await deps.info.allPerpMetas()) as RawPerpMeta[]);
+    const list = [...assets.values()].filter((a) => a.dex === 'xyz' && !a.delisted).map((a) => ({ coin: a.coin, name: a.coin.replace('xyz:', '') }));
+    marketCache = { at: deps.now(), markets: list };
+    return list;
+  };
 
   // -------------------------------------------------------------- location (layered gate, layer 1)
   const location = (c: Context) => {
@@ -172,6 +187,29 @@ export function createApp(deps: ApiDeps) {
     }
     await deps.store.audit.append({ account, at: now, kind: 'rule_confirmed', why: 'You signed this policy', what: `Policy v${policy.version}: ${policy.rules.length} rule(s)`, proof: { hash, signature: body.signature } });
     return c.json({ version: policy.version, hash });
+  });
+
+  // -------------------------------------------------------------- plain-language translator (I5 gate inside)
+  app.post('/v1/rules/draft', async (c) => {
+    const account = c.get('account');
+    if (!deps.translator) return c.json({ error: 'the AI translator is not available yet' }, 503);
+    const { text } = await c.req.json<{ text: string }>();
+    if (typeof text !== 'string') return c.json({ error: 'text required' }, 400);
+    const current = await deps.store.policy(account);
+    if (!current) return c.json({ error: 'sign your first rules (with your slippage limit) before using the translator' }, 409);
+    const now = deps.now();
+    const recent = (draftTimes.get(account) ?? []).filter((t) => now - t < 3_600_000);
+    if (recent.length >= DRAFTS_PER_HOUR) return c.json({ error: 'too many translations this hour; try again later' }, 429);
+    draftTimes.set(account, [...recent, now]);
+
+    const r = await compileRule(deps.translator, { text, policy: current.policy, markets: await markets() });
+    if (r.kind === 'clarify') return c.json({ kind: 'clarify', question: r.question });
+    if (r.kind === 'refuse') return c.json({ kind: 'refuse', reason: r.reason });
+    if (!r.check.ok) {
+      await deps.store.audit.append({ account, at: now, kind: 'rule_draft_rejected', why: 'The AI draft failed the safety checks, so it was never shown as a rule', what: `"${text.slice(0, 200)}"`, proof: { violations: r.check.violations } });
+      return c.json({ kind: 'rejected', violations: r.check.violations });
+    }
+    return c.json({ kind: 'draft', rule: r.check.rule, description: describeRule(r.check.rule!), provenance: r.check.provenance, policy: r.check.policy });
   });
 
   // -------------------------------------------------------------- guard orders (the guard's own resting backstops)

@@ -10,7 +10,9 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@aws-sdk/client-kms": "^3",
+    "@bulwarkxyz/compiler": "workspace:*",
     "@bulwarkxyz/config": "workspace:*",
     "@bulwarkxyz/guard-core": "workspace:*",
     "@bulwarkxyz/hyperliquid": "workspace:*",
