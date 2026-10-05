@@ -87,6 +87,13 @@ export function createApp(deps: ApiDeps) {
     return trusted ? { country: c.req.header('x-bulwark-country') ?? null, subdivision: c.req.header('x-bulwark-subdivision') ?? null } : { country: null, subdivision: null };
   };
 
+  // How long the API itself took, visible in the browser's network panel (Server-Timing), to tell API time from hosting hops.
+  app.use('*', async (c, next) => {
+    const t0 = performance.now();
+    await next();
+    c.res.headers.set('Server-Timing', `api;dur=${(performance.now() - t0).toFixed(1)}`);
+  });
+
   app.get('/health', (c) => c.json({ ok: true }));
 
   // -------------------------------------------------------------- market activity (public, cached)
@@ -95,7 +102,10 @@ export function createApp(deps: ApiDeps) {
     const coins = [...new Set((c.req.query('coins') ?? '').split(',').map((s) => s.trim()).filter(Boolean))];
     if (coins.length === 0 || coins.length > MAX_COINS || coins.some((s) => !/^xyz:[A-Z0-9]{1,16}$/.test(s))) return c.json({ error: `coins: 1 to ${MAX_COINS} xyz markets, e.g. xyz:CL,xyz:GOLD` }, 400);
     try {
-      return c.json({ network: deps.network, checkedAt: deps.now(), markets: await activity(coins) });
+      const body = { network: deps.network, checkedAt: deps.now(), markets: await activity(coins) };
+      // The same for every visitor: let the CDN keep it for a minute.
+      c.header('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+      return c.json(body);
     } catch {
       return c.json({ error: 'Hyperliquid unreachable' }, 503);
     }
@@ -140,11 +150,15 @@ export function createApp(deps: ApiDeps) {
 
   app.get('/v1/me', async (c) => {
     const account = c.get('account');
-    const [user, confirmed] = await Promise.all([deps.store.user(account), deps.store.policy(account)]);
-    const agents = user?.agentAddress ? await deps.info.extraAgents(account).catch(() => []) : [];
+    // Everything at once: the two Hyperliquid reads were sequential and made this the slowest call the app makes.
+    const [user, confirmed, agents, maxFee, keyMeta] = await Promise.all([
+      deps.store.user(account),
+      deps.store.policy(account),
+      deps.info.extraAgents(account).catch(() => []),
+      deps.info.maxBuilderFee(account, BUILDER_ADDRESS).catch(() => 0),
+      deps.store.agentKeys(account, deps.network),
+    ]);
     const agent = user?.agentAddress ? agents.find((a) => a.address.toLowerCase() === user.agentAddress?.toLowerCase()) : undefined;
-    const maxFee = await deps.info.maxBuilderFee(account, BUILDER_ADDRESS).catch(() => 0);
-    const keyMeta = await deps.store.agentKeys(account, deps.network);
     const pending = keyMeta.find((k) => k.status === 'pending');
     return c.json({
       account,

@@ -23,8 +23,14 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   const region = zone ? req.headers.get('x-bulwark-viewer-region') : req.headers.get('x-vercel-ip-country-region');
   if (country) headers['x-bulwark-country'] = country;
   if (region) headers['x-bulwark-subdivision'] = region;
+  const t0 = performance.now();
   const res = await fetch(url, { method: req.method, headers, ...(req.method === 'GET' ? {} : { body: await req.text() }) });
-  return new Response(await res.text(), { status: res.status, headers: { 'content-type': 'application/json' } });
+  const body = await res.text();
+  // Pass on the API's own timing and caching; add this hop's, so the network panel shows where time goes.
+  const out: Record<string, string> = { 'content-type': 'application/json', 'server-timing': [res.headers.get('server-timing'), `proxy;dur=${(performance.now() - t0).toFixed(1)}`].filter(Boolean).join(', ') };
+  const cache = res.headers.get('cache-control');
+  if (cache) out['cache-control'] = cache;
+  return new Response(body, { status: res.status, headers: out });
 }
 
 export { forward as GET, forward as POST };
