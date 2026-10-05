@@ -26,6 +26,8 @@ const FILE_RULES = [
   { name: 'key or credential file', re: /\.(pem|p12|pfx|key)$/ },
 ];
 const MAX_BYTES = 2 * 1024 * 1024;
+// This file names the patterns it looks for, so it is the one file not scanned for them.
+const SELF = 'scripts/public-repo-check.mjs';
 
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8', maxBuffer: 1 << 30 });
 const findings = [];
@@ -41,6 +43,7 @@ for (const f of git('ls-files').split('\n').filter(Boolean)) {
   }
   if (size > MAX_BYTES) findings.push(`${f}: ${(size / 1048576).toFixed(1)} MB, over the 2 MB limit for a tracked file`);
   if (size > MAX_BYTES || /\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|pdf)$/i.test(f)) continue;
+  if (f === SELF) continue;
   const text = git('show', `HEAD:${f}`).toString();
   for (const r of RULES) if (r.re.test(text)) findings.push(`${f}: ${r.name}`);
 }
@@ -53,7 +56,7 @@ const seen = new Set();
 for (const line of log.split('\n')) {
   if (line.startsWith('@@commit ')) commit = line.slice(9, 17);
   else if (line.startsWith('+++ b/')) file = line.slice(6);
-  else if (line.startsWith('+') && !line.startsWith('+++'))
+  else if (line.startsWith('+') && !line.startsWith('+++') && file !== SELF)
     for (const r of RULES)
       if (r.re.test(line)) {
         const k = `${commit} ${file} ${r.name}`;
