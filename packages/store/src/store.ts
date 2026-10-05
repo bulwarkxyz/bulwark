@@ -98,6 +98,8 @@ export interface GuardStore {
   addAction(account: string, at: number): Promise<void>;
   /** Links a Telegram chat with a one-time code; returns the account, or null if the code is unknown, used or expired. */
   redeemTelegramCode(code: string, chatId: string, now: number): Promise<string | null>;
+  /** Forgets this Telegram chat on every account linked to it (sent from the chat itself); returns those accounts. */
+  unlinkTelegramChat(chatId: string): Promise<string[]>;
   readonly audit: AuditStore;
 }
 
@@ -390,5 +392,10 @@ export class MemoryStore implements ApiStore, KeyVault {
     const u = this.u.get(c.account);
     if (u) this.u.set(c.account, { ...u, telegramChatId: chatId });
     return c.account;
+  }
+  async unlinkTelegramChat(chatId: string) {
+    const out: string[] = [];
+    for (const [k, u] of this.u) if (u.telegramChatId === chatId) (this.u.set(k, { ...u, telegramChatId: null }), out.push(k));
+    return out;
   }
 }

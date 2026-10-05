@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '@bulwarkxyz/store';
-import { TelegramBot } from '../src/telegram-bot.js';
+import { BOT_COMMANDS, KILL_SWITCH_URL, TelegramBot } from '../src/telegram-bot.js';
 import { ConsoleNotifier, TelegramNotifier, formatRun } from '../src/notify.js';
 
 const A = '0x9959260f1aa229f8a70e0c495ca9b251106c1a86';
@@ -27,6 +27,49 @@ describe('telegram', () => {
     await bot.handle([{ update_id: 2, message: { chat: { id: 78 }, text: '/link AB12CD' } }]);
     expect((await store.user(A))?.telegramChatId).toBe('77');
     expect(tg.calls.at(-1)?.body.text).toMatch(/not valid or has expired/);
+  });
+
+  it('links from the app\'s deep link (/start CODE), case-insensitive', async () => {
+    const store = new MemoryStore();
+    store.putUser({ account: A as `0x${string}`, agentKeyRef: 'kms:k', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
+    store.putTelegramCode('AB12CD', A, 2000);
+    const tg = fakeTelegram();
+    await new TelegramBot('T', store, tg.f, () => 1000).handle([{ update_id: 1, message: { chat: { id: 5 }, text: '/start ab12cd' } }]);
+    expect((await store.user(A))?.telegramChatId).toBe('5');
+  });
+
+  it('/stop never stops the guard: it points to the kill switch, which the wallet signs', async () => {
+    const store = new MemoryStore();
+    store.putUser({ account: A as `0x${string}`, agentKeyRef: 'kms:k', region: 'allowed', telegramChatId: '9', killSwitch: false, builderApproved: false });
+    const tg = fakeTelegram();
+    const bot = new TelegramBot('T', store, tg.f, () => 1000);
+    for (const text of ['/stop', '/disarm', '/stop@BulwarkGuardBot']) {
+      await bot.handle([{ update_id: 1, message: { chat: { id: 9 }, text } }]);
+      expect(tg.calls.at(-1)?.body.text).toContain(KILL_SWITCH_URL);
+    }
+    expect((await store.user(A))?.killSwitch).toBe(false);
+  });
+
+  it('/unlink forgets this chat and stops alerts; the guard keeps running', async () => {
+    const store = new MemoryStore();
+    store.putUser({ account: A as `0x${string}`, agentKeyRef: 'kms:k', region: 'allowed', telegramChatId: '9', killSwitch: false, builderApproved: false });
+    const tg = fakeTelegram();
+    const bot = new TelegramBot('T', store, tg.f, () => 1000);
+    await bot.handle([{ update_id: 1, message: { chat: { id: 9 }, text: '/unlink' } }]);
+    expect((await store.user(A))?.telegramChatId).toBeNull();
+    expect((await store.user(A))?.killSwitch).toBe(false);
+    expect(tg.calls.at(-1)?.body.text).toMatch(/^Unlinked/);
+    await bot.handle([{ update_id: 2, message: { chat: { id: 9 }, text: '/unlink' } }]);
+    expect(tg.calls.at(-1)?.body.text).toMatch(/not linked/);
+  });
+
+  it('sets its own command menu and descriptions', async () => {
+    const tg = fakeTelegram();
+    await new TelegramBot('T', new MemoryStore(), tg.f).configure();
+    expect(tg.calls.map((c) => c.method)).toEqual(['setMyCommands', 'setMyShortDescription', 'setMyDescription']);
+    expect(tg.calls[0]?.body.commands).toEqual(BOT_COMMANDS);
+    expect(String(tg.calls[1]?.body.short_description).length).toBeLessThanOrEqual(120);
+    expect(String(tg.calls[2]?.body.description).length).toBeLessThanOrEqual(512);
   });
 
   it('refuses expired codes', async () => {

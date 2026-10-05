@@ -248,4 +248,9 @@ export class PgStore implements ApiStore, KeyVault {
       return row.account as string;
     }) as Promise<string | null>;
   }
+
+  async unlinkTelegramChat(chatId: string) {
+    const rows = await this.sql`update users set telegram_chat_id = null where telegram_chat_id = ${chatId} returning account`;
+    return rows.map((r) => r.account as string);
+  }
 }
