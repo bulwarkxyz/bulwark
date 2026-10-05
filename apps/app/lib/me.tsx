@@ -42,15 +42,16 @@ export function useMe() {
 }
 
 /** Review builds only: a watched account as if it had finished onboarding (see lib/review.tsx). */
-function reviewMe(account: Hex, exampleRules: boolean, stopped: boolean, keyCustody: 'sealed' | 'kms'): Me {
+function reviewMe(account: Hex, exampleRules: boolean, stopped: boolean, key: 'sealed' | 'kms' | 'wiped'): Me {
+  const wiped = key === 'wiped';
   return {
     account,
-    user: { account, agentKeyRef: 'review', agentAddress: null, region: 'allowed', telegramChatId: null, killSwitch: stopped, builderApproved: false },
-    agent: { address: account, approved: true, validUntil: null },
+    user: { account, agentKeyRef: 'review', agentAddress: null, region: 'allowed', telegramChatId: null, killSwitch: stopped || wiped, builderApproved: false },
+    agent: wiped ? null : { address: account, approved: true, validUntil: null },
     builder: { address: account, feeTenthsBps: 30, approvedMaxTenthsBps: 0 },
-    keyCustody: keyCustody,
+    keyCustody: key === 'sealed' ? 'sealed' : 'kms',
     newKeyCustody: 'kms',
-    keyStatus: 'ready',
+    keyStatus: wiped ? 'wiped' : 'ready',
     pendingAgent: null,
     policy: exampleRules ? { version: 3, hash: 'example', confirmedAt: Date.UTC(2026, 9, 4, 14, 2), policy: examplePolicy(account) } : null,
   };

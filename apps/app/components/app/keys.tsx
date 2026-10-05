@@ -10,6 +10,9 @@ import { useCommand } from '@/lib/commands';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { info } from '@/lib/hl';
 import { useMe, type Me } from '@/lib/me';
+import { wipeGuardKey, type WipeStep } from '@/lib/wipe';
+import type { AuditEntry } from '@bulwarkxyz/store/audit';
+import { WipeConfirm, WipeProgress } from './wipe-confirm';
 import { approveAgentFor, approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type SignTypedData } from '@/lib/signing';
 import { shortAddr } from './format';
 
@@ -65,6 +68,11 @@ export function GuardKeyCard() {
   const pending = me.data?.pendingAgent ?? null;
   const region = me.data?.user?.region;
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const command = useCommand();
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeAck, setWipeAck] = useState(false);
+  const [wipeSteps, setWipeSteps] = useState<WipeStep[]>([]);
+  const [wipeEnd, setWipeEnd] = useState<null | { done: boolean }>(null);
 
   async function create() {
     setBusy(true);
@@ -142,6 +150,33 @@ export function GuardKeyCard() {
     }
   }
 
+  async function wipe() {
+    setBusy(true);
+    setMsg(null);
+    setWipeSteps([]);
+    setWipeEnd(null);
+    try {
+      const out = await wipeGuardKey(
+        {
+          send: () => command('wipe'),
+          me: () => qc.fetchQuery({ queryKey: ['me'], queryFn: () => api<Me>('/v1/me'), staleTime: 0 }),
+          audit: () => api<AuditEntry[]>('/v1/audit?limit=20'),
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        },
+        (st) => setWipeSteps((prev) => [...prev, st]),
+      );
+      setWipeEnd({ done: out.done });
+      setWipeOpen(false);
+      setWipeAck(false);
+      await qc.invalidateQueries();
+    } catch (e) {
+      setMsg({ ok: false, text: `The wipe was not sent: ${(e as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const custody = shownCustody(me.data);
   const days_ = (
     <div className="field">
@@ -172,6 +207,13 @@ export function GuardKeyCard() {
         <span className="small t2">{custody ? KEY_TEXT[custody] : 'Sign in to see where your guard key is stored.'}</span>
         <span className="small t2">Hyperliquid lets the key trade for you but never withdraw. Reduce-only is our engine’s limit, not Hyperliquid’s: every order is re-checked against your rules before it is signed.</span>
         {region === 'guardOff' ? <div className="banner b-warn">In your region the guard is off: trading and alerts only.</div> : null}
+        {me.data?.keyStatus === 'wiped' && !wipeSteps.length ? (
+          <div className="banner">
+            <span>
+              <b>Your guard key was wiped.</b> The guard is stopped. To use it again, create a new key, approve it on Hyperliquid, then resume the guard.
+            </span>
+          </div>
+        ) : null}
         {agent ? (
           <div className="kv">
             <span>Address</span>
@@ -233,6 +275,16 @@ export function GuardKeyCard() {
             Replace my guard key
           </button>
         )}
+        {wipeSteps.length ? <WipeProgress steps={wipeSteps} done={Boolean(wipeEnd?.done)} timedOut={Boolean(wipeEnd && !wipeEnd.done)} /> : null}
+        {agent && !wipeSteps.length ? (
+          wipeOpen && custody ? (
+            <WipeConfirm custody={me.data?.keyCustody ?? custody} ack={wipeAck} onAck={setWipeAck} busy={busy} onConfirm={wipe} onCancel={() => { setWipeOpen(false); setWipeAck(false); }} />
+          ) : (
+            <button type="button" className="btn btn-ghost ct" disabled={busy} onClick={() => setWipeOpen(true)} style={{ alignSelf: 'flex-start' }}>
+              Wipe my guard key…
+            </button>
+          )
+        ) : null}
         <Status msg={msg} />
       </div>
     </section>
