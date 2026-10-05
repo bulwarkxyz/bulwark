@@ -1,0 +1,32 @@
+{
+  "name": "@bulwarkxyz/executor",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bulwarkxyz/config": "workspace:*",
+    "@bulwarkxyz/guard-core": "workspace:*",
+    "@bulwarkxyz/hyperliquid": "workspace:*",
+    "@bulwarkxyz/signer": "workspace:*",
+    "viem": "^2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
