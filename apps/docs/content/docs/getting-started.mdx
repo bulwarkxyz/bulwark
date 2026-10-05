@@ -26,7 +26,7 @@ Bulwark trades from your own Hyperliquid account. Deposit USDC there the usual w
 <Step>
 ### Create and approve your guard key
 
-Bulwark creates a guard key for you and stores it encrypted on its server (see [Key storage](/key-storage)). You approve it on Hyperliquid as a named agent (`bulwark-guard`), optionally with an expiry. Hyperliquid lets agents trade but never withdraw.
+Bulwark creates a guard key for you in AWS KMS, where its private key cannot be exported (see [Key storage](/key-storage)). You approve it on Hyperliquid as a named agent (`bulwark-guard`), optionally with an expiry. Hyperliquid lets agents trade but never withdraw.
 </Step>
 
 <Step>

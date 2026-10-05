@@ -22,7 +22,7 @@ Perpetual futures are leveraged. You can lose more than the margin you put in a 
 
 ## Key and software risks
 
-- **Guard key custody.** Your guard key is stored encrypted on Bulwark's server. A compromise of that server could let someone **trade** on your account (not withdraw). See [Key storage](/key-storage).
+- **Guard key custody.** Your guard key is held in AWS KMS and cannot be copied, but a compromise of Bulwark's signing service could let someone have it sign **trades** on your account while they controlled the service (not withdrawals). Keys created before KMS was switched on are encrypted keys on Bulwark's server, which could be copied in such a compromise. See [Key storage](/key-storage).
 - **Trading key.** The optional browser trading key can trade for anyone with access to your browser profile.
 - **Software errors.** Despite tests and the checks before every signature, the guard could contain a bug.
 - **The AI translator** can misread a sentence. Nothing applies until you have read the exact rule and signed it.

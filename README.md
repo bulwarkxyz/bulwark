@@ -12,7 +12,7 @@ A trading app for HIP-3 stock and commodity perps on Hyperliquid, with a guard t
 - Every number in a rule is one the user typed. Limits can be written in plain words; an AI only translates them, and a draft can only add protection.
 - The user signs each policy version; the guard runs only the signed version.
 
-**Keys:** each user's guard key is stored encrypted (AES-256-GCM) on the signing service. A server compromise could allow trades, never withdrawals. Hardware-backed (KMS) storage is built and switched off until it can be enabled.
+**Keys:** each user's guard key is a non-exportable AWS KMS key (secp256k1, held in KMS's FIPS 140-3 Level 3 HSMs); the signing service can only ask KMS to sign, and a separate provisioning role creates and retires keys. A service compromise could have the key sign trades while it lasted, never withdrawals, and never copy the key. The fallback, behind `KEY_CUSTODY=sealed`, stores keys encrypted (AES-256-GCM) on the signing service.
 
 **Status:** testnet preview, built for the Colosseum Crypto World's Fair, Hyperliquid track. Docs: `/docs` on the Bulwark site (source in [`apps/docs`](apps/docs)).
 
@@ -21,7 +21,7 @@ A trading app for HIP-3 stock and commodity perps on Hyperliquid, with a guard t
 | Path | What |
 |---|---|
 | [`packages/guard-core`](packages/guard-core) | Open-source guard engine: margin model for each account mode, policy schema, evaluator, invariants I1–I7, backstops, simulator |
-| [`packages/signer`](packages/signer) | Encrypted-at-rest agent keys, the KMS signer, and the provisioner guard |
+| [`packages/signer`](packages/signer) | The AWS KMS signer and provisioner guard, and encrypted-at-rest keys (fallback) |
 | [`packages/executor`](packages/executor) | Re-runs the invariants in front of the signer; sends guard actions and user commands |
 | [`packages/compiler`](packages/compiler) | Plain-language rule translator behind the number-provenance gate, with its test set |
 | [`packages/hyperliquid`](packages/hyperliquid) | Action builders, signing, info and exchange clients |

@@ -185,7 +185,7 @@ export function createApp(deps: ApiDeps) {
     const now = deps.now();
     await deps.store.putKmsKey({ account, network: deps.network, address: key.address, kmsKeyId: key.keyId, status: 'active', masterKeyId: null, createdAt: now, updatedAt: now });
     await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, now);
-    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked for a guard key', what: `Guard key created in AWS KMS (address ${key.address}); its private key cannot leave KMS`, proof: { address: key.address } });
+    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked for a guard key', what: `Guard key created in AWS KMS (address ${key.address}); its private key cannot leave KMS`, proof: { address: key.address, kmsKeyId: key.keyId } });
     return c.json({ agentAddress: key.address });
   });
 
@@ -211,7 +211,7 @@ export function createApp(deps: ApiDeps) {
     }
     const now = deps.now();
     await deps.store.putKmsKey({ account, network: deps.network, address: key.address, kmsKeyId: key.keyId, status: 'pending', masterKeyId: null, createdAt: now, updatedAt: now });
-    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked to replace your guard key', what: `Replacement guard key created in AWS KMS (address ${key.address}); it takes over once you approve it on Hyperliquid`, proof: { address: key.address } });
+    await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked to replace your guard key', what: `Replacement guard key created in AWS KMS (address ${key.address}); it takes over once you approve it on Hyperliquid`, proof: { address: key.address, kmsKeyId: key.keyId } });
     return c.json({ status: 'pending', pendingAgent: { address: key.address } });
   });
 
@@ -372,7 +372,7 @@ export async function retireKmsKeys(deps: Pick<ApiDeps, 'store' | 'network' | 'r
     }
     const now = deps.now();
     await deps.store.markKmsRetired(k.account, k.network, k.address, now);
-    await deps.store.audit.append({ account: k.account, at: now, kind: 'key', why: 'Your guard key was wiped or replaced', what: `AWS KMS key for ${k.address} disabled; AWS deletes it after 7 days`, proof: { address: k.address } });
+    await deps.store.audit.append({ account: k.account, at: now, kind: 'key', why: 'Your guard key was wiped or replaced', what: `AWS KMS key for ${k.address} disabled; AWS deletes it after 7 days`, proof: { address: k.address, kmsKeyId: k.kmsKeyId } });
     retired++;
   }
   return { retired, failed };

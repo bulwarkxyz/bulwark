@@ -17,7 +17,7 @@ You do. The app and the AI never suggest limits.
 
 ### Can Bulwark take my funds?
 
-No. Hyperliquid does not let agent keys withdraw, and our engine only sends reduce-only orders and moves USDC between your own balances. Your guard key is stored encrypted on our server: if our server were compromised, someone could place trades on your account, but could not withdraw. Hardware-backed key storage is planned.
+No. Hyperliquid does not let agent keys withdraw, and our engine only sends reduce-only orders and moves USDC between your own balances. Your guard key is a non-exportable key in AWS KMS: no one can copy it. If our signing service were compromised, someone could have it sign trades on your account while they controlled it, but could not withdraw. See [Key storage](/key-storage).
 
 ### Which AI does the translating?
 

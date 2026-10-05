@@ -44,9 +44,9 @@ When that happens, the stage is not done. The guard **sends the unfilled part ag
 - **After 3 attempts that did not fully fill,** you get a critical alert saying the guard cannot fill within your slippage limit. It keeps trying while the line is crossed; you may want to act yourself.
 - **It stops** when the stage's line is no longer crossed, the position is closed, or you stop the guard.
 
-Every attempt is in your [audit log](/docs/audit-log) with its number, its limit price and how much filled.
+Every attempt is in your [audit log](/audit-log) with its number, its limit price and how much filled.
 
-Retries help when the price pauses or bounces between attempts. They cannot help when the account goes from its line to liquidation faster than an order can reach the exchange; the [crash-day replays](/docs/backtests) show both.
+Retries help when the price pauses or bounces between attempts. They cannot help when the account goes from its line to liquidation faster than an order can reach the exchange; the [crash-day replays](/backtests) show both.
 
 Rules can also watch account drawdown, a market's price move, or a position's leverage, and can be limited to fixed windows (weekend, overnight, US session).
 
@@ -92,6 +92,6 @@ Every action passes seven checks twice: once when it is decided, and again in th
 
 - **Kill switch:** stops the guard at once and cancels only the orders it placed. Your positions and your own orders are left alone.
 - **Panic unwind:** closes every position with reduce-only orders over the time you choose (5 minutes to 7 days): a TWAP for positions of $100 or more, an IOC below that.
-- **Wipe guard key:** stops the guard and destroys your stored guard key. (Available through the API today; the button arrives with the app's next design update.)
+- **Wipe guard key:** stops the guard, cancels the orders it placed, and retires your guard key: a KMS key is disabled and scheduled for deletion; an encrypted key is destroyed. (Available through the API today; the button arrives with the app's next design update.)
 
 Each command is signed in your wallet and must reach the server within 60 seconds of signing.

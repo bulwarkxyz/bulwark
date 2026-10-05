@@ -3,8 +3,8 @@ title: Key storage and security
 description: Where your guard key lives, what it can and cannot do, and what a server compromise would mean.
 ---
 
-<Callout type="warn" title="Read this before approving a guard key">
-  Your guard key is stored **encrypted on Bulwark's server**. If that server were compromised, someone could place trades on your account with it. They could **not withdraw** your funds. Hardware-backed key storage is planned and not yet in use.
+<Callout type="info" title="Read this before approving a guard key">
+  Your guard key is a **non-exportable key in AWS KMS**, held in hardware security modules validated to FIPS 140-3 Level 3. Its private key never leaves KMS: Bulwark never sees it, and no one can copy it. If Bulwark's signing service were compromised, an attacker could ask KMS to sign trades on your account for as long as they controlled the service. They could **not copy the key**, and they could **not withdraw** your funds.
 </Callout>
 
 ## What the guard key is
@@ -15,21 +15,24 @@ Reduce-only is **our engine's limit, not Hyperliquid's**: the key itself could p
 
 ## How it is stored
 
-- **One key per user**, generated on Bulwark's signing service.
-- **Encrypted at rest** with AES-256-GCM under a master key that exists only as a secret on the signing service. Each encrypted key is bound to your account and network, so it can't be moved to another user.
-- **Decrypted only to sign**: the key is decrypted for a single signature and the memory is cleared right after. Every signature is checked to recover to your key's address.
-- **Never returned**: no part of the API can read or return key material. The web app and the API only ever see the key's address.
+- **One KMS key per user**, created for you in AWS KMS (Singapore, `ap-southeast-1`) as a secp256k1 signing key. AWS generates the private key inside its hardware security modules; it is never exported, not even to Bulwark ([AWS KMS: features](https://aws.amazon.com/kms/features/)).
+- **Two separate roles.** The service that creates keys can only create, describe, disable and schedule deletion of keys tagged for Bulwark. The signing service can only ask KMS to sign and read public keys. Neither can export a key.
+- **Signing.** The signing service sends KMS only the hash of an action that has already passed the [seven checks](/how-the-guard-works#the-checks-before-every-signature), and checks that every signature recovers to your key's address.
+- **Never returned.** No part of Bulwark can read key material, because none leaves KMS. The web app and the API only ever see your key's address.
+
+### The fallback: an encrypted key on Bulwark's server
+
+If KMS is unavailable, Bulwark can instead create your key on its signing service and store it **encrypted** (AES-256-GCM) under a master key that exists only as a secret on that service. Each encrypted key is bound to your account and network, decrypted only for a single signature, and cleared from memory right after. Unlike a KMS key, an encrypted key is not hardware-backed: if that server and its master key were compromised, the key itself could be copied and used to place trades. It still could not withdraw.
+
+Keys created during the testnet preview before KMS was switched on are encrypted keys. **Settings › Account shows which kind your key is.** To move to a KMS key, replace your key.
 
 ## Rotation and removal
 
-- **Replace your key:** a new key is created; it takes over only once you approve it on Hyperliquid, and the old one is then destroyed.
-- **Wipe your key:** a signed command stops the guard and destroys your stored key. To also remove it from Hyperliquid, approve a different key under the same name or let its expiry pass.
+- **Replace your key:** a new key is created; it takes over only once you approve it on Hyperliquid. The old one then stops signing at once: a KMS key is disabled and scheduled for deletion, an encrypted key is destroyed.
+- **Wipe your key:** a signed command stops the guard, cancels the orders it placed while the key can still sign, then retires the key the same way. A disabled KMS key cannot sign; AWS deletes it after a 7-day waiting period. Every step is in your [audit log](/audit-log).
+- **On Hyperliquid:** wiping does not remove the approval there. Approve a different key under the same name, or let the approval expire.
 - **Expiry:** when you approve the key on Hyperliquid you can set how long the approval lasts.
 
 ## Your trading key
 
 The optional trading key for your own orders is created in your browser and stays there (it is not sent to Bulwark). Like every Hyperliquid agent, it cannot withdraw. Anyone with access to your browser profile could trade with it; you can forget it in Settings.
-
-## Planned: hardware-backed keys
-
-Bulwark is built to hold guard keys in AWS KMS, where keys are created inside the service and cannot be exported. That path is implemented and tested but **not active**. Until it is, nothing in Bulwark should describe your guard key as hardware-backed; if you see such wording, tell us.

@@ -10,6 +10,7 @@
     "testnet:builder-drain": "tsx src/builder-drain.ts",
     "latency": "tsx src/latency.ts",
     "return-funds": "tsx src/return-funds.ts",
+    "key-e2e": "tsx src/key-e2e.ts",
     "kms-check": "tsx src/kms-check.ts",
     "backtest": "tsx src/backtest.ts"
   },
