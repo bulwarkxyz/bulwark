@@ -19,6 +19,7 @@ import { approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type S
 import { useTimes } from '@/lib/time';
 import { useAlertActions, useAlertFeed, useAlertSettings, useUnseenAlerts } from '@/lib/alerts';
 import { Toggle } from '@/components/app/toggle';
+import { AccountModePanel } from '@/components/app/account-mode';
 import { useWalletChainId } from '@/lib/wallet';
 import { walletErrorText } from '@/lib/wallet-errors';
 
@@ -393,6 +394,7 @@ export default function SettingsPage() {
         {connected ? <KeysPanel /> : null}
         {connected ? <AlertsPanel /> : null}
         {connected && BUILDER_ON ? <FeePanel /> : null}
+        {connected ? <AccountModePanel /> : null}
         <DisplayPanel />
       </div>
     </div>

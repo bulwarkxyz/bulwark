@@ -6,6 +6,7 @@ import {
   agentName,
   approveAgentAction,
   approveBuilderFeeAction,
+  userSetAbstractionAction,
   l1ActionHash,
   l1TypedData,
   userSignedTypedData,
@@ -56,6 +57,11 @@ export function approveAgentFor(walletChainId: number, agent: Hex, name: string,
 
 export function approveBuilderFor(walletChainId: number, builder: Hex, maxFeeRate: string) {
   return approveBuilderFeeAction({ chain, signatureChainId: hexChain(walletChainId), maxFeeRate, builder, nonce: Date.now() });
+}
+
+/** Switch the account's mode on Hyperliquid (standard ↔ unified), signed by the user's own wallet. */
+export function setAbstractionFor(walletChainId: number, user: Hex, abstraction: 'disabled' | 'unifiedAccount') {
+  return userSetAbstractionAction({ chain, signatureChainId: hexChain(walletChainId), user, abstraction, nonce: Date.now() });
 }
 
 // ------------------------------------------------------------------ the browser trading key
