@@ -34,20 +34,27 @@ export interface Notification {
 
 const CHOICE_WHY = 'A new setting needs your choice';
 
-export function classify(e: AuditEntry): Notification {
-  const proof = (e.proof ?? {}) as { fill?: { coin?: string }; ruleIds?: string[]; ruleId?: string };
+/** A feed entry: an audit entry plus the API's link fields (null when unknown). */
+export type AlertEntry = AuditEntry & { ruleId?: string | null; coin?: string | null };
+
+export function classify(e: AlertEntry): Notification {
+  const proof = (e.proof ?? {}) as { fill?: { coin?: string }; ruleIds?: string[]; ruleId?: string; coin?: string };
+  // The API's fields first; older entries carry the same in proof.
+  const ruleId = e.ruleId ?? proof.ruleId ?? proof.ruleIds?.[0] ?? null;
+  const coin = e.coin ?? proof.fill?.coin ?? proof.coin ?? null;
   const auditHref = `/app/audit?seq=${e.seq}`;
   const base = { seq: e.seq, at: e.at, title: e.what, detail: e.why, auditHref, example: String(e.hash).startsWith('example-') };
   if (e.kind === 'degraded') return { ...base, type: 'heldOff', href: auditHref, hrefLabel: 'Audit entry' };
   if (proof.fill) {
-    const m = proof.fill.coin ? marketByCoin(proof.fill.coin) : undefined;
+    const m = coin ? marketByCoin(coin) : undefined;
     return { ...base, type: 'liquidation', href: m ? `/app/positions?coin=${encodeURIComponent(m.coin)}` : '/app/positions', hrefLabel: m ? `${m.ticker} in Positions` : 'Positions' };
   }
-  if (e.why === CHOICE_WHY || proof.ruleIds?.length) {
-    const first = proof.ruleIds?.[0];
-    return { ...base, type: 'choice', href: first ? `/app/rules#rule-${first}` : '/app/rules', hrefLabel: 'Choose in Guard rules' };
+  if (e.why === CHOICE_WHY || proof.ruleIds?.length) return { ...base, type: 'choice', href: ruleId ? `/app/rules#rule-${ruleId}` : '/app/rules', hrefLabel: 'Choose in Guard rules' };
+  if (ruleId) return { ...base, type: 'alert', href: `/app/rules#rule-${ruleId}`, hrefLabel: 'The rule' };
+  if (coin) {
+    const m = marketByCoin(coin);
+    if (m) return { ...base, type: 'alert', href: `/app/positions?coin=${encodeURIComponent(m.coin)}`, hrefLabel: `${m.ticker} in Positions` };
   }
-  if (proof.ruleId) return { ...base, type: 'alert', href: `/app/rules#rule-${proof.ruleId}`, hrefLabel: 'The rule' };
   return { ...base, type: 'alert', href: auditHref, hrefLabel: 'Audit entry' };
 }
 
@@ -67,11 +74,17 @@ export function rangeStart(r: DateRange, now: number): number | null {
   return now - (r === '7d' ? 7 : 30) * 86_400_000;
 }
 
-/** Read state on this device: everything up to a time, plus single entries opened since. */
+/**
+ * Read state: everything up to an alert seq (the server's marker, GET/POST /v1/alerts/seen, so it follows
+ * the user across devices), plus single alerts opened since, kept on this device.
+ */
 export interface ReadState {
   upTo: number;
   seqs: number[];
 }
-export const isRead = (n: Pick<Notification, 'at' | 'seq'>, r: ReadState) => n.at <= r.upTo || r.seqs.includes(n.seq);
+export const isRead = (n: Pick<Notification, 'seq'>, r: ReadState) => n.seq <= r.upTo || r.seqs.includes(n.seq);
 export const markOne = (r: ReadState, seq: number): ReadState => (r.seqs.includes(seq) ? r : { ...r, seqs: [...r.seqs, seq].slice(-200) });
-export const markAll = (items: readonly Pick<Notification, 'at'>[], r: ReadState): ReadState => ({ upTo: Math.max(r.upTo, ...items.map((n) => n.at)), seqs: [] });
+export const markAll = (items: readonly Pick<Notification, 'seq'>[], r: ReadState): ReadState => {
+  const upTo = Math.max(r.upTo, ...items.map((n) => n.seq));
+  return { upTo, seqs: r.seqs.filter((s) => s > upTo) };
+};

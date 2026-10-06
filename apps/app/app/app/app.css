@@ -391,10 +391,6 @@ html.light .bw,html.light [data-rk]{
 .toggle.on .knob{left:19px;background:var(--on-ink)}
 .toggle:disabled{opacity:.5;cursor:default}
 /* Alert feed */
-.alist-feed{list-style:none;margin:0;padding:0}
-.alist-feed li{display:flex;flex-direction:column;gap:2px;padding:9px 0;border-bottom:1px solid var(--line)}
-.alist-feed li:last-child{border-bottom:0}
-.dotcount{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--warn);color:var(--on-warn);font-size:11px;font-weight:700}
 
 /* ---------- wallet modal (RainbowKit, themed in lib/wallet.tsx) ----------
    The tokens above are defined on [data-rk] too, so the modal follows light and dark. No motion, as in the
@@ -431,3 +427,36 @@ button.wallet[aria-expanded="true"]{border-color:var(--field-focus)}
 .wm-row{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer}
 .wm-row:hover{background:var(--s2)}
 .pop-sheet .wm-row{min-height:46px}
+
+/* ---------- notifications: the bell's panel and the page ---------- */
+.bell{position:relative}
+.bell .badge{position:absolute;top:1px;right:0;display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--ink);color:var(--on-ink);font-size:10px;font-weight:700;line-height:1}
+.nhead{gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.nbody{flex:1;min-height:0;overflow:auto}
+.nfoot{gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+.nlist{list-style:none;margin:0;padding:0}
+.nrow{position:relative;display:flex;align-items:flex-start;border-bottom:1px solid var(--line)}
+.nrow:last-child{border-bottom:0}
+.nrow .nmain{flex:1;min-width:0;display:flex;gap:10px;padding:12px 14px;color:inherit}
+.nrow .nmain:hover{background:var(--s2)}
+.nrow .ndot{flex:none;width:7px;height:7px;margin-top:6px;border-radius:50%;background:transparent}
+.nrow.unread .ndot{background:var(--ink)}
+.nrow.unread .nmain .small{font-weight:600}
+.nrow .naudit{flex:none;padding:12px 14px 0 0;text-decoration:underline}
+.nstate{display:flex;flex-direction:column;gap:6px;padding:20px 16px}
+.nstate .ico{color:var(--text-3)}
+.clamp1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.pop-sheet .nrow .nmain{padding:14px 16px}
+.nfilters{display:flex;flex-wrap:wrap;gap:10px}
+.nfilters .seg{flex:1 1 auto;min-width:0}
+.nfilters .seg:last-child{flex:0 1 360px}
+@media (max-width:760px){.nfilters .seg{flex:1 1 100%;overflow-x:auto;grid-auto-columns:max-content}}
+/* What a notification linked to: a row, a rule or an audit entry, marked for a moment. */
+.bw .target,.bw tr.target td{box-shadow:inset 0 0 0 2px var(--focus)}
+/* Independent columns (Settings): each column stacks its own sections, no row pairing. On phones the
+   columns dissolve into one list ordered by each section's `order`. */
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.cols2 .stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:760px){.cols2{display:flex;flex-direction:column;gap:16px}.cols2 .stack{display:contents}}

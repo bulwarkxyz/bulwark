@@ -92,7 +92,8 @@ function CloseButton({ coin, size, here }: { coin: string; size: number; here: b
  * Positions with Hyperliquid's columns plus the pool's buffer and the guard. `compact` (the trade screen's
  * bottom panel) keeps the guard in one cell; the Positions screen splits it into state and "acts at".
  */
-export function PositionsTable({ g, risk, now, highlight, compact }: { g: GuardView; risk: AccountRisk; now: number; highlight?: string; compact?: boolean }) {
+/** `mark`: a row to point at (a notification's link), without changing what Close does. */
+export function PositionsTable({ g, risk, now, highlight, compact, mark }: { g: GuardView; risk: AccountRisk; now: number; highlight?: string; compact?: boolean; mark?: string | null }) {
   const rows = sortedRows(risk);
   return (
     <div className="tblw">
@@ -124,7 +125,7 @@ export function PositionsTable({ g, risk, now, highlight, compact }: { g: GuardV
             const margin = p.api.marginUsed;
             const liq = <td className="r num ct">{row.liquidationPx ? fmtPx(row.liquidationPx) : '—'}</td>;
             return (
-              <tr key={p.key} className={highlight === p.coin ? 'sel' : ''}>
+              <tr key={p.key} id={`pos-${p.coin}`} className={highlight === p.coin || mark === p.coin ? 'sel' : ''}>
                 <td>
                   <div className="sym">
                     <span className="glyph">{t.slice(0, 2)}</span>
@@ -196,7 +197,7 @@ export function PositionsTable({ g, risk, now, highlight, compact }: { g: GuardV
 }
 
 /** Phone: one card per position, riskiest pool first, with its buffer and guard state. */
-export function PositionCards({ g, risk, now }: { g: GuardView; risk: AccountRisk; now: number }) {
+export function PositionCards({ g, risk, now, mark }: { g: GuardView; risk: AccountRisk; now: number; mark?: string | null }) {
   return (
     <div className="col" style={{ gap: 10 }}>
       {sortedRows(risk).map(({ pool, row }) => {
@@ -205,7 +206,7 @@ export function PositionCards({ g, risk, now }: { g: GuardView; risk: AccountRis
         const m = marketByCoin(p.coin);
         const off = m ? !homeOpen(m.session, now) : false;
         return (
-          <article key={p.key} className="panel pb col" style={{ gap: 8 }}>
+          <article key={p.key} id={`posc-${p.coin}`} className={`panel pb col ${mark === p.coin ? 'target' : ''}`} style={{ gap: 8 }}>
             <div className="row nw">
               <span className="glyph">{t.slice(0, 2)}</span>
               <b>{t}</b>

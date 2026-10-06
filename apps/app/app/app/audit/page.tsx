@@ -2,13 +2,14 @@
 
 import { verifyChain, type AuditEntry } from '@bulwarkxyz/store/audit';
 import Link from 'next/link';
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { fmtPx } from '@/components/app/format';
 import { Icon } from '@/components/app/icons';
 import { useSignedIn } from '@/lib/api';
 import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
+import { QueryParam, revealById } from '@/components/app/query-param';
 
 const KIND_LABEL: Record<string, string> = {
   key: 'Guard key',
@@ -58,6 +59,16 @@ export default function AuditPage() {
   const log = useAudit();
   const times = useTimes();
   const all = [...(log.data ?? [])].sort((a, b) => b.seq - a.seq);
+  // ?seq=12 (a notification's link): show every kind, open that entry and bring it into view.
+  const [target, setTarget] = useState<number | null>(null);
+  const onSeq = useCallback((v: string | null) => setTarget(v && /^\d+$/.test(v) ? Number(v) : null), []);
+  const found = target !== null && all.some((e) => e.seq === target);
+  useEffect(() => {
+    if (!found || target === null) return;
+    setFilter('all');
+    setOpen(target);
+    revealById(window.matchMedia('(max-width: 760px)').matches ? `auditc-${target}` : `audit-${target}`);
+  }, [found, target]);
   const kinds = FILTERS.find((f) => f.id === filter)?.kinds ?? null;
   const entries = kinds ? all.filter((e) => kinds.includes(e.kind)) : all;
   // The API returns the newest 500; the chain is checked from the oldest one returned.
@@ -81,6 +92,7 @@ export default function AuditPage() {
 
   return (
     <div className="pg">
+      <QueryParam name="seq" onChange={onSeq} />
       <div className="ptitle">
         <h1 className="h1">Audit log</h1>
         {chip}
@@ -154,7 +166,7 @@ export default function AuditPage() {
             {entries.map((e) => {
               const a = attemptOf(e);
               return (
-                <li key={e.seq}>
+                <li key={e.seq} id={`auditc-${e.seq}`}>
                   <div className="row nw" style={{ gap: 8 }}>
                     <span className={`num tiny ${broken !== null && e.seq >= broken ? 'ct' : 't3'}`}>#{e.seq}</span>
                     <span className="num tiny t2">{times.fmt(e.at, 'short')}</span>
@@ -195,7 +207,7 @@ export default function AuditPage() {
               <tbody>
                 {entries.map((e) => (
                   <Fragment key={e.seq}>
-                    <tr>
+                    <tr id={`audit-${e.seq}`}>
                       <td className={`r num ${broken !== null && e.seq >= broken ? 'ct' : 't3'}`}>{e.seq}</td>
                       <td className="num">{times.fmt(e.at, 'full')}</td>
                       <td>

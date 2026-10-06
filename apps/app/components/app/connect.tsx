@@ -76,7 +76,9 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
   const review = useReview();
   const viewer = useViewer();
   const btn = useRef<HTMLButtonElement>(null);
+  const signBtn = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const clearErr = useCallback(() => setErr(null), []);
   const close = useCallback(() => setOpen(false), []);
 
   if (review.on && review.watch && viewer.connected) {
@@ -108,7 +110,7 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
   return (
     <div className="row nw" style={{ gap: 8 }}>
       {!signedIn ? (
-        <button type="button" className={`btn btn-sm btn-ink ${stepSignIn ? 'hide-sm' : ''}`} onClick={doSignIn}>
+        <button ref={signBtn} type="button" className={`btn btn-sm btn-ink ${stepSignIn ? 'hide-sm' : ''}`} onClick={doSignIn}>
           Sign in
         </button>
       ) : null}
@@ -119,11 +121,24 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
       <Popover anchor={btn} open={open} onClose={close} label="Wallet" width={340}>
         <WalletMenu onClose={close} onSignIn={doSignIn} signedIn={signedIn} />
       </Popover>
-      {err ? (
-        <span className="hide-sm">
-          <WalletMessage error={err} compact />
-        </span>
-      ) : null}
+      {/* A failed sign-in opens under its button in the top layer, so the top bar never reflows. */}
+      <Popover anchor={signBtn.current ? signBtn : btn} open={Boolean(err)} onClose={clearErr} label="Sign-in problem" width={320}>
+        {err ? (
+          <div className="wm col">
+            <WalletMessage error={err} />
+            <div className="row nw" style={{ gap: 8 }}>
+              {err.declined ? null : (
+                <button type="button" className="btn btn-sm btn-ink" onClick={doSignIn}>
+                  Try again
+                </button>
+              )}
+              <button type="button" className="btn btn-sm btn-ghost" onClick={clearErr}>
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popover>
     </div>
   );
 }

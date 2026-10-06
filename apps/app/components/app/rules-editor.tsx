@@ -4,6 +4,7 @@ import { describeRule } from '@bulwarkxyz/compiler';
 import type { Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { revealById } from './query-param';
 import { useAccount, useSignTypedData } from 'wagmi';
 import { ApiError, api } from '@/lib/api';
 import { tickerOf } from '@/lib/guard';
@@ -331,6 +332,17 @@ export function HowGuardTrades({ s, bare }: { s: PolicyDraftState; bare?: boolea
 
 /** "Active rules": the draft, rule by rule, with Edit and Remove, and the button to sign the next version. */
 export function ActiveRules({ s, status, loading, bare, title = 'Active rules' }: { s: PolicyDraftState; status: (r: Rule) => { text: string; cls: string }; loading: boolean; bare?: boolean; title?: string }) {
+  // #rule-<id> (a notification's link): bring that rule into view once the rules are on screen.
+  const n = s.draft.rules.length;
+  useEffect(() => {
+    const go = () => {
+      const h = window.location.hash.slice(1);
+      if (h.startsWith('rule-')) revealById(h);
+    };
+    if (n) go();
+    window.addEventListener('hashchange', go);
+    return () => window.removeEventListener('hashchange', go);
+  }, [n]);
   const signedRules = s.signed?.rules ?? [];
   const removed = signedRules.filter((r) => s.changes.removed.includes(r.id));
   const nChanges = s.changes.added.length + s.changes.changed.length + s.changes.removed.length + (s.changes.slippage ? 1 : 0);
@@ -374,7 +386,7 @@ export function ActiveRules({ s, status, loading, bare, title = 'Active rules' }
             const st = isNew || isChanged ? { text: 'Not active until you sign', cls: 'wt' } : status(r);
             const editable = Boolean(formFromRule(r));
             return (
-              <div key={r.id} className="rulerow">
+              <div key={r.id} id={`rule-${r.id}`} className="rulerow">
                 <span className="n">{i + 1}</span>
                 <div className="col" style={{ gap: 3 }}>
                   <span style={{ fontSize: 14 }}>

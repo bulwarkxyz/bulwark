@@ -24,13 +24,17 @@ describe('classify', () => {
     expect(classify(entry({ kind: 'degraded' }))).toMatchObject({ type: 'heldOff', href: '/app/audit?seq=7' });
     expect(classify(entry({ kind: 'alert' }))).toMatchObject({ type: 'alert', href: '/app/audit?seq=7' });
   });
+  it('uses the API’s ruleId and coin fields when present', () => {
+    expect(classify(entry({ kind: 'alert', ruleId: 'r9' } as never)).href).toBe('/app/rules#rule-r9');
+    expect(classify(entry({ kind: 'alert', coin: 'xyz:SILVER' } as never)).hrefLabel).toBe('SILVER in Positions');
+  });
   it('always carries the audit entry', () => {
     expect(classify(entry({ kind: 'alert', proof: { ruleId: 'r1' } })).auditHref).toBe('/app/audit?seq=7');
   });
 });
 
 describe('read state', () => {
-  const items = [{ at: 300, seq: 3 }, { at: 200, seq: 2 }, { at: 100, seq: 1 }];
+  const items = [{ seq: 3 }, { seq: 2 }, { seq: 1 }];
   it('marks one, then all', () => {
     let r = { upTo: 0, seqs: [] as number[] };
     r = markOne(r, 2);
@@ -41,7 +45,7 @@ describe('read state', () => {
   });
   it('a newer alert is unread again after mark all', () => {
     const r = markAll(items, { upTo: 0, seqs: [] });
-    expect(isRead({ at: 301, seq: 4 }, r)).toBe(false);
+    expect(isRead({ seq: 4 }, r)).toBe(false);
   });
 });
 

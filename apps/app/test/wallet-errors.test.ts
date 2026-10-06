@@ -40,11 +40,12 @@ describe('explainWalletError', () => {
       if (!declined && !/^Something/.test(x.text)) expect(x.next, 'each failure says what to do next').toBeTruthy();
     });
 
-  it('shows the API’s contract-wallet answer as it is, with the next step', () => {
-    const e = new ApiError(400, { code: 'contract_wallet', error: 'Smart-contract wallets are not supported: Hyperliquid accounts are EOAs.' });
+  it('shows the API’s contract-wallet answer as it is, and nothing after it', () => {
+    const e = new ApiError(400, { code: 'contract_wallet', error: 'Smart-contract wallets aren’t supported. Connect the wallet that holds your Hyperliquid account.' });
     const x = explainWalletError(e);
-    expect(x.text).toBe('Smart-contract wallets are not supported: Hyperliquid accounts are EOAs.');
-    expect(x.next).toMatch(/ordinary wallet/);
+    expect(x.text).toBe('Smart-contract wallets aren’t supported. Connect the wallet that holds your Hyperliquid account.');
+    expect(x.next).toBeUndefined();
+    expect(walletErrorText(e)).toBe(x.text);
   });
   it('maps API sign-in failures, region refusals, rate limits and outages', () => {
     expect(explainWalletError(new ApiError(401, { error: 'bad signature' })).next).toMatch(/Sign in again/);
