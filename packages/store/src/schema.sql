@@ -161,3 +161,5 @@ alter table latches add column if not exists fires jsonb not null default '{}'::
 
 -- In-app alerts preference (alongside Telegram, which is linked separately).
 alter table users add column if not exists in_app_alerts boolean not null default true;
+-- The newest alert (audit seq) the user has seen, on any device.
+alter table users add column if not exists alerts_seen_seq bigint not null default 0;

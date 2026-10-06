@@ -406,6 +406,23 @@ describe('command results and alerts', () => {
     expect((await store.user(ACCOUNT))?.telegramChatId).toBeNull();
   });
 
+  it('alerts carry the rule and market they are about, and a read marker follows the user across devices', async () => {
+    const token = await signIn();
+    expect((await app.request('/v1/alerts/seen', { method: 'POST', headers: authed(token), body: JSON.stringify({ upTo: 1 }) })).status).toBe(409);
+    onboard();
+    await store.audit.append({ account: ACCOUNT, at: now + 1, kind: 'alert', why: 'Liquidation reported by the exchange', what: 'x', proof: { fill: { coin: 'xyz:GOLD' } } });
+    await store.audit.append({ account: ACCOUNT, at: now + 2, kind: 'alert', why: 'buffer below your line', what: 'y', proof: { ruleId: 'stage-2' } });
+    await store.audit.append({ account: ACCOUNT, at: now + 3, kind: 'degraded', why: 'late data', what: 'z' });
+    const feed = (await (await app.request(`/v1/alerts?since=${now}`, { headers: authed(token) })).json()) as Array<{ seq: number; ruleId: string | null; coin: string | null }>;
+    expect(feed.map((e) => [e.ruleId, e.coin])).toEqual([[null, null], ['stage-2', null], [null, 'xyz:GOLD']]);
+    expect(await (await app.request('/v1/alerts/seen', { headers: authed(token) })).json()).toEqual({ upTo: 0, unread: 3 });
+    const middle = feed[1]!.seq;
+    expect(await (await app.request('/v1/alerts/seen', { method: 'POST', headers: authed(token), body: JSON.stringify({ upTo: middle }) })).json()).toEqual({ upTo: middle });
+    expect(await (await app.request('/v1/alerts/seen', { method: 'POST', headers: authed(token), body: JSON.stringify({ upTo: 0 }) })).json()).toEqual({ upTo: middle });
+    expect((await (await app.request('/v1/alerts/seen', { headers: authed(token) })).json()) as object).toEqual({ upTo: middle, unread: 1 });
+    expect((await app.request('/v1/alerts/seen', { method: 'POST', headers: authed(token), body: JSON.stringify({ upTo: -1 }) })).status).toBe(400);
+  });
+
   it('in-app alerts: a setting next to Telegram, and a feed of what the guard told the user', async () => {
     const token = await signIn();
     onboard();

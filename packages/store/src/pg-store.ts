@@ -162,6 +162,14 @@ export class PgStore implements ApiStore, KeyVault {
     if (!r) return null;
     return { id: Number(r.id), command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at), createdAt: Number(r.created_at), doneAt: r.done_at === null ? null : Number(r.done_at), result: (r.result as Record<string, unknown> | null) ?? null };
   }
+  async alertsSeen(account: string) {
+    const [r] = await this.sql`select alerts_seen_seq from users where account = ${this.k(account)}`;
+    return Number(r?.alerts_seen_seq ?? 0);
+  }
+  async markAlertsSeen(account: string, upTo: number) {
+    const [r] = await this.sql`update users set alerts_seen_seq = greatest(alerts_seen_seq, ${upTo}) where account = ${this.k(account)} returning alerts_seen_seq`;
+    return Number(r?.alerts_seen_seq ?? 0);
+  }
   async alertSettings(account: string) {
     const [r] = await this.sql`select in_app_alerts from users where account = ${this.k(account)}`;
     return { inApp: r?.in_app_alerts ?? true };

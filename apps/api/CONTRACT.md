@@ -171,6 +171,25 @@ A replace (`/v1/guard-key/rotate`) isn't a command. Its progress shows in `/v1/m
   - Telegram gets the same messages when linked;
   - the setting only controls whether the app shows them.
 
+**Alert entries:** each entry in `GET /v1/alerts` is an audit entry, with fields that stay stable:
+- `seq`: the audit sequence number. Use it to link to the entry in the audit log.
+- `at`, `kind` (`alert` or `degraded`), `why`, `what`, `hash`.
+- `proof`, which varies by kind.
+
+Added for links (new; `null` when unknown):
+- `ruleId`: the stage the alert is about. Taken from `proof.ruleId`, or the first of `proof.ruleIds` for the "needs your choice" notice.
+- `coin`: the market. Taken from `proof.coin` or `proof.fill.coin` (liquidations).
+- Stage alerts carry `ruleId`. Liquidations carry `coin`. Stale-data holds (`degraded`) carry neither.
+
+**Read state, on the server (follows the user across devices):**
+- **`GET /v1/alerts/seen`** → `{ upTo, unread }`.
+  - `upTo` is the newest alert `seq` the user has seen (0 if none).
+  - `unread` counts the alerts after it among the latest 500 audit entries.
+- **`POST /v1/alerts/seen`** with `{ upTo: <seq> }` → `{ upTo }`.
+  - The marker only moves forward: a lower value leaves it unchanged.
+  - Answers `400` for anything other than a whole number, and `409` before onboarding.
+  - Send the newest `seq` shown when the user opens the panel.
+
 **`POST /v1/telegram/code`** → `{ code, expiresInMinutes: 15, bot: '@BulwarkGuardBot', link: 'https://t.me/BulwarkGuardBot?start=<code>' }`.
 - Show `link` as the one-tap way to link; the bot also accepts `/link <code>`.
 - `bot` and `link` are new and additive. They're `null` if no bot is configured.

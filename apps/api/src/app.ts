@@ -361,7 +361,30 @@ export function createApp(deps: ApiDeps) {
     const since = Number(c.req.query('since') ?? 0);
     const limit = Math.min(200, Number(c.req.query('limit') ?? 50));
     const entries = await deps.store.audit.list(account, 500);
-    return c.json(entries.filter((e) => (e.kind === 'alert' || e.kind === 'degraded') && e.at > since).slice(0, limit));
+    // Each entry also carries what it is about, when known: the rule (stage) and the market.
+    const about = (e: (typeof entries)[number]) => {
+      const p = (e.proof ?? {}) as { ruleId?: unknown; ruleIds?: unknown; coin?: unknown; fill?: { coin?: unknown } };
+      const ruleId = typeof p.ruleId === 'string' ? p.ruleId : Array.isArray(p.ruleIds) && typeof p.ruleIds[0] === 'string' ? p.ruleIds[0] : null;
+      const coin = typeof p.coin === 'string' ? p.coin : typeof p.fill?.coin === 'string' ? p.fill.coin : null;
+      return { ruleId, coin };
+    };
+    return c.json(entries.filter((e) => (e.kind === 'alert' || e.kind === 'degraded') && e.at > since).slice(0, limit).map((e) => ({ ...e, ...about(e) })));
+  });
+
+  // Read state on the server, so it follows the user across devices. The marker only moves forward.
+  app.get('/v1/alerts/seen', async (c) => {
+    const account = c.get('account');
+    const upTo = await deps.store.alertsSeen(account);
+    const entries = await deps.store.audit.list(account, 500);
+    const unread = entries.filter((e) => (e.kind === 'alert' || e.kind === 'degraded') && e.seq > upTo).length;
+    return c.json({ upTo, unread });
+  });
+  app.post('/v1/alerts/seen', async (c) => {
+    const account = c.get('account');
+    if (!(await deps.store.user(account))) return c.json({ error: 'complete onboarding first' }, 409);
+    const { upTo } = await c.req.json<{ upTo: unknown }>().catch(() => ({ upTo: null }));
+    if (typeof upTo !== 'number' || !Number.isInteger(upTo) || upTo < 0) return c.json({ error: 'upTo must be an alert seq (a whole number)' }, 400);
+    return c.json({ upTo: await deps.store.markAlertsSeen(account, upTo) });
   });
 
   // -------------------------------------------------------------- guard status

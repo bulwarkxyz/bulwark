@@ -196,6 +196,10 @@ export interface ApiStore extends GuardStore {
   /** The user's alert preferences (in-app; Telegram is linked separately). */
   alertSettings(account: string): Promise<{ inApp: boolean }>;
   setAlertSettings(account: string, s: { inApp: boolean }): Promise<void>;
+  /** The newest alert seq the user has seen (0 if none). */
+  alertsSeen(account: string): Promise<number>;
+  /** Moves the seen marker forward only; returns the marker after the call. */
+  markAlertsSeen(account: string, upTo: number): Promise<number>;
 }
 
 export class MemoryStore implements ApiStore, KeyVault {
@@ -304,6 +308,15 @@ export class MemoryStore implements ApiStore, KeyVault {
   }
   async setAlertSettings(account: string, s: { inApp: boolean }) {
     this.alertPrefs.set(this.k(account), { inApp: s.inApp });
+  }
+  private readonly seen = new Map<string, number>();
+  async alertsSeen(account: string) {
+    return this.seen.get(this.k(account)) ?? 0;
+  }
+  async markAlertsSeen(account: string, upTo: number) {
+    const next = Math.max(this.seen.get(this.k(account)) ?? 0, upTo);
+    this.seen.set(this.k(account), next);
+    return next;
   }
   async pendingCommands() {
     return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt }) => ({ id, account, command, minutes, issuedAt }));
