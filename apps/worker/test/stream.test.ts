@@ -34,6 +34,21 @@ describe('stream', () => {
     st.stop();
   });
 
+  it('follows a held market on its own ~1 s stream, once, and hands its mark to the guard', () => {
+    const sock = fakeSocket();
+    const got: Array<[string, number]> = [];
+    const st = new HyperliquidStream('wss://x', { onCoinMark: (c, m) => got.push([c, m]) }, () => sock);
+    st.start();
+    sock.emit('open');
+    st.subscribeCoin('xyz:GOLD');
+    st.subscribeCoin('xyz:GOLD');
+    expect(sock.sent.map((x) => JSON.parse(x).subscription)).toEqual([{ type: 'activeAssetCtx', coin: 'xyz:GOLD' }]);
+    st.dispatch(JSON.stringify({ channel: 'activeAssetCtx', data: { coin: 'xyz:GOLD', ctx: { markPx: '4157.2', oraclePx: '4158.4' } } }));
+    st.dispatch(JSON.stringify({ channel: 'activeAssetCtx', data: { coin: 'xyz:GOLD', ctx: { markPx: 'x' } } }));
+    expect(got).toEqual([['xyz:GOLD', 4157.2]]);
+    st.stop();
+  });
+
   it('caps users per connection at 10', () => {
     const st = new HyperliquidStream('wss://x', {}, () => fakeSocket());
     for (let i = 0; i < 10; i++) st.subscribeUser(`0x${i}`);

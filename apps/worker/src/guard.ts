@@ -149,6 +149,13 @@ export class GuardEngine {
     return Promise.all(runs);
   }
 
+  /** Every market some watched account holds, for the per-market mark streams. */
+  heldCoins(): Set<string> {
+    const out = new Set<string>();
+    for (const c of this.cache.values()) for (const coin of coinsOf(c)) out.add(coin);
+    return out;
+  }
+
   onUserState(account: string, states: Array<[string, RawClearinghouseState]>, at: number): Promise<void> {
     const c = this.entry(account);
     c.dexStates = Object.fromEntries(states);

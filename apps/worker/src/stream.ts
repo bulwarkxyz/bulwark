@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 /**
  * One WebSocket connection to Hyperliquid with resubscribe-on-reconnect and a heartbeat.
  * Limits per IP: 10 connections, 1000 subscriptions, 10 unique users across user subscriptions.
+ * Marks: allDexsAssetCtxs for every market (every ~15 s), plus activeAssetCtx for each market a guarded account holds (~1 s).
  * https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits
  * Channels used (https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions):
  *   allDexsAssetCtxs              → marks for every dex, ~1 s
@@ -23,6 +24,8 @@ const defaultFactory: SocketFactory = (url) => new WebSocket(url) as unknown as 
 
 export interface StreamHandlers {
   onMarks?(ctxs: Array<[string, Array<{ markPx: string; oraclePx: string }>]>, at: number): void;
+  /** One market's mark from its own activeAssetCtx stream (about once a second). */
+  onCoinMark?(coin: string, mark: number, at: number): void;
   onUserState?(user: string, states: Array<[string, RawClearinghouseState]>, at: number): void;
   onSpotState?(user: string, spot: RawSpotState, at: number): void;
   onStatus?(status: 'open' | 'closed', at: number): void;
@@ -32,6 +35,7 @@ export class HyperliquidStream {
   private socket: SocketLike | null = null;
   private readonly subs: Array<Record<string, unknown>> = [];
   private readonly users = new Set<string>();
+  private readonly coins = new Set<string>();
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private backoff = 500;
   private closed = false;
@@ -54,6 +58,16 @@ export class HyperliquidStream {
     this.closed = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.socket?.close();
+  }
+
+  /**
+   * A held market's own context stream. allDexsAssetCtxs pushes only about every 15 s (measured on mainnet and
+   * testnet, 6 Oct 2026), slower than the guard's 10 s staleness limit; activeAssetCtx pushes about once a second.
+   */
+  subscribeCoin(coin: string): void {
+    if (this.coins.has(coin)) return;
+    this.coins.add(coin);
+    this.add({ type: 'activeAssetCtx', coin });
   }
 
   subscribeMarks(): void {
@@ -118,6 +132,11 @@ export class HyperliquidStream {
       case 'allDexsAssetCtxs':
         this.handlers.onMarks?.(d.ctxs as never, at);
         break;
+      case 'activeAssetCtx': {
+        const mark = Number((d.ctx as { markPx?: string } | undefined)?.markPx);
+        if (typeof d.coin === 'string' && Number.isFinite(mark) && mark > 0) this.handlers.onCoinMark?.(d.coin, mark, at);
+        break;
+      }
       case 'allDexsClearinghouseState':
         this.handlers.onUserState?.(String(d.user).toLowerCase(), d.clearinghouseStates as never, at);
         break;

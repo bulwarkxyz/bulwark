@@ -147,9 +147,17 @@ async function main() {
       status.lastMarkAt = at;
       void engine.onMarks(marksFromCtxs(ctxs, meta.universe), at);
     },
+    onCoinMark: (coin, mark, at) => {
+      status.lastMarkAt = at;
+      void engine.onMarks(new Map([[coin, mark]]), at);
+    },
   });
   markStream.subscribeMarks();
   markStream.start();
+  // Held markets get their own ~1 s mark stream (the all-markets one arrives only every ~15 s).
+  setInterval(() => {
+    for (const coin of engine.heldCoins()) markStream.subscribeCoin(coin);
+  }, 5_000);
   // Account state: Hydromancer first, Hyperliquid's own feeds as the fallback (statefeed.ts).
   const arbiter = new StateArbiter((u, states, at) => void engine.onUserState(u, states, at));
   const HYDRO_KEY = process.env.HYDROMANCER_API_KEY ?? '';
