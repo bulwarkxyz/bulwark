@@ -56,7 +56,7 @@ for (const w of [1440, 390]) {
   const marked = await p
     .waitForFunction((ph) => document.getElementById(ph ? 'posc-xyz:SILVER' : 'pos-xyz:SILVER')?.className.includes(ph ? 'target' : 'sel'), phone, { timeout: 20_000 })
     .then(() => true, () => false);
-  const seen = marked ? '' : await p.evaluate(() => `url ${location.pathname}${location.search}, rows ${document.querySelectorAll('tr[id^="pos-"]').length}, SILVER ${document.getElementById('pos-xyz:SILVER')?.className ?? 'absent'}, cards ${document.querySelectorAll('article[id^="posc-"]').length}, loading ${document.querySelectorAll('main .sk').length}`);
+  const seen = marked ? '' : await p.evaluate(() => `url ${location.pathname}${location.search}, rows ${document.querySelectorAll('tr[id^="pos-"]').length}, SILVER ${document.getElementById('pos-xyz:SILVER')?.className ?? 'absent'}, cards ${document.querySelectorAll('article[id^="posc-"]').length}, loading ${document.querySelectorAll("main .sk").length}, page: ${(document.querySelector("main")?.innerText ?? "").replace(/\s+/g, " ").slice(0, 260)}`);
   check(marked, `${at}: a liquidation opens that position, marked`, seen);
   // The audit link opens and marks the entry.
   await bell.click();
