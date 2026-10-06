@@ -46,6 +46,10 @@ tail -1 "$out/wallet-modal.txt"
 echo "== review build (local only)"
 (cd apps/app && NEXT_PUBLIC_REVIEW_MODE=1 npx next build >/dev/null)
 serve
+# The bell and wallet-menu checks first: the grid check loads every screen three times, and Hyperliquid
+# testnet may then slow the next account reads.
+node scripts/nav-check.mjs "$base" >"$out/nav-check.txt" || { grep FAIL "$out/nav-check.txt"; exit 1; }
+tail -1 "$out/nav-check.txt"
 q="watch=$watch&rules=example"
 : >"$out/grid-gaps.txt"
 for w in 1440 1100 900; do
@@ -53,8 +57,6 @@ for w in 1440 1100 900; do
   tail -1 "$out/grid-gaps.txt"
   tail -1 "$out/grid-gaps.txt" | grep -q "^no uneven" || exit 1
 done
-node scripts/nav-check.mjs "$base" >"$out/nav-check.txt" || { grep FAIL "$out/nav-check.txt"; exit 1; }
-tail -1 "$out/nav-check.txt"
 node scripts/review-shots.mjs "$base" "$out/shots" --routes "$routes" --watch "$watch" --full >/dev/null
 echo "screenshots: $(ls "$out/shots" | wc -l | tr -d ' ') in $out/shots"
 echo "== bar passed"

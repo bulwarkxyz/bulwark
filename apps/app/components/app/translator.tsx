@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useSignTypedData } from 'wagmi';
 import { api, ApiError } from '@/lib/api';
 import { useMe } from '@/lib/me';
+import { translatorBlock } from '@/lib/rule-builder';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
 import { Icon } from './icons';
 import type { PolicyDraftState } from './rules-editor';
@@ -72,6 +73,8 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
   }
 
   const translating = forced === 'loading' || busy === 'translate';
+  // A first policy's slippage is typed before translating and travels in the draft, so it isn't a conflict.
+  const block = reply?.kind === 'draft' ? translatorBlock(s.changes, s.draft, reply.policy.execution.maxSlippagePct) : null;
   return (
     <section className={bare ? 'col' : 'panel'} aria-labelledby="ai-h" style={bare ? { gap: 12 } : undefined}>
       <div className={bare ? 'row' : 'ph'} style={bare ? { alignItems: 'center' } : undefined}>
@@ -143,7 +146,7 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
               </span>
             </div>
             <div className="row">
-              <button type="button" className="btn btn-sm btn-ink" disabled={busy !== null || s.changes.any} onClick={sign}>
+              <button type="button" className="btn btn-sm btn-ink" disabled={busy !== null || block !== null} onClick={sign}>
                 {busy === 'sign' ? 'Waiting for signature…' : `Sign version ${reply.policy.version}`}
               </button>
               <button
@@ -160,7 +163,13 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
                 Discard
               </button>
             </div>
-            {s.changes.any ? <span className="tiny wt">You have changes below that aren’t signed. Sign or discard them first, or use Edit by hand to add this rule to them.</span> : null}
+            {block === 'rules' ? (
+              <span className="tiny wt">You have rule changes below that aren’t signed. Sign or discard them first, or use Edit by hand to add this rule to them.</span>
+            ) : block === 'slippage' ? (
+              <span className="tiny wt">
+                Your max slippage is now {s.draft.slippage}%, but this draft was made with {reply.policy.execution.maxSlippagePct}%. Translate again to use the new number, or put it back.
+              </span>
+            ) : null}
           </div>
         ) : reply?.kind === 'clarify' ? (
           <div className="banner">

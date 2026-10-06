@@ -1,6 +1,6 @@
 import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { describe, expect, it } from 'vitest';
-import { EMPTY_FORM, REPEAT_OPTIONS, REPEAT_UNSET, THEN_OPTIONS, WHEN_OPTIONS, buildRule, draftChanges, draftFrom, draftPolicy, formFromRule, nextRuleId, repeatChip, type RuleForm } from '@/lib/rule-builder';
+import { EMPTY_FORM, REPEAT_OPTIONS, REPEAT_UNSET, THEN_OPTIONS, WHEN_OPTIONS, buildRule, draftChanges, draftFrom, draftPolicy, formFromRule, nextRuleId, repeatChip, translatorBlock, type RuleForm } from '@/lib/rule-builder';
 
 const ACCOUNT = '0x7c81e5a50a1931a5fbe663a916d31e46f804fd1e';
 // Most tests are about the trigger and action, so they choose a repeat mode; the choice has its own tests.
@@ -160,5 +160,22 @@ describe('policy draft', () => {
   });
   it('rule ids stay unique', () => {
     expect(nextRuleId([{ id: 'hand-1' }, { id: 'hand-2' }] as Rule[])).toBe('hand-3');
+  });
+});
+
+describe('translatorBlock', () => {
+  const none = { added: [] as string[], changed: [] as string[], removed: [] as string[], slippage: false, any: false };
+  it('a first policy: the slippage the user typed before translating does not block signing the draft', () => {
+    const changes = { ...none, slippage: true, any: true };
+    expect(translatorBlock(changes, { rules: [], slippage: '1' }, 1)).toBeNull();
+  });
+  it('a slippage changed after translating blocks, and says so', () => {
+    expect(translatorBlock({ ...none, slippage: true, any: true }, { rules: [], slippage: '2' }, 1)).toBe('slippage');
+  });
+  it('unsigned rule edits block, since signing the draft would drop them', () => {
+    expect(translatorBlock({ ...none, added: ['r1'], any: true }, { rules: [], slippage: '1' }, 1)).toBe('rules');
+  });
+  it('nothing pending: no block', () => {
+    expect(translatorBlock(none, { rules: [], slippage: '0.5' }, 0.5)).toBeNull();
   });
 });

@@ -277,6 +277,17 @@ export function draftChanges(signed: Policy | null | undefined, d: PolicyDraft):
   return { added, changed, removed, slippage, any: Boolean(added.length || changed.length || removed.length || (slippage && d.slippage.trim() !== '')) };
 }
 
+/**
+ * What stops the translator's draft from being signed as it is: edited, added or removed rules (signing the
+ * draft would drop them), or a slippage the user typed that differs from the one the draft carries. On a
+ * first policy the draft is made with the slippage the user typed, so that slippage alone never blocks it.
+ */
+export function translatorBlock(changes: ReturnType<typeof draftChanges>, d: PolicyDraft, draftSlippagePct: number): 'rules' | 'slippage' | null {
+  if (changes.added.length || changes.changed.length || changes.removed.length) return 'rules';
+  if (changes.slippage && d.slippage.trim() !== '' && num(d.slippage) !== draftSlippagePct) return 'slippage';
+  return null;
+}
+
 export type DraftPolicyResult = { ok: true; policy: Policy } | { ok: false; problem: string };
 
 /** The next policy version to sign, or what is still missing. */
