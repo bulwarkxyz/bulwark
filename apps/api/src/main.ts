@@ -52,6 +52,7 @@ async function main() {
     jwtSecret: new TextEncoder().encode(need('JWT_SECRET')),
     proxySecret: need('PROXY_SECRET'),
     siweDomain: process.env.SIWE_DOMAIN ?? 'bulwark.0xo.in',
+    siweExtraDomains: (process.env.SIWE_EXTRA_DOMAINS ?? '').split(',').map((d) => d.trim()).filter(Boolean),
     ...(translator ? { translator } : {}),
     keyCustody: process.env.KEY_CUSTODY === 'kms' ? 'kms' : 'sealed',
     repeatChoiceRequired: process.env.REPEAT_CHOICE_REQUIRED === '1',

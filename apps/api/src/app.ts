@@ -33,6 +33,11 @@ export interface ApiDeps {
   /** The web app's server proxy proves itself with this; only then are its location headers trusted. */
   proxySecret: string;
   siweDomain: string;
+  /**
+   * Other sites of ours that may also ask for a sign-in (the review link). The production domain stays the
+   * default; a nonce is bound to one domain and sign-in must use exactly that one.
+   */
+  siweExtraDomains?: string[];
   /** Creates a per-user KMS key; absent until AWS access exists. */
   provisionAgent?: (account: Hex) => Promise<{ keyId: string; address: Hex }>;
   /** Disables a KMS key and schedules its deletion (provisioner role). */
@@ -75,7 +80,8 @@ const SESSION_HOURS = 12;
 
 export function createApp(deps: ApiDeps) {
   const app = new Hono<Env>();
-  const nonces = new Map<string, { nonce: string; exp: number }>();
+  const nonces = new Map<string, { nonce: string; exp: number; domain: string }>();
+  const siweDomains = new Set([deps.siweDomain, ...(deps.siweExtraDomains ?? [])]);
   const draftTimes = new Map<string, number[]>();
   /** A refused signature: say "smart-contract wallet" when that's why, otherwise "bad signature". */
   const refuseSignature = async (c: Context, address: string, signature: Hex, otherwise = 'bad signature') => {
@@ -125,15 +131,19 @@ export function createApp(deps: ApiDeps) {
   app.post('/auth/nonce', async (c) => {
     const { address } = await c.req.json<{ address: string }>();
     const nonce = randomBytes(12).toString('hex');
-    nonces.set(getAddress(address), { nonce, exp: deps.now() + NONCE_TTL_MS });
-    return c.json({ nonce, domain: deps.siweDomain });
+    // The app's proxy names the site the request came from; only our own sites are used, else production's.
+    const site = c.req.header('x-bulwark-site') ?? '';
+    const domain = siweDomains.has(site) ? site : deps.siweDomain;
+    nonces.set(getAddress(address), { nonce, exp: deps.now() + NONCE_TTL_MS, domain });
+    return c.json({ nonce, domain });
   });
 
   app.post('/auth/verify', async (c) => {
     const { message, signature } = await c.req.json<{ message: string; signature: Hex }>();
     const parsed = parseSiweMessage(message);
-    if (!parsed.address || parsed.domain !== deps.siweDomain) return c.json({ error: 'wrong domain' }, 401);
-    const expected = nonces.get(getAddress(parsed.address));
+    const expected = parsed.address ? nonces.get(getAddress(parsed.address)) : undefined;
+    if (!parsed.address || !parsed.domain || !siweDomains.has(parsed.domain) || (expected && expected.domain !== parsed.domain))
+      return c.json({ error: 'This site is not allowed to sign in to Bulwark.', code: 'wrong_domain' }, 401);
     if (!expected || expected.nonce !== parsed.nonce || expected.exp < deps.now()) return c.json({ error: 'nonce expired' }, 401);
     if (isContractWalletSignature(signature) || !(await verifyMessage({ address: parsed.address, message, signature: normalizeSignature(signature) }).catch(() => false)))
       return refuseSignature(c, parsed.address, signature);

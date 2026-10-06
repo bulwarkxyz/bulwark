@@ -54,6 +54,27 @@ describe('sign in', () => {
 });
 
 describe('region gate', () => {
+  it('the review link may sign in too, but only for its own nonce; any other site is refused; production stays the default', async () => {
+    const REVIEW = 'review.bulwark.example';
+    const two = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, siweExtraDomains: [REVIEW], keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now });
+    const nonceFor = async (site?: string) => (await (await two.request('/auth/nonce', { method: 'POST', headers: site ? { 'x-bulwark-site': site } : {}, body: JSON.stringify({ address: user.address }) })).json()) as { nonce: string; domain: string };
+    const signAs = async (domain: string, nonce: string) => {
+      const message = createSiweMessage({ address: user.address, chainId: 42161, domain, nonce, uri: `https://${domain}`, version: '1', issuedAt: new Date(now) });
+      return two.request('/auth/verify', { method: 'POST', body: JSON.stringify({ message, signature: await user.signMessage({ message }) }) });
+    };
+    expect((await nonceFor()).domain).toBe(DOMAIN);
+    expect((await nonceFor('evil.example')).domain).toBe(DOMAIN);
+    const r = await nonceFor(REVIEW);
+    expect(r.domain).toBe(REVIEW);
+    expect((await signAs(REVIEW, r.nonce)).status).toBe(200);
+    // A nonce issued for production can't be used to sign in as the review site, and vice versa.
+    const p = await nonceFor();
+    const wrong = await signAs(REVIEW, p.nonce);
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toMatchObject({ code: 'wrong_domain' });
+    expect((await signAs('evil.example', (await nonceFor('evil.example')).nonce)).status).toBe(401);
+  });
+
   it('blocks by IP, residency or citizenship, and only trusts location from the proxy', async () => {
     const token = await signIn();
     const attest = (headers: Record<string, string>, residency = 'IN', citizenship = 'IN') =>

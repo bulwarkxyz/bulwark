@@ -16,6 +16,8 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   const { path } = await params;
   const url = `${API}/${path.join('/')}${req.nextUrl.search}`;
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-bulwark-proxy-secret': process.env.PROXY_SECRET ?? '' };
+  // Which of our sites this came from (the review link or the production domain), for the sign-in message.
+  headers['x-bulwark-site'] = req.headers.get('x-forwarded-host') ?? req.nextUrl.host;
   const auth = req.headers.get('authorization');
   if (auth) headers.authorization = auth;
   const zone = process.env.ZONE_SECRET && req.headers.get('x-bulwark-zone-secret') === process.env.ZONE_SECRET;
@@ -24,7 +26,13 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   if (country) headers['x-bulwark-country'] = country;
   if (region) headers['x-bulwark-subdivision'] = region;
   const t0 = performance.now();
-  const res = await fetch(url, { method: req.method, headers, ...(req.method === 'GET' ? {} : { body: await req.text() }) });
+  let res: Response;
+  try {
+    res = await fetch(url, { method: req.method, headers, ...(req.method === 'GET' ? {} : { body: await req.text() }) });
+  } catch {
+    // Say what actually failed: this deployment could not reach the API (not "the server could not answer").
+    return Response.json({ error: 'This deployment of the app cannot reach the Bulwark API.', code: 'api_unreachable' }, { status: 502 });
+  }
   const body = await res.text();
   // Pass on the API's own timing and caching; add this hop's, so the network panel shows where time goes.
   const out: Record<string, string> = { 'content-type': 'application/json', 'server-timing': [res.headers.get('server-timing'), `proxy;dur=${(performance.now() - t0).toFixed(1)}`].filter(Boolean).join(', ') };
