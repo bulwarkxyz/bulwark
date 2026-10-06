@@ -70,12 +70,21 @@ export async function part3(opts: { dryRun: boolean; ownerApproved?: string }): 
   // 2. open the two positions with the trading key
   const gSize = ceilSize(LONG.usd / gold.ask, gAsset.szDecimals);
   const nSize = ceilSize(SECOND.usd / second.ask, nAsset.szDecimals);
-  const gPx = roundPrice(gold.ask * (1 + gSlip), gAsset.szDecimals, 'up');
-  const nPx = roundPrice(second.ask * (1 + sSlip), nAsset.szDecimals, 'up');
+  // Hyperliquid refuses limits too far from the oracle ("Price too far from oracle": a 15% limit was refused on
+  // 6 Oct), so a buy limit is capped at 8% above the oracle; a market whose ask is beyond that is skipped.
+  const oracle = async (coin: string) => {
+    const [meta, ctxs] = await s.info.metaAndAssetCtxs('xyz');
+    const i = (meta as { universe: Array<{ name: string }> }).universe.findIndex((u) => u.name === coin);
+    return Number((ctxs[i] as { oraclePx?: string })?.oraclePx ?? NaN);
+  };
+  const capBuy = async (coin: string, ask: number, slip: number) => Math.min(ask * (1 + slip), (await oracle(coin)) * 1.08);
+  const gPx = roundPrice(await capBuy(LONG.coin, gold.ask, gSlip), gAsset.szDecimals, 'up');
+  const nPx = roundPrice(await capBuy(SECOND.coin, second.ask, sSlip), nAsset.szDecimals, 'up');
+  if (nPx < second.ask) console.log(`  ${SECOND.coin}: its best ask (${second.ask}) is more than 8% above the oracle, so a buy would be refused; it is skipped.`);
   if (!(await confirm({ what: `Open the test positions with your trading key: ${LEVERAGE}x cross, buy ${gSize} GOLD (limit ${gPx}) and buy ${nSize} XYZ100 (limit ${nPx}), immediate-or-cancel${attach ? ', with the Bulwark fee' : ''}.`, amount: `About $${(gSize * gold.ask).toFixed(2)} + $${(nSize * second.ask).toFixed(2)} of mock notional.`, limit: NOT_MONEY }))) return void console.log('Stopped.');
   for (const a of [gAsset, nAsset]) await s.withTradingKey(`leverage ${a.coin}`, updateLeverageAction(a.assetId, !a.onlyIsolated, LEVERAGE));
   const g = await s.withTradingKey('open GOLD long', orderAction([orderWire({ asset: gAsset.assetId, isBuy: true, limitPx: toWire(gPx), size: toWire(gSize), reduceOnly: false, orderType: { limit: { tif: 'Ioc' } } })], attach));
-  const n = await s.withTradingKey('open XYZ100 long', orderAction([orderWire({ asset: nAsset.assetId, isBuy: true, limitPx: toWire(nPx), size: toWire(nSize), reduceOnly: false, orderType: { limit: { tif: 'Ioc' } } })], attach));
+  const n = nPx < second.ask ? { statuses: [{ kind: 'skipped', reason: 'ask beyond the oracle band' }] } : await s.withTradingKey('open XYZ100 long', orderAction([orderWire({ asset: nAsset.assetId, isBuy: true, limitPx: toWire(nPx), size: toWire(nSize), reduceOnly: false, orderType: { limit: { tif: 'Ioc' } } })], attach));
   console.log(`  GOLD: ${JSON.stringify(g.statuses)}\n  XYZ100: ${JSON.stringify(n.statuses)}`);
 
   // 3. your own stop-loss on the second position (a real signed trigger order)
