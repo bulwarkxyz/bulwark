@@ -14,7 +14,9 @@
     "replays": "tsx src/replays.ts",
     "key-e2e": "tsx src/key-e2e.ts",
     "kms-check": "tsx src/kms-check.ts",
-    "backtest": "tsx src/backtest.ts"
+    "backtest": "tsx src/backtest.ts",
+    "testrun": "tsx src/testrun/main.ts",
+    "test": "tsx --test src/testrun/guard.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3",
