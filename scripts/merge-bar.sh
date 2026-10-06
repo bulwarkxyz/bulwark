@@ -42,6 +42,9 @@ for p in phone laptop; do node scripts/perf-tabs.mjs "$base" --profile "$p" --bu
 # Each check writes its own file; `|| { …; exit 1; }` because set -e does not stop inside an && chain.
 node scripts/wallet-modal-check.mjs "$base" >"$out/wallet-modal.txt" || { cat "$out/wallet-modal.txt"; exit 1; }
 tail -1 "$out/wallet-modal.txt"
+# Again as a visitor with no wallet at all, as most production visitors are (the 7 Oct rollback).
+node scripts/wallet-modal-check.mjs "$base" --no-test-wallet >"$out/wallet-modal-bare.txt" || { cat "$out/wallet-modal-bare.txt"; exit 1; }
+tail -1 "$out/wallet-modal-bare.txt"
 
 echo "== review build (local only)"
 (cd apps/app && NEXT_PUBLIC_REVIEW_MODE=1 npx next build >/dev/null)

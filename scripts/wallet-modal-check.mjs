@@ -3,7 +3,7 @@
 // throw (no pageerror) and must still be on screen afterwards. Catches crashes like the WalletConnect QR one
 // (qr refusing border 0, fixed by the cuer>qr override). Wallets that aren't installed show their own
 // "get" or QR screen; that's fine, as long as nothing throws.
-// Usage: node scripts/wallet-modal-check.mjs <baseUrl>
+// Usage: node scripts/wallet-modal-check.mjs <baseUrl> [--no-test-wallet] [--first <url>]
 //   Locally, build with NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID set (any 32 hex characters) to list the
 //   WalletConnect wallets. A placeholder ID gets no pairing link from the relay, so the QR is never drawn
 //   there: to cover the QR itself, run it against the live site (its project ID is allow-listed). It only
@@ -12,8 +12,15 @@
 import { chromium } from 'playwright';
 import { installTestWallet } from './test-wallet.mjs';
 
-const base = process.argv[2] ?? 'http://localhost:3230';
-const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base);
+const args = process.argv.slice(2);
+const bare = args.includes('--no-test-wallet');
+// --first <url>: opened in each new browser before the check, e.g. a protected preview's share link (sets its cookie).
+const fi = args.indexOf('--first');
+const first = fi === -1 ? null : args.splice(fi, 2)[1];
+const base = args.find((a) => !a.startsWith('--')) ?? 'http://localhost:3230';
+// The local test wallet is announced on localhost only, and never with --no-test-wallet: production visitors
+// usually have no wallet at all, and the bar must see what they see too.
+const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) && !bare;
 let failed = 0;
 const browser = await chromium.launch();
 for (const w of [1440, 390]) {
@@ -23,6 +30,7 @@ for (const w of [1440, 390]) {
   const probe = await browser.newContext(opts);
   if (local) await installTestWallet(probe);
   let p = await probe.newPage();
+  if (first) await p.goto(first, { timeout: 120_000 });
   await p.goto(`${base}/app`);
   await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click();
   await p.locator('[data-testid^="rk-wallet-option-"]').first().waitFor({ timeout: 60_000 });
@@ -32,6 +40,7 @@ for (const w of [1440, 390]) {
     const ctx = await browser.newContext(opts);
     if (local) await installTestWallet(ctx);
     p = await ctx.newPage();
+    if (first) await p.goto(first, { timeout: 120_000 });
     const errors = [];
     p.on('pageerror', (e) => errors.push(e.message.split('\n')[0]));
     await p.goto(`${base}/app`);
