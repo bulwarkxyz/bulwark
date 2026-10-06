@@ -341,3 +341,33 @@ export function useMarketActivity() {
   }
   return { data, isLoading: false, source: 'direct' as const };
 }
+
+/** An open order as Hyperliquid's frontendOpenOrders reports it (triggers carry their condition). */
+export interface OpenOrder {
+  coin: string;
+  side: 'B' | 'A';
+  limitPx: string;
+  sz: string;
+  oid: number;
+  timestamp: number;
+  /** "Limit", "Stop Market", "Take Profit Market", … */
+  orderType: string;
+  reduceOnly: boolean;
+  isTrigger?: boolean;
+  triggerPx?: string;
+  triggerCondition?: string;
+  isPositionTpsl?: boolean;
+}
+
+/** The user's open orders on both venues, every 10 s. Shared by the bottom panel and TP/SL. */
+export function useOpenOrders(user: Hex | undefined) {
+  return useQuery({
+    queryKey: ['open-orders', NETWORK, user],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      const [main, xyz] = await Promise.all([info.request<OpenOrder[]>({ type: 'frontendOpenOrders', user, dex: '' }), info.request<OpenOrder[]>({ type: 'frontendOpenOrders', user, dex: 'xyz' })]);
+      return [...main, ...xyz];
+    },
+    refetchInterval: 10_000,
+  });
+}

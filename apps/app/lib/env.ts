@@ -15,3 +15,10 @@ export const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PR
 
 /** Hyperliquid's explorer page for an address, on this app's network. */
 export const explorerAddress = (address: string) => `${NETWORK === 'mainnet' ? 'https://app.hyperliquid.xyz' : 'https://app.hyperliquid-testnet.xyz'}/explorer/address/${address}`;
+
+/**
+ * Take profit / stop loss on positions: testnet only. On for everyone when the build sets
+ * NEXT_PUBLIC_TPSL=1; until then one browser can opt in (localStorage bw.tpsl = "1") to try it on the live
+ * site with real signed orders before it is switched on. See lib/tpsl.ts for what is proven.
+ */
+export const TPSL_BUILD = NETWORK === 'testnet' && process.env.NEXT_PUBLIC_TPSL === '1';

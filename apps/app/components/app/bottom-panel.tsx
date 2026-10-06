@@ -9,7 +9,7 @@ import { useSignedIn } from '@/lib/api';
 import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { NETWORK } from '@/lib/env';
 import { TOGETHER_NOTE, orderLabel, tickerOf, useGuardOrders, type GuardView } from '@/lib/guard';
-import { info, useFills } from '@/lib/hl';
+import { info, useFills, useOpenOrders } from '@/lib/hl';
 import { useReview } from '@/lib/review';
 import { fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { Icon } from './icons';
@@ -18,20 +18,6 @@ import { useTimes } from '@/lib/time';
 
 type Tab = 'positions' | 'orders' | 'guard' | 'fills' | 'funding' | 'history';
 
-function useOpenOrders(user: Hex | undefined) {
-  return useQuery({
-    queryKey: ['open-orders', NETWORK, user],
-    enabled: Boolean(user),
-    queryFn: async () => {
-      const [main, xyz] = await Promise.all([
-        info.request<Array<{ coin: string; side: 'B' | 'A'; limitPx: string; sz: string; oid: number; timestamp: number; orderType: string; reduceOnly: boolean; triggerPx?: string }>>({ type: 'frontendOpenOrders', user, dex: '' }),
-        info.request<Array<{ coin: string; side: 'B' | 'A'; limitPx: string; sz: string; oid: number; timestamp: number; orderType: string; reduceOnly: boolean; triggerPx?: string }>>({ type: 'frontendOpenOrders', user, dex: 'xyz' }),
-      ]);
-      return [...main, ...xyz];
-    },
-    refetchInterval: 10_000,
-  });
-}
 function useFunding(user: Hex | undefined) {
   return useQuery({
     queryKey: ['funding', NETWORK, user],

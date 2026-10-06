@@ -4,6 +4,7 @@ import type { AccountRisk, PoolRisk, PositionRisk } from '@bulwarkxyz/guard-core
 import Link from 'next/link';
 import { describeAction, orderLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
 import { homeOpen, marketByCoin } from '@/lib/markets';
+import { PositionTpslButton } from './position-tpsl';
 import { useViewer } from '@/lib/review';
 import { closeIntent, ticketIntent } from '@/lib/ticket-intent';
 import { BufferMeter, GuardChip } from './guard-ui';
@@ -186,7 +187,14 @@ export function PositionsTable({ g, risk, now, highlight, compact, mark }: { g: 
                     {liq}
                   </>
                 )}
-                <td className="r">{p.dex === 'xyz' ? <CloseButton coin={p.coin} size={p.size} here={highlight === p.coin} /> : null}</td>
+                <td className="r">
+                  {p.dex === 'xyz' ? (
+                    <span className="row nw" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                      <PositionTpslButton coin={p.coin} size={p.size} liquidationPx={row.liquidationPx} />
+                      <CloseButton coin={p.coin} size={p.size} here={highlight === p.coin} />
+                    </span>
+                  ) : null}
+                </td>
               </tr>
             );
           })}
@@ -240,7 +248,12 @@ export function PositionCards({ g, risk, now, mark }: { g: GuardView; risk: Acco
                   <span className="num">{fmtUsd(p.api.marginUsed)}</span> · {p.leverage}× · {pool.pool.kind === 'isolated' ? 'isolated' : 'cross'}
                 </span>
               </div>
-              {p.dex === 'xyz' ? <CloseButton coin={p.coin} size={p.size} here={false} /> : null}
+              {p.dex === 'xyz' ? (
+                <span className="row nw" style={{ gap: 6 }}>
+                  <PositionTpslButton coin={p.coin} size={p.size} liquidationPx={row.liquidationPx} />
+                  <CloseButton coin={p.coin} size={p.size} here={false} />
+                </span>
+              ) : null}
             </div>
           </article>
         );
