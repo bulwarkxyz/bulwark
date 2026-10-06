@@ -101,7 +101,37 @@ async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * One guard at a time. During a deploy Railway runs the old and the new worker side by side for a few seconds; on
+ * 6 Oct 2026 both acted on the same testnet account in the same second (two trims, a duplicate nonce). The new worker
+ * now waits for this database lock, which the old one holds until it exits (SIGTERM below, or its connection closing).
+ */
+const ONLY_WORKER_LOCK = 0x42554c57; // "BULW"
+async function becomeTheOnlyWorker() {
+  const conn = await sql.reserve();
+  const [first] = await conn`select pg_try_advisory_lock(${ONLY_WORKER_LOCK}) as ok`;
+  if (!first?.ok) {
+    console.log(JSON.stringify({ msg: 'waiting for the previous worker to stop' }));
+    await conn`select pg_advisory_lock(${ONLY_WORKER_LOCK})`;
+  }
+  console.log(JSON.stringify({ msg: 'only worker lock held' }));
+  // If the lock's connection drops, another worker could take over: stop rather than run as a second guard.
+  setInterval(() => {
+    conn`select 1`.catch(() => {
+      console.error(JSON.stringify({ msg: 'lost the only-worker lock connection; exiting' }));
+      process.exit(1);
+    });
+  }, 15_000);
+}
+
+process.on('SIGTERM', () => {
+  // Stop at once: no new action is signed, and the lock is released with the connection.
+  console.log(JSON.stringify({ msg: 'SIGTERM: stopping' }));
+  process.exit(0);
+});
+
 async function main() {
+  await withRetry('database', () => becomeTheOnlyWorker());
   await withRetry('database', () => migrate(sql));
   let meta = await withRetry('Hyperliquid', loadAssets);
   const status = { network, startedAt: new Date().toISOString(), users: 0, lastMarkAt: 0, streams: 0 };
