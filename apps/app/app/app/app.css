@@ -429,7 +429,8 @@ button.wallet[aria-expanded="true"]{border-color:var(--field-focus)}
 .pop-sheet .wm-row{min-height:46px}
 
 /* ---------- notifications: the bell's panel and the page ---------- */
-.bell{position:relative}
+.bell{position:relative;flex:none;min-width:34px;padding:0 8px}
+.bell svg{flex:none}
 .bell .badge{position:absolute;top:1px;right:0;display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--ink);color:var(--on-ink);font-size:10px;font-weight:700;line-height:1}
 .nhead{gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
 .nbody{flex:1;min-height:0;overflow:auto}

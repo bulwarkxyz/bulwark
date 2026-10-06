@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { NotificationRow, NotificationStates } from '@/components/app/notifications';
+import { NotificationRow, notificationState } from '@/components/app/notifications';
 import { useNotifications } from '@/lib/alerts';
 import { RANGE_LABEL, TYPE_LABEL, rangeStart, type DateRange, type NotificationType } from '@/lib/notifications';
 import { useReview, useViewer } from '@/lib/review';
@@ -19,9 +19,11 @@ export default function NotificationsPage() {
   // The range is the request's start, rounded to the minute so the query key stays put between renders.
   const since = rangeStart(range, Math.floor(Date.now() / 60_000) * 60_000);
   const q = useNotifications({ limit: 200, since });
-  const list = q.items.filter((n) => type === 'all' || n.type === type);
-  const counts = Object.fromEntries(TYPES.map((t) => [t, t === 'all' ? q.items.length : q.items.filter((n) => n.type === t).length]));
-  const state = q.ready ? <NotificationStates q={q} /> : null;
+  // The API applies `since`; filtering here too keeps the list right while a new range loads.
+  const inRange = q.items.filter((n) => since === null || n.at >= since);
+  const list = inRange.filter((n) => type === 'all' || n.type === type);
+  const counts = Object.fromEntries(TYPES.map((t) => [t, t === 'all' ? inRange.length : inRange.filter((n) => n.type === t).length]));
+  const state = q.ready ? notificationState({ q }) : null;
 
   return (
     <div className="pg">

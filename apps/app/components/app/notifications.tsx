@@ -52,8 +52,9 @@ export function NotificationRow({ n, read, onOpen, full = false }: { n: Notifica
   );
 }
 
-/** States shared by the panel and the page: off, loading, error, empty. Null when there is a list. */
-export function NotificationStates({ q, compact = false }: { q: ReturnType<typeof useNotifications>; compact?: boolean }) {
+/** States shared by the panel and the page: off, loading, error, empty. Null when there is a list. Called as a
+ * function (it uses no hooks), so callers can tell "nothing to say" from a rendered state. */
+export function notificationState({ q, compact = false }: { q: ReturnType<typeof useNotifications>; compact?: boolean }) {
   if (!q.on)
     return (
       <div className="nstate">
@@ -106,7 +107,7 @@ export function NotificationBell() {
   const close = useCallback(() => setOpen(false), []);
   if (!q.ready) return null;
   const shown = q.items.slice(0, 20);
-  const state = <NotificationStates q={q} compact />;
+  const state = notificationState({ q, compact: true });
   return (
     <>
       <button

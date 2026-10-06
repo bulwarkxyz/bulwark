@@ -65,11 +65,11 @@ function phoneTitle(path: string): string {
   if (path.startsWith('/app/simulator')) return 'Simulator';
   if (path.startsWith('/app/audit')) return 'Audit log';
   if (path.startsWith('/app/account')) return 'Account';
+  if (path.startsWith('/app/notifications')) return 'Notifications';
   if (path.startsWith('/app/settings')) return 'More';
   return 'Markets';
 }
 
-/** New in-app alerts since the user last looked (only when in-app alerts are on). */
 function TopNav({ focused }: { focused: boolean }) {
   const path = usePathname();
   const tradeHref = useTradeHref();

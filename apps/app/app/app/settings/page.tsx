@@ -343,6 +343,7 @@ export default function SettingsPage() {
       <nav className="panel mobile-only" aria-label="More screens">
         <ul className="morelist">
           {[
+            { href: '/app/notifications', label: 'Notifications', sub: 'alerts from the guard' },
             { href: '/app/account', label: 'Account', sub: 'pools, keys, fees' },
             { href: '/app/audit', label: 'Audit log', sub: 'every action, verified in your browser' },
             { href: '/app/simulator', label: 'Simulator', sub: 'test your rules' },

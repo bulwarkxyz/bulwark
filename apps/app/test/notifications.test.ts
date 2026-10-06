@@ -18,7 +18,7 @@ describe('classify', () => {
   });
   it('an alert rule links to the rule', () => {
     const n = classify(entry({ kind: 'alert', proof: { ruleId: 'r1' } }));
-    expect(n).toMatchObject({ type: 'alert', href: '/app/rules#rule-r1', hrefLabel: 'The rule' });
+    expect(n).toMatchObject({ type: 'alert', href: '/app/rules#rule-r1', hrefLabel: 'Your rule' });
   });
   it('held off and anything else link to the audit entry', () => {
     expect(classify(entry({ kind: 'degraded' }))).toMatchObject({ type: 'heldOff', href: '/app/audit?seq=7' });

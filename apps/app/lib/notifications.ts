@@ -50,7 +50,7 @@ export function classify(e: AlertEntry): Notification {
     return { ...base, type: 'liquidation', href: m ? `/app/positions?coin=${encodeURIComponent(m.coin)}` : '/app/positions', hrefLabel: m ? `${m.ticker} in Positions` : 'Positions' };
   }
   if (e.why === CHOICE_WHY || proof.ruleIds?.length) return { ...base, type: 'choice', href: ruleId ? `/app/rules#rule-${ruleId}` : '/app/rules', hrefLabel: 'Choose in Guard rules' };
-  if (ruleId) return { ...base, type: 'alert', href: `/app/rules#rule-${ruleId}`, hrefLabel: 'The rule' };
+  if (ruleId) return { ...base, type: 'alert', href: `/app/rules#rule-${ruleId}`, hrefLabel: 'Your rule' };
   if (coin) {
     const m = marketByCoin(coin);
     if (m) return { ...base, type: 'alert', href: `/app/positions?coin=${encodeURIComponent(m.coin)}`, hrefLabel: `${m.ticker} in Positions` };
