@@ -31,7 +31,7 @@ Your rules set lines on the buffer and what happens at each. Typical actions:
 
 What a stage does after it has acted is **your choice, for each stage**. There is no default, and a stage can't be saved without one:
 
-- **Once per fall:** it acts once when its line is crossed, then leaves the rest of the fall to the backstop. It acts again only after the market recovers to where it was when the stage acted, or the positions it acted on are gone. Its own trim lifting your buffer back above the line does not count as a recovery.
+- **Once per fall:** it acts once when its line is crossed, then leaves the rest of the fall to the backstop. It acts again only once your buffer is back above the line **and** the price is back where the stage acted, or the positions it acted on are gone. Its own trim lifting your buffer back above the line does not count as a recovery, and neither does a price that simply has not moved since it acted.
 - **Every time the line is crossed:** it acts again each time your buffer comes back above the line and falls through it, including when the buffer only came back because of the guard's own trim.
 
 You can also set a limit: **at most N actions in H hours**, both numbers yours. When the limit is reached, the stage holds and you get one alert; your backstop still stands. The [replays](/backtests#once-per-fall-or-every-time) show both choices on the same days.

@@ -21,7 +21,7 @@ Windows are a fixed table, not numbers: **weekend** (Friday US close to Monday U
 
 Every rule carries one more setting, which you choose and the app never pre-selects:
 
-- **Once per fall:** act once when the trigger is met, then leave the rest of the fall to the backstop. It acts again only after the market recovers to where it was when it acted.
+- **Once per fall:** act once when the trigger is met, then leave the rest of the fall to the backstop. It acts again only once the trigger is no longer met and the price is back where it acted (or that position is closed).
 - **Every time:** act each time the trigger is met again, including after the guard's own trim lifted your buffer.
 
 Optionally: **at most N actions in H hours**, with both numbers typed by you. [How each behaves](/how-the-guard-works#stages).
