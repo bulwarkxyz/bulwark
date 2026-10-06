@@ -22,13 +22,13 @@ export function QueryParam({ name, onChange }: { name: string; onChange: (v: str
   );
 }
 
-/** Scrolls an element into view and marks it for two seconds (no motion: the mark just appears). */
+/** Scrolls an element into view and marks it for a few seconds (no motion: the mark just appears). */
 export function revealById(id: string) {
   requestAnimationFrame(() => {
     const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ block: 'center' });
     el.classList.add('target');
-    setTimeout(() => el.classList.remove('target'), 2400);
+    setTimeout(() => el.classList.remove('target'), 3500);
   });
 }

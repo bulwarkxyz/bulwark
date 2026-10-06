@@ -53,7 +53,7 @@ function reviewAlerts(): AlertEntry[] {
   // Links match the example rules (stage-1…3, lib/review.tsx) and the watched account's GOLD position.
   return [
     e(5, 4, 'alert', 'Example: GOLD pool buffer 2.96×, below your 3× line.', 'Your alert rule at 3×.', { ruleId: 'stage-1', coin: 'xyz:GOLD' }),
-    e(4, 38, 'alert', 'Example: 2 of your stages (stage-2, stage-3) need a choice: act once per fall, or every time the line is crossed.', 'A new setting needs your choice', { ruleId: 'stage-2', proof: { ruleIds: ['stage-2', 'stage-3'] } }),
+    e(4, 38, 'alert', 'Example: 1 of your stages (stage-3) needs a choice: act once per fall, or every time the line is crossed.', 'A new setting needs your choice', { ruleId: 'stage-3', proof: { ruleIds: ['stage-3'] } }),
     e(3, 60, 'degraded', 'Example: held off for 9 s after a reconnect.', 'Marks were 12 s old.'),
     e(2, 300, 'alert', 'Example: reduce order for GOLD has not fully filled after 3 attempts. The guard keeps trying while the line is crossed.', 'Buffer below your 2.5× line.', { ruleId: 'stage-2', coin: 'xyz:GOLD' }),
     e(1, 60 * 30, 'alert', 'Example: Hyperliquid liquidated 0.02 SILVER at 31.40.', 'Liquidation reported by the exchange', { coin: 'xyz:SILVER', proof: { fill: { coin: 'xyz:SILVER', sz: '0.02', px: '31.40' } } }),
