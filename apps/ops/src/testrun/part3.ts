@@ -45,7 +45,7 @@ export async function part3(opts: { dryRun: boolean; ownerApproved?: string }): 
   if (opts.dryRun) {
     console.log(`\nPlan (dry run, nothing signed):
   ${unified ? '' : `1. Move ${POOL_FUNDING} mock USDC from your main balance into the xyz pool (to yourself).\n  `}2. Set ${LEVERAGE}x cross on GOLD and XYZ100, buy ~$${LONG.usd} of GOLD (at most ${(gSlip * 100).toFixed(1)}% above the ask) and ~$${SECOND.usd} of XYZ100 (at most ${(sSlip * 100).toFixed(1)}%: its testnet spread is wide), immediate-or-cancel.
-  3. Your own stop-loss on the XYZ100 long: a reduce-only stop-market sell 20% below the mark.
+  3. Your own stop-loss on the XYZ100 long: a reduce-only stop-market sell 6% below the mark (limit within Hyperliquid's oracle band).
   4. Sign rules (next version): stage 1 trims the largest position by 50% at a line just above your buffer (fires at once: the canary)${unified ? '' : `; stage 2 tops up $${TOP_UP} at the same line`}; stage 3 alerts at 2.0x, so the guard's backstop rests below the price.
   5. Watch the guard for 3 minutes, then move ${REPRICE_FUNDING} mock USDC into the pool so it re-prices the backstops; watch 2 more minutes.
   ${NOT_MONEY}`);
@@ -92,8 +92,9 @@ export async function part3(opts: { dryRun: boolean; ownerApproved?: string }): 
   state = await s.risk();
   const held = state.snapshot.positions.find((p) => p.coin === SECOND.coin);
   if (held) {
-    const trig = roundPrice(held.markAtSnapshot * 0.8, nAsset.szDecimals, 'down');
-    const lim = roundPrice(held.markAtSnapshot * 0.75, nAsset.szDecimals, 'down');
+    // Inside Hyperliquid's oracle band: trigger 6% below the mark, limit at most 8% below the oracle.
+    const trig = roundPrice(held.markAtSnapshot * 0.94, nAsset.szDecimals, 'down');
+    const lim = roundPrice(Math.max(trig * 0.98, (await oracle(SECOND.coin)) * 0.92), nAsset.szDecimals, 'up');
     const size = Math.abs(held.size);
     if (await confirm({ what: `Place your own stop-loss on the XYZ100 long: reduce-only stop-market sell of ${size} if the mark falls to ${trig} (limit ${lim}).`, amount: `${size} XYZ100, closes the long only.`, limit: NOT_MONEY })) {
       const r = await s.withTradingKey('user stop-loss', orderAction([orderWire({ asset: nAsset.assetId, isBuy: false, limitPx: toWire(lim), size: toWire(size), reduceOnly: true, orderType: { trigger: { isMarket: true, triggerPx: toWire(trig), tpsl: 'sl' } } })], attach));
