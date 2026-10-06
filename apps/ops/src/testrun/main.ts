@@ -15,11 +15,21 @@ const dryRun = rest.includes('--dry-run');
 const amountArg = rest.indexOf('--amount');
 const amount = amountArg >= 0 ? Number(rest[amountArg + 1]) : undefined;
 
+// The owner's advance approval of every step (testnet parts only), quoted into the run log with each plan.
+const approvedArg = rest.indexOf('--owner-approved');
+const ownerApproved = approvedArg >= 0 ? rest[approvedArg + 1] : undefined;
+if (ownerApproved !== undefined && (!ownerApproved || part === 'part1')) {
+  console.error('--owner-approved needs a note, and is for the testnet parts (2–4) only; part 1 moves real money and always asks.');
+  process.exit(2);
+}
+const approval = ownerApproved ? { ownerApproved } : {};
+const flag = (name: string, key: string) => (rest.indexOf(name) >= 0 ? { [key]: rest[rest.indexOf(name) + 1] } : {});
+
 const parts: Record<string, () => Promise<void>> = {
   part1: () => part1({ dryRun, ...(amount !== undefined ? { amount } : {}) }),
-  part2: () => part2({ dryRun }),
-  part3: () => part3({ dryRun }),
-  part4: () => part4({ dryRun, switchMode: !rest.includes('--no-switch') }),
+  part2: () => part2({ dryRun, ...approval, ...flag('--residency', 'residency'), ...flag('--citizenship', 'citizenship') }),
+  part3: () => part3({ dryRun, ...approval }),
+  part4: () => part4({ dryRun, switchMode: !rest.includes('--no-switch'), ...approval }),
 };
 
 const run = part ? parts[part] : undefined;

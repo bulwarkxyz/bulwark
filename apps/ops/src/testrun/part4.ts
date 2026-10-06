@@ -7,7 +7,7 @@
  */
 import { roundPrice, toWire } from '@bulwarkxyz/guard-core';
 import { cancelAction, orderAction, orderWire, userSetAbstractionAction } from '@bulwarkxyz/hyperliquid';
-import { RunLog, WALLET, confirm, loadWallet } from './guard.js';
+import { RunLog, WALLET, approveTestnetStepsInAdvance, confirm, loadWallet } from './guard.js';
 import { CHAIN, SIGNATURE_CHAIN_ID, Session } from './session.js';
 
 const NOT_MONEY = 'Testnet only, mock USDC, no real money. Does not count toward the 13 USDC limit.';
@@ -15,8 +15,9 @@ const NOT_MONEY = 'Testnet only, mock USDC, no real money. Does not count toward
 const slipFor = (b: { bid: number | null; ask: number | null }) => (b.bid && b.ask ? Math.min(0.1, Math.max(0.02, (b.ask - b.bid) / b.bid + 0.01)) : 0.02);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function part4(opts: { dryRun: boolean; switchMode: boolean }): Promise<void> {
+export async function part4(opts: { dryRun: boolean; ownerApproved?: string; switchMode: boolean }): Promise<void> {
   const log = new RunLog('part4');
+  if (opts.ownerApproved) approveTestnetStepsInAdvance(opts.ownerApproved, log);
   const s = new Session(log, opts.dryRun ? null : loadWallet());
   if (!opts.dryRun) await s.signIn();
   const state = await s.risk();

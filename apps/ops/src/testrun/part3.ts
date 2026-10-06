@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { ceilSize, roundPrice, toWire, type Policy } from '@bulwarkxyz/guard-core';
 import { USDC_TOKEN, orderAction, orderWire, sendAssetAction, updateLeverageAction } from '@bulwarkxyz/hyperliquid';
-import { RUN_DIR, RunLog, WALLET, checkDestination, confirm, loadWallet } from './guard.js';
+import { RUN_DIR, RunLog, WALLET, checkDestination, approveTestnetStepsInAdvance, confirm, loadWallet } from './guard.js';
 import { CHAIN, SIGNATURE_CHAIN_ID, Session, auditSince } from './session.js';
 
 const NOT_MONEY = 'Testnet only, mock USDC, no real money. Does not count toward the 13 USDC limit.';
@@ -24,8 +24,9 @@ const REPRICE_FUNDING = 5;
 const TOP_UP = 2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function part3(opts: { dryRun: boolean }): Promise<void> {
+export async function part3(opts: { dryRun: boolean; ownerApproved?: string }): Promise<void> {
   const log = new RunLog('part3');
+  if (opts.ownerApproved) approveTestnetStepsInAdvance(opts.ownerApproved, log);
   const s = new Session(log, opts.dryRun ? null : loadWallet());
   let state = await s.risk();
   const unified = state.abstraction === 'unifiedAccount';

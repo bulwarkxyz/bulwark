@@ -100,10 +100,25 @@ export interface Plan {
   notes?: string[];
 }
 
+/**
+ * The wallet owner's written approval of every step of a testnet part, given in advance (testnet parts only:
+ * part 1 and anything that moves real money always need "yes" typed at a terminal). Each plan is still shown and
+ * written to the run log, with this approval, before it runs.
+ */
+let ownerApproval: { note: string; log: RunLog } | null = null;
+export function approveTestnetStepsInAdvance(note: string, log: RunLog): void {
+  ownerApproval = { note, log };
+}
+
 /** Shows the plan and waits for the user to type exactly "yes". Refuses when there is no person at a terminal. */
 export async function confirm(plan: Plan, io: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream; isTTY: boolean } = { input: process.stdin, output: process.stdout, isTTY: Boolean(process.stdin.isTTY) }): Promise<boolean> {
-  if (!io.isTTY) throw new Refused('This step needs a person to type "yes" at a terminal; it will not run from a script or a pipe.');
   const lines = ['', `  What:   ${plan.what}`, `  Amount: ${plan.amount}`, `  Limit:  ${plan.limit}`, ...(plan.notes ?? []).map((n) => `          ${n}`), ''];
+  if (ownerApproval) {
+    io.output.write(`${lines.join('\n')}\n  Approved in advance by the wallet owner: ${ownerApproval.note}\n`);
+    ownerApproval.log.write('step approved in advance', { plan, approval: ownerApproval.note });
+    return true;
+  }
+  if (!io.isTTY) throw new Refused('This step needs a person to type "yes" at a terminal; it will not run from a script or a pipe.');
   io.output.write(`${lines.join('\n')}\n`);
   const rl = createInterface({ input: io.input, output: io.output });
   const answer = (await rl.question('  Type yes to do this, anything else to stop: ')).trim();

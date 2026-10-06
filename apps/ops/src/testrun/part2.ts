@@ -8,7 +8,7 @@
 import { BUILDER_APPROVE_MAX_RATE } from '@bulwarkxyz/config';
 import { agentName, approveAgentAction, approveBuilderFeeAction, type Hex } from '@bulwarkxyz/hyperliquid';
 import { createInterface } from 'node:readline/promises';
-import { RunLog, WALLET, confirm, loadWallet } from './guard.js';
+import { RunLog, WALLET, approveTestnetStepsInAdvance, confirm, loadWallet } from './guard.js';
 import { CHAIN, SIGNATURE_CHAIN_ID, Session } from './session.js';
 
 const DAYS = 30;
@@ -22,8 +22,9 @@ async function ask(q: string): Promise<string> {
   return a;
 }
 
-export async function part2(opts: { dryRun: boolean }): Promise<void> {
+export async function part2(opts: { dryRun: boolean; ownerApproved?: string; residency?: string; citizenship?: string }): Promise<void> {
   const log = new RunLog('part2');
+  if (opts.ownerApproved) approveTestnetStepsInAdvance(opts.ownerApproved, log);
   const s = new Session(log, opts.dryRun ? null : loadWallet());
   const agents = async () => (await s.info.extraAgents(WALLET)).map((a) => ({ name: a.name, address: a.address.toLowerCase(), validUntil: a.validUntil }));
   console.log(`\nTest wallet ${WALLET} on Hyperliquid testnet. Agents approved now: ${JSON.stringify(await agents())}`);
@@ -46,8 +47,9 @@ export async function part2(opts: { dryRun: boolean }): Promise<void> {
 
   // 2. region
   if (!me.user || me.user.region !== 'allowed') {
-    const residency = (await ask('\n  Your country of residence (two letters, e.g. IN): ')).toUpperCase();
-    const citizenship = (await ask('  Your citizenship (two letters): ')).toUpperCase();
+    const residency = (opts.residency ?? (await ask('\n  Your country of residence (two letters, e.g. IN): '))).toUpperCase();
+    const citizenship = (opts.citizenship ?? (await ask('  Your citizenship (two letters): '))).toUpperCase();
+    if (!/^[A-Z]{2}$/.test(residency) || !/^[A-Z]{2}$/.test(citizenship)) throw new Error('Residence and citizenship are two-letter country codes.');
     if (!(await confirm({ what: `Send the region step: residence ${residency}, citizenship ${citizenship}. The site also checks your connection's country.`, amount: 'None.', limit: NOT_MONEY }))) return void console.log('Stopped.');
     const r = await s.api<{ verdict: string; guard: string }>('/v1/onboarding/attest', { body: { residency, citizenship } });
     log.write('region step', { status: r.status, response: r.body });
