@@ -16,8 +16,8 @@ export function useAssets() {
   return useQuery({
     queryKey: ['assets', NETWORK],
     queryFn: async () => {
-      const perpDexs = (await info.perpDexs()) as RawPerpDexs;
-      const metas = (await info.allPerpMetas()) as RawPerpMeta[];
+      // Both at once: the account view waits on these, and testnet answers each in 0.2 to 3 s.
+      const [perpDexs, metas] = (await Promise.all([info.perpDexs(), info.allPerpMetas()])) as [RawPerpDexs, RawPerpMeta[]];
       return { assets: buildAssetIndex(perpDexs, metas) as AssetIndex, collateral: dexCollateral(perpDexs, metas) };
     },
     staleTime: 10 * 60_000,

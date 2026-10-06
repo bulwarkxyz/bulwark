@@ -52,8 +52,9 @@ for (const w of [1440, 390]) {
   await bell.click();
   await p.locator('.pop .nrow .nmain').filter({ hasText: 'liquidated' }).click();
   await p.waitForURL(/\/app\/positions\?coin=xyz%3ASILVER$/);
+  // The position's row appears once its account data arrives from Hyperliquid testnet (seconds, at times).
   const marked = await p
-    .waitForFunction((ph) => document.getElementById(ph ? 'posc-xyz:SILVER' : 'pos-xyz:SILVER')?.className.includes(ph ? 'target' : 'sel'), phone, { timeout: 8_000 })
+    .waitForFunction((ph) => document.getElementById(ph ? 'posc-xyz:SILVER' : 'pos-xyz:SILVER')?.className.includes(ph ? 'target' : 'sel'), phone, { timeout: 20_000 })
     .then(() => true, () => false);
   check(marked, `${at}: a liquidation opens that position, marked`);
   // The audit link opens and marks the entry.
