@@ -16,6 +16,9 @@ const nextConfig = {
   // Served as a zone under the landing site: /app and /api/bw route here; assets live under /app-static.
   assetPrefix: '/app-static',
   env: { NEXT_PUBLIC_REVIEW_MODE: reviewMode },
+  // No smart-contract wallets (lib/wallet.tsx): their SDKs are replaced by an empty module, which also
+  // keeps their optional dependencies (x402, Solana) out of the build.
+  turbopack: { resolveAlias: { '@base-org/account': './lib/no-smart-wallets.js', '@coinbase/wallet-sdk': './lib/no-smart-wallets.js' } },
   // Review previews are shared by link only: never indexed, whatever the host does by default.
   ...(reviewMode === '1' ? { headers: async () => [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] }] } : {}),
 };

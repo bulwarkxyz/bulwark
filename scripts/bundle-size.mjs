@@ -39,6 +39,8 @@ for (const path of pages) {
     if (r) r.wire = e.encodedDataLength;
   });
   await page.goto(`${base}${path}`, { waitUntil: 'load', timeout: 120_000 });
+  const sumNow = (k) => [...js.values()].reduce((s, r) => s + r[k], 0);
+  const atLoad = { wire: sumNow('wire'), raw: sumNow('raw') };
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   const nav = await page.evaluate(() => {
     const n = performance.getEntriesByType('navigation')[0];
@@ -46,7 +48,8 @@ for (const path of pages) {
     return { domContentLoaded: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), fcp: fcp ? Math.round(fcp.startTime) : null };
   });
   const sum = (k) => [...js.values()].reduce((s, r) => s + r[k], 0);
-  const row = { path, scripts: js.size, jsWireKB: Math.round(sum('wire') / 1024), jsRawKB: Math.round(sum('raw') / 1024), ...nav };
+  // Before the load event: what the first view waits for. Total: including what loads once the page is idle.
+  const row = { path, scripts: js.size, loadWireKB: Math.round(atLoad.wire / 1024), totalWireKB: Math.round(sum('wire') / 1024), totalRawKB: Math.round(sum('raw') / 1024), ...nav };
   // The wallet modal: what opening it fetches, and how long until it's on screen.
   const btn = page.getByRole('button', { name: /^Connect( wallet)?$/ }).filter({ visible: true }).first();
   if (await btn.count()) {

@@ -4,7 +4,7 @@ import { BUILDER_ADDRESS, BUILDER_APPROVE_MAX_RATE, BUILDER_APPROVE_MAX_TENTHS_B
 import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useAccount, useChainId, useSignTypedData } from 'wagmi';
+import { useAccount, useSignTypedData } from 'wagmi';
 import { api } from '@/lib/api';
 import { BUILDER_ON, NETWORK } from '@/lib/env';
 import { info } from '@/lib/hl';
@@ -17,6 +17,8 @@ import { shortAddr } from './format';
 import { Icon } from './icons';
 import { useTimes } from '@/lib/time';
 import { describeResult, useCommand, waitForCommand, type CommandRecord } from '@/lib/commands';
+import { useWalletChainId } from '@/lib/wallet';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 type Msg = { ok: boolean; text: string } | null;
 
@@ -62,7 +64,7 @@ function validUntil(days: string): number | undefined {
 }
 
 function useWalletSigner() {
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signTypedDataAsync } = useSignTypedData();
   return { chainId, sign: signTypedDataAsync as unknown as SignTypedData };
 }
@@ -122,7 +124,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
       }
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -137,7 +139,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
       setMsg({ ok: true, text: 'Guard key approved on Hyperliquid.' });
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -160,7 +162,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
       setConfirmReplace(false);
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -175,7 +177,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
       setMsg({ ok: true, text: 'New guard key approved. It takes over and the old key stops signing.' });
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -203,7 +205,7 @@ export function GuardKeyCard({ variant = 'card', setup = false }: { variant?: Ca
       setWipeAck(false);
       await qc.invalidateQueries();
     } catch (e) {
-      setMsg({ ok: false, text: `The wipe was not sent: ${(e as Error).message}` });
+      setMsg({ ok: false, text: `The wipe was not sent: ${walletErrorText(e)}` });
     } finally {
       setBusy(false);
     }
@@ -350,7 +352,7 @@ export function TradingKeyCard({ variant = 'card' }: { variant?: CardVariant } =
       await agents.refetch();
       setMsg({ ok: true, text: 'Trading key approved. Orders from the ticket no longer need a wallet prompt.' });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -417,7 +419,7 @@ export function BuilderCard({ variant = 'card' }: { variant?: CardVariant } = {}
       setMsg({ ok: true, text: 'Fee approved.' });
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -461,7 +463,7 @@ export function KillSwitchCard({ preview }: { preview?: 'busy' | 'error' } = {})
         setMsg({ ok: true, text: `Guard stopped. ${rec ? describeResult('stop', rec.result) : 'It hasn’t reported back yet; its resting orders are being cancelled. Check the audit log in a minute.'}` });
       }
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }

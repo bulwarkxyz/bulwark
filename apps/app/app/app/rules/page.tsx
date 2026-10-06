@@ -4,7 +4,7 @@ import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
-import { useChainId, useSignTypedData } from 'wagmi';
+import { useSignTypedData } from 'wagmi';
 import { fmtBuffer } from '@/components/app/format';
 import { BufferMeter } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';

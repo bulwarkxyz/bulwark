@@ -3,12 +3,14 @@
 import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useChainId, useSignTypedData } from 'wagmi';
+import { useSignTypedData } from 'wagmi';
 import { api, ApiError } from '@/lib/api';
 import { useMe } from '@/lib/me';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
 import { Icon } from './icons';
 import type { PolicyDraftState } from './rules-editor';
+import { useWalletChainId } from '@/lib/wallet';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 type DraftReply =
   | { kind: 'draft'; rule: Rule; description: string; provenance: Array<{ path: string; value: number; typed: number }>; policy: Policy }
@@ -23,7 +25,7 @@ type DraftReply =
  */
 export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | null; s: PolicyDraftState; bare?: boolean }) {
   const qc = useQueryClient();
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signTypedDataAsync } = useSignTypedData();
   const [text, setText] = useState('');
   const [reply, setReply] = useState<DraftReply | null>(null);
@@ -46,7 +48,7 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
     try {
       setReply(await api<DraftReply>('/v1/rules/draft', { body: first ? { text, maxSlippagePct: slip } : { text } }));
     } catch (e) {
-      setErr(e instanceof ApiError && e.status === 503 ? 'The AI translator is not switched on yet. You can still build rules by hand.' : (e as Error).message);
+      setErr(e instanceof ApiError && e.status === 503 ? 'The AI translator is not switched on yet. You can still build rules by hand.' : walletErrorText(e));
     } finally {
       setBusy(null);
     }
@@ -63,7 +65,7 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
       setReply(null);
       setText('');
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(walletErrorText(e));
     } finally {
       setBusy(null);
     }

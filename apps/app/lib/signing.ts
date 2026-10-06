@@ -6,6 +6,7 @@ import {
   agentName,
   approveAgentAction,
   approveBuilderFeeAction,
+  userSetAbstractionAction,
   l1ActionHash,
   l1TypedData,
   userSignedTypedData,
@@ -24,8 +25,22 @@ const hexChain = (id: number) => `0x${id.toString(16)}` as Hex;
 /** Wallet signer shape (wagmi's signTypedDataAsync). */
 export type SignTypedData = (args: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> }) => Promise<Hex>;
 
-function split(sig: Hex) {
-  return { r: `0x${sig.slice(2, 66)}` as Hex, s: `0x${sig.slice(66, 130)}` as Hex, v: Number.parseInt(sig.slice(130, 132), 16) as 27 | 28 };
+/**
+ * r, s and v for Hyperliquid, from whatever the wallet returned: 65 bytes with v as 27/28 or 0/1 (some
+ * hardware and mobile wallets), or the 64-byte compact form (EIP-2098). Anything else is a contract
+ * wallet's signature, which Hyperliquid can't use.
+ */
+export function split(sig: Hex): { r: Hex; s: Hex; v: 27 | 28 } {
+  const hex = sig.slice(2);
+  if (hex.length === 128) {
+    const vs = BigInt(`0x${hex.slice(64)}`);
+    const yParity = Number(vs >> 255n);
+    const s = (vs & ((1n << 255n) - 1n)).toString(16).padStart(64, '0');
+    return { r: `0x${hex.slice(0, 64)}`, s: `0x${s}`, v: (27 + yParity) as 27 | 28 };
+  }
+  if (hex.length !== 130) throw new Error('This looks like a smart-contract wallet’s signature. Hyperliquid accounts need an ordinary wallet.');
+  const v = Number.parseInt(hex.slice(128, 130), 16);
+  return { r: `0x${hex.slice(0, 64)}`, s: `0x${hex.slice(64, 128)}`, v: (v < 27 ? v + 27 : v) as 27 | 28 };
 }
 
 /** A user-signed Hyperliquid action, signed by the user's own wallet and sent to the exchange. */
@@ -42,6 +57,11 @@ export function approveAgentFor(walletChainId: number, agent: Hex, name: string,
 
 export function approveBuilderFor(walletChainId: number, builder: Hex, maxFeeRate: string) {
   return approveBuilderFeeAction({ chain, signatureChainId: hexChain(walletChainId), maxFeeRate, builder, nonce: Date.now() });
+}
+
+/** Switch the account's mode on Hyperliquid (standard ↔ unified), signed by the user's own wallet. */
+export function setAbstractionFor(walletChainId: number, user: Hex, abstraction: 'disabled' | 'unifiedAccount') {
+  return userSetAbstractionAction({ chain, signatureChainId: hexChain(walletChainId), user, abstraction, nonce: Date.now() });
 }
 
 // ------------------------------------------------------------------ the browser trading key

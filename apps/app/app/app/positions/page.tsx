@@ -14,6 +14,7 @@ import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 export default function PositionsPage() {
   const review = useReview();
@@ -67,7 +68,7 @@ export default function PositionsPage() {
       const rec = res.id !== null ? await waitForCommand(res.id) : null;
       setMsg({ ok: true, text: rec ? `Unwind started over ${minutesN} minutes. ${describeResult('unwind', rec.result)}` : `Unwind sent. The guard hasn’t reported back yet; the audit log will show each order.` });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }

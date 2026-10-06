@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { useAccount, useChainId, useSignTypedData } from 'wagmi';
+import { useAccount, useSignTypedData } from 'wagmi';
 import { DisconnectButton } from '@/components/app/connect';
 import { Icon } from '@/components/app/icons';
 import { GuardKeyCard, KEY_STORAGE, KillSwitchCard, TradingKeyCard, guardKeyStatus, shownCustody } from '@/components/app/keys';
@@ -19,6 +19,9 @@ import { approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type S
 import { useTimes } from '@/lib/time';
 import { useAlertActions, useAlertFeed, useAlertSettings, useUnseenAlerts } from '@/lib/alerts';
 import { Toggle } from '@/components/app/toggle';
+import { AccountModePanel } from '@/components/app/account-mode';
+import { useWalletChainId } from '@/lib/wallet';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 /** Keys: one compact row each, with the full controls one click away. */
 function KeysPanel() {
@@ -100,7 +103,7 @@ function AlertsPanel() {
   const linked = settings.data?.telegram.linked ?? Boolean(me.data?.user?.telegramChatId);
   const feed = useAlertFeed(Boolean(me.data?.user) && inApp);
   const times = useTimes();
-  const [code, setCode] = useState<string | null>(null);
+  const [code, setCode] = useState<{ code: string; bot?: string; link?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmUnlink, setConfirmUnlink] = useState(false);
@@ -115,7 +118,7 @@ function AlertsPanel() {
     try {
       await f();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(walletErrorText(e));
     } finally {
       setBusy(false);
     }
@@ -155,7 +158,7 @@ function AlertsPanel() {
                 </button>
               )
             ) : (
-              <button type="button" className="btn btn-sm" disabled={!ready || busy} onClick={() => run(async () => setCode((await api<{ code: string }>('/v1/telegram/code', { method: 'POST', body: {} })).code))}>
+              <button type="button" className="btn btn-sm" disabled={!ready || busy} onClick={() => run(async () => setCode(await api<{ code: string; bot?: string; link?: string }>('/v1/telegram/code', { method: 'POST', body: {} })))}>
                 Get a link code
               </button>
             )}
@@ -163,8 +166,15 @@ function AlertsPanel() {
         </div>
         {confirmUnlink ? <span className="tiny t2" style={{ marginTop: 6 }}>Unlinking stops every Telegram message and forgets this chat. Alerts keep going to the app if it is on.</span> : null}
         {code ? (
-          <div className="code" style={{ margin: '10px 0' }}>
-            Send <b>/link {code}</b> to the Bulwark bot <span className="t3">· valid 15 minutes</span>
+          <div className="col" style={{ gap: 6, margin: '10px 0' }}>
+            {code.link?.startsWith('https://t.me/') ? (
+              <a className="btn btn-sm btn-ink" href={code.link} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start' }}>
+                Open {code.bot ?? 'the Bulwark bot'} in Telegram
+              </a>
+            ) : null}
+            <div className="code">
+              {code.link ? 'Or send' : 'Send'} <b>/link {code.code}</b> to {code.bot ?? 'the Bulwark bot'} <span className="t3">· valid 15 minutes</span>
+            </div>
           </div>
         ) : null}
         {err ? <span className="small ct">{err}</span> : null}
@@ -207,7 +217,7 @@ function AlertsPanel() {
 function FeePanel() {
   const me = useMe();
   const qc = useQueryClient();
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signTypedDataAsync } = useSignTypedData();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -222,7 +232,7 @@ function FeePanel() {
       setMsg({ ok: true, text: rate === '0%' ? 'Approval lowered to zero. Orders through Bulwark now need a new approval.' : 'Fee approved.' });
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setMsg({ ok: false, text: walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -384,6 +394,7 @@ export default function SettingsPage() {
         {connected ? <KeysPanel /> : null}
         {connected ? <AlertsPanel /> : null}
         {connected && BUILDER_ON ? <FeePanel /> : null}
+        {connected ? <AccountModePanel /> : null}
         <DisplayPanel />
       </div>
     </div>

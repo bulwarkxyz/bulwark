@@ -17,6 +17,7 @@ import { useAccountView } from '@/lib/hl';
 import { MARKETS, homeOpen } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
+import { walletErrorText } from '@/lib/wallet-errors';
 
 const STEPS = [
   { name: 'Connect your wallet', sub: 'Sign in proves you own the address. It authorises nothing.' },
@@ -43,7 +44,7 @@ function RegionStep() {
       setMsg({ ok: true, text: r.verdict === 'allowed' ? 'You can use the guard.' : 'In your region Bulwark offers trading and alerts; the guard stays off.' });
       await qc.invalidateQueries({ queryKey: ['me'] });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof ApiError && e.status === 403 ? 'Bulwark is not available where you live or for your citizenship.' : (e as Error).message });
+      setMsg({ ok: false, text: e instanceof ApiError && e.status === 403 ? 'Bulwark is not available where you live or for your citizenship.' : walletErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -137,7 +138,7 @@ export default function OnboardingPage() {
           {!connected ? (
             <ConnectButton />
           ) : !signedIn || !me.data ? (
-            <button type="button" className="btn btn-ink" onClick={() => signIn().catch((e: Error) => setErr(e.message))}>
+            <button type="button" className="btn btn-ink" onClick={() => signIn().catch((e: unknown) => setErr(walletErrorText(e)))}>
               Sign in
             </button>
           ) : (

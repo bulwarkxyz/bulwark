@@ -8,7 +8,8 @@ const css = readFileSync(new URL('../apps/app/app/app/app.css', import.meta.url)
 const pairs = JSON.parse(readFileSync(new URL('./contrast-pairs.json', import.meta.url), 'utf8'));
 
 function tokens(theme) {
-  const m = css.match(new RegExp(`html\\.${theme} \\.bw\\{([\\s\\S]*?)\\n\\}`));
+  // The block may list more selectors after .bw (the wallet modal's [data-rk] shares the tokens).
+  const m = css.match(new RegExp(`html\\.${theme} \\.bw(?:,[^{]*)?\\{([\\s\\S]*?)\\n\\}`));
   if (!m) throw new Error(`no ${theme} token block in app.css`);
   return Object.fromEntries([...m[1].matchAll(/--([\w-]+):([^;]+);/g)].map(([, k, v]) => [k, v.trim()]));
 }

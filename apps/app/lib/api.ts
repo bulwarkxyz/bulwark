@@ -7,6 +7,8 @@ import { useSyncExternalStore } from 'react';
  * location headers and the proxy secret. The session token is a short-lived JWT kept in sessionStorage.
  */
 const KEY = 'bw.session';
+const ADDR = 'bw.session.address';
+const listeners = new Set<() => void>();
 
 export function sessionToken(): string | null {
   try {
@@ -16,14 +18,36 @@ export function sessionToken(): string | null {
   }
 }
 
-export function setSessionToken(t: string | null) {
+/** The wallet address the session was signed in with (lower case). */
+export function sessionAddress(): string | null {
   try {
-    if (t) sessionStorage.setItem(KEY, t);
-    else sessionStorage.removeItem(KEY);
+    return sessionStorage.getItem(ADDR);
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionToken(t: string | null, address?: string) {
+  try {
+    if (t) {
+      sessionStorage.setItem(KEY, t);
+      if (address) sessionStorage.setItem(ADDR, address.toLowerCase());
+    } else {
+      sessionStorage.removeItem(KEY);
+      sessionStorage.removeItem(ADDR);
+    }
   } catch {
     /* storage unavailable: the user signs in again */
   }
+  for (const fn of listeners) fn();
 }
+
+const onSession = (fn: () => void) => {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+};
 
 export class ApiError extends Error {
   constructor(
@@ -49,7 +73,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 const noop = () => () => {};
 /** Signed-in state that is false during server render and hydration, so markup matches. */
 export function useSignedIn(): boolean {
-  return useSyncExternalStore(noop, () => Boolean(sessionToken()), () => false);
+  return useSyncExternalStore(onSession, () => Boolean(sessionToken()), () => false);
 }
 
 /** True after hydration. */

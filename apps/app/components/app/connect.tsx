@@ -4,15 +4,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 import { createSiweMessage } from 'viem/siwe';
-import { useAccount, useChainId, useConnect, useDisconnect, useSignMessage } from 'wagmi';
+import { useAccount, useDisconnect, useSignMessage } from 'wagmi';
 import { api, setSessionToken, useSignedIn } from '@/lib/api';
 import { useReview, useViewer } from '@/lib/review';
+import { useWalletChainId, useWalletModal } from '@/lib/wallet';
+import { explainWalletError, type Explained } from '@/lib/wallet-errors';
 import { shortAddr } from './format';
 
 /** Sign-in with Ethereum against the Bulwark API. The message says it authorises no transaction. */
 export function useSignIn() {
   const { address } = useAccount();
-  const chainId = useChainId();
+  const chainId = useWalletChainId();
   const { signMessageAsync } = useSignMessage();
   const qc = useQueryClient();
   return async () => {
@@ -30,16 +32,27 @@ export function useSignIn() {
     });
     const signature = await signMessageAsync({ message });
     const { token } = await api<{ token: string }>('/auth/verify', { body: { message, signature } });
-    setSessionToken(token);
+    setSessionToken(token, address);
     await qc.invalidateQueries({ queryKey: ['me'] });
   };
 }
 
-export function ConnectButton() {
-  const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending } = useConnect();
+/** A connection or signing failure: what happened and what to do (lib/wallet-errors.ts). */
+export function WalletMessage({ error, compact = false }: { error: Explained; compact?: boolean }) {
+  return (
+    <span role={error.declined ? 'status' : 'alert'} className={`small ${error.declined ? 't2' : 'ct'}`} style={compact ? { fontSize: 12 } : undefined}>
+      {error.text}
+      {error.next ? <span className="t2"> {error.next}</span> : null}
+    </span>
+  );
+}
+
+/** `stepSignIn`: the page has its own Sign in (setup), so phones skip the header's to keep it on one line. */
+export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) {
+  const { address, isConnected, isConnecting, isReconnecting } = useAccount();
+  const wallet = useWalletModal();
   const signIn = useSignIn();
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<Explained | null>(null);
   const signedIn = useSignedIn();
   const review = useReview();
   const viewer = useViewer();
@@ -53,10 +66,11 @@ export function ConnectButton() {
     );
   }
   if (!isConnected) {
-    const injected = connectors[0];
+    // The modal being open isn't "connecting": that starts when a wallet is chosen.
+    const busy = wallet.loading || isConnecting || isReconnecting;
     return (
-      <button type="button" className="btn btn-sm btn-ink" disabled={!injected || isPending} onClick={() => injected && connect({ connector: injected })}>
-        {isPending ? 'Connecting…' : 'Connect wallet'}
+      <button type="button" className="btn btn-sm btn-ink" onClick={wallet.open}>
+        {busy ? 'Connecting…' : 'Connect wallet'}
       </button>
     );
   }
@@ -65,10 +79,10 @@ export function ConnectButton() {
       {!signedIn ? (
         <button
           type="button"
-          className="btn btn-sm btn-ink"
+          className={`btn btn-sm btn-ink ${stepSignIn ? 'hide-sm' : ''}`}
           onClick={() => {
             setErr(null);
-            signIn().catch((e: Error) => setErr(e.message));
+            signIn().catch((e: unknown) => setErr(explainWalletError(e)));
           }}
         >
           Sign in
@@ -77,7 +91,11 @@ export function ConnectButton() {
       <Link className="wallet" href="/app/account" aria-label="Account">
         <span className="num small">{shortAddr(address as string)}</span>
       </Link>
-      {err ? <span className="err hide-sm" style={{ fontSize: 12 }}>{err}</span> : null}
+      {err ? (
+        <span className="hide-sm">
+          <WalletMessage error={err} compact />
+        </span>
+      ) : null}
     </div>
   );
 }
