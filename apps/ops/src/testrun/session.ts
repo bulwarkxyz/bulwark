@@ -5,9 +5,10 @@
  * the way the API and the guard compute it.
  */
 import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { builderField } from '@bulwarkxyz/config';
 import { POLICY_CONFIRMATION_TYPES, assessRisk, buildAssetIndex, buildSnapshot, dexCollateral, policyConfirmationDomain, policyHash, type Policy, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
-import { ExchangeClient, InfoClient, l1ActionHash, l1TypedData, userSignedTypedData, type ExchangeResult, type Hex, type L1Action, type UserSignedAction } from '@bulwarkxyz/hyperliquid';
+import { ExchangeClient, InfoClient, WeightLimiter, l1ActionHash, limitedFetch, l1TypedData, userSignedTypedData, type ExchangeResult, type Hex, type L1Action, type UserSignedAction } from '@bulwarkxyz/hyperliquid';
 import { parseSignature } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
@@ -27,8 +28,23 @@ const rsv = (sig: Hex) => {
   return { r: p.r, s: p.s, v: Number(p.v ?? 27n + BigInt(p.yParity)) as 27 | 28 };
 };
 
+/**
+ * Reads share one weight budget and wait out a 429 (testnet's limit is per IP, shared with the app open in a
+ * browser on the same machine), so a busy moment delays the run instead of stopping it.
+ */
+const limiter = new WeightLimiter(600);
+const patientFetch: typeof fetch = async (input, init) => {
+  // The caller's abort timer would run while we wait in the queue: each attempt gets its own, started after the wait.
+  const { signal: _ignored, ...rest } = init ?? {};
+  for (let attempt = 1; ; attempt++) {
+    const res = await limitedFetch(limiter, (i, o) => fetch(i, { ...o, signal: AbortSignal.timeout(20_000) }), 120_000, 5_000)(input, rest);
+    if (res.status !== 429 || attempt >= 6) return res;
+    await new Promise((r) => setTimeout(r, 2000 * attempt));
+  }
+};
+
 export class Session {
-  readonly info = new InfoClient(NET);
+  readonly info = new InfoClient(NET, patientFetch, 600_000);
   readonly exchange = new ExchangeClient(NET);
   private token: string | null = null;
   private lastNonce = 0;
@@ -101,6 +117,8 @@ export class Session {
     const v = await this.api<{ token?: string; error?: string }>('/auth/verify', { body: { message, signature: await w.signMessage({ message }) } });
     if (!v.body.token) throw new Error(`sign-in refused: ${v.body.error ?? v.status}`);
     this.token = v.body.token;
+    // For screen capture only: the session (not the key) lets a read-only browser show the signed-in screens.
+    if (process.env.TESTRUN_SESSION_FILE) writeFileSync(process.env.TESTRUN_SESSION_FILE, this.token, { mode: 0o600 });
     this.log.write('signed in', { site: SITE });
   }
 
