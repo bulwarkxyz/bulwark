@@ -47,6 +47,12 @@ describe('repeat: the user chooses per stage', () => {
     expect(acted).toHaveLength(2);
   });
 
+  it('once per breach: a flat market does not re-arm it while the line is still crossed (testnet run, 6 Oct: it fired twice in 2 s)', () => {
+    // A line far above the buffer (the canary): the trim cannot lift the buffer over it, and the price never moves.
+    const canary: Rule = { ...stage({ mode: 'oncePerBreach' }), when: { kind: 'buffer', below: 10 } };
+    expect(walk(canary, [86, 86, 86, 86, 86, 86])).toHaveLength(1);
+  });
+
   it('once per breach: it re-arms once the position it acted on is gone', () => {
     const r: Rule = { ...stage({ mode: 'oncePerBreach' }), then: [{ kind: 'close', target: { kind: 'all' } }] };
     let d = evaluate(policy([r]), at(86), { [CL]: 86 }, ctx({ now: NOW }));

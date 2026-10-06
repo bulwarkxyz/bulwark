@@ -375,7 +375,7 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
   const raw: GuardAction[] = [];
   if (!risk.supported) return { risk, fired, actions: [], latched, active, breaches, fires };
   const held = new Map(risk.pools.flatMap((p) => p.positions.map((r) => [r.position.coin, r] as const)));
-  /** "Once per breach": over when every position the stage acted on is gone or back at or past its price then. */
+  /** "Once per breach": every position the stage acted on is gone or back at or past its price then (see the re-arm rule below). */
   const recovered = (b: Breach | undefined) =>
     !b ||
     Object.entries(b.marks).every(([coin, then]) => {
@@ -397,8 +397,10 @@ export function evaluate(policy: Policy, snapshot: AccountSnapshot, marks: Marks
     for (const key of [...latched]) {
       if (!key.startsWith(`${rule.id}@`)) continue;
       if (once) {
-        // Once per breach: the guard's own trim lifting the buffer is not the end of the breach.
-        if (recovered(breaches[key])) {
+        // Once per breach: over only when the line is no longer crossed AND the price is back where it acted (or the
+        // position is gone). The guard's own trim lifting the buffer is not the end of the breach, and neither is a
+        // price that simply has not moved since it acted (a flat market re-armed it at once and it fired again).
+        if (!hitKeys.has(key) && recovered(breaches[key])) {
           latched.delete(key);
           delete breaches[key];
         }
