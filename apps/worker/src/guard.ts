@@ -28,6 +28,12 @@ import type { GuardStore } from '@bulwarkxyz/store';
 export const MARK_MAX_AGE_MS = 10_000;
 export const STATE_MAX_AGE_MS = 30_000;
 export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
+/**
+ * How long the account's mode (standard or unified) is trusted before it is read again. The user can switch it at
+ * any time (the app's Settings > Account mode); until 6 Oct 2026 it was read once, so after a switch the guard kept
+ * pricing a unified account as standard (testnet run: a 10x buffer alert and a backstop for a ~1,999x account).
+ */
+export const ABSTRACTION_TTL_MS = 30_000;
 /** Data must be past its limit this long before the user is told (a reconnect's few seconds are not news). */
 export const DEGRADED_ALERT_AFTER_MS = 20_000;
 export const BACKSTOP_EVERY_MS = 60_000;
@@ -85,6 +91,7 @@ export interface EngineDeps {
 
 interface AccountCache {
   abstraction?: string;
+  abstractionAt?: number;
   dexStates: Record<string, RawClearinghouseState>;
   stateAt: number;
   spot?: RawSpotState;
@@ -297,7 +304,18 @@ export class GuardEngine {
     const report = (state: GuardState, reason: PausedReason | null = null) => this.report(account, c, user.killSwitch ? 'stopped' : state, user.killSwitch ? null : reason, now);
     if (!confirmed || confirmed.policy.rules.length === 0) return report('no_rules');
     if (c.stateAt === 0) return report('paused', 'stale_data');
-    if (!c.abstraction) c.abstraction = await this.deps.abstraction(account);
+    if (!c.abstraction || now - (c.abstractionAt ?? 0) >= ABSTRACTION_TTL_MS) {
+      // A failed re-read keeps the last known mode; with none known yet, the run fails and is retried.
+      const mode = c.abstraction ? await this.deps.abstraction(account).catch(() => c.abstraction as string) : await this.deps.abstraction(account);
+      if (c.abstraction && mode !== c.abstraction) {
+        // The account changed mode: its pools are different now, so re-plan backstops from scratch.
+        c.lastBackstopAt = 0;
+        c.openOrders = c.openByDex = undefined;
+        console.log(JSON.stringify({ msg: 'account mode changed', account, from: c.abstraction, to: mode }));
+      }
+      c.abstraction = mode;
+      c.abstractionAt = now;
+    }
 
     // Never act on stale data: hold off and tell the user (throttled). Backstops on the exchange still stand.
     const held = [...coinsOf(c)];

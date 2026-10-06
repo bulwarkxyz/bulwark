@@ -5,7 +5,7 @@ import { HttpError, NonceManager, parseExchangeResponse, type Hex, type SignedRe
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { verifyChain } from '@bulwarkxyz/store';
-import { BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, positionsKey, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
+import { ABSTRACTION_TTL_MS, BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, positionsKey, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
 import { RETRY_ALERT_AFTER } from '@bulwarkxyz/guard-core';
 import { ConsoleNotifier } from '../src/notify.js';
 import { MemoryStore, type GuardUser } from '@bulwarkxyz/store';
@@ -113,6 +113,27 @@ describe('guard engine', () => {
     expect(chain.some((e) => e.kind === 'guard_action')).toBe(true);
     expect(verifyChain(chain)).toBeNull();
     expect(notifier.sent.at(-1)?.text).toMatch(/Bulwark guard: buffer .* below your 2× line/);
+  });
+
+  it('reads the account mode again after a while, so a switch to unified is priced as unified', async () => {
+    let mode = 'default';
+    const calls: string[] = [];
+    (engine as unknown as { deps: { abstraction: (u: string) => Promise<string> } }).deps.abstraction = async () => (calls.push(mode), mode);
+    await feed(91.5);
+    expect(calls).toEqual(['default']);
+    mode = 'unifiedAccount';
+    t += 1000;
+    await feed(91.5);
+    expect(calls).toHaveLength(1); // still trusted
+    t += ABSTRACTION_TTL_MS;
+    await feed(91.5);
+    expect(calls).toEqual(['default', 'unifiedAccount']);
+    // A failed re-read keeps the last mode and does not stop the run.
+    (engine as unknown as { deps: { abstraction: () => Promise<string> } }).deps.abstraction = async () => {
+      throw new Error('down');
+    };
+    t += ABSTRACTION_TTL_MS;
+    await expect(feed(91.5)).resolves.toBeUndefined();
   });
 
   it('when Hyperliquid refuses a request for one account (429), the others still run and nothing rejects', async () => {
