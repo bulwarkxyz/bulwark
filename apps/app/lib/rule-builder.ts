@@ -70,7 +70,7 @@ export const EMPTY_FORM: RuleForm = {
 
 /** Copy for the choice (reports/B9.md), word for word. */
 export const REPEAT_OPTIONS = [
-  { mode: 'oncePerBreach', label: 'Once per fall', chip: 'Once per fall', text: 'Acts once when the line is crossed, then leaves the rest of the fall to your backstop. It acts again only after the price recovers to where it acted.' },
+  { mode: 'oncePerBreach', label: 'Once per fall', chip: 'Once per fall', text: 'Acts once when the line is crossed, then leaves the rest of the fall to your backstop. It acts again only once your buffer is back above the line and the price is back where it acted (or that position is closed).' },
   { mode: 'everyCrossing', label: 'Every time the line is crossed', chip: 'Every time', text: 'Acts each time your buffer comes back above the line and falls through it, including after its own trim.' },
 ] as const;
 export const REPEAT_UNSET = 'Choose what this stage does after it acts';

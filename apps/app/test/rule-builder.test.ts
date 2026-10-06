@@ -110,7 +110,7 @@ describe('rule builder: once per fall, or every time (reports/B9.md)', () => {
   });
   it('the options are B9’s copy, word for word', () => {
     expect(REPEAT_OPTIONS.map((o) => o.text)).toEqual([
-      'Acts once when the line is crossed, then leaves the rest of the fall to your backstop. It acts again only after the price recovers to where it acted.',
+      'Acts once when the line is crossed, then leaves the rest of the fall to your backstop. It acts again only once your buffer is back above the line and the price is back where it acted (or that position is closed).',
       'Acts each time your buffer comes back above the line and falls through it, including after its own trim.',
     ]);
   });

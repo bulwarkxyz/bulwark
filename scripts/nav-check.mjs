@@ -14,6 +14,12 @@ const check = (ok, what, detail = '') => {
   if (!ok) failed++;
 };
 const browser = await chromium.launch();
+// Warm the server first: the first request after a start compiles nothing but is slow enough to miss a wait.
+{
+  const warm = await browser.newPage();
+  for (const path of ['/app', '/app/positions', '/app/rules', '/app/notifications', '/app/settings']) await warm.goto(`${base}${path}`).catch(() => {});
+  await warm.close();
+}
 
 for (const w of [1440, 390]) {
   const phone = w < 500;
