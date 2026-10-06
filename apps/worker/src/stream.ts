@@ -7,11 +7,21 @@ import WebSocket from 'ws';
  * Marks: allDexsAssetCtxs for every market (every ~15 s), plus activeAssetCtx for each market a guarded account holds (~1 s).
  * https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits
  * Channels used (https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/websocket/subscriptions):
- *   allDexsAssetCtxs              → marks for every dex, ~1 s
+ *   allDexsAssetCtxs              → marks for every dex, ~15 s
+ *   activeAssetCtx{coin}          → one held market's mark, ~1 s
  *   allDexsClearinghouseState{u}  → per-dex state for a user, ~5 s and on events
  *   spotState{u}                  → spot balances (the collateral for unified accounts)
  */
 export const MAX_USERS_PER_CONNECTION = 10;
+/**
+ * Held markets with their own stream, at most. Hyperliquid allows 1,000 subscriptions and 2,000 messages a minute per
+ * IP; a reconnect resends every subscription, so even a connection that drops eight times in its first minute
+ * (backoff 0.5 s doubling) stays under 2,000 messages. Beyond this, a market keeps the ~15 s all-markets price and
+ * the guard holds off whenever that is older than its 10 s limit.
+ */
+export const MAX_COIN_STREAMS = 200;
+/** The backoff resets only after a connection has stayed up this long, so a flapping one keeps backing off. */
+export const STABLE_CONNECTION_MS = 60_000;
 
 export interface SocketLike {
   on(event: 'open' | 'close' | 'error' | 'message', cb: (arg?: unknown) => void): void;
@@ -40,6 +50,7 @@ export class HyperliquidStream {
   private backoff = 500;
   private closed = false;
   private isOpen = false;
+  private openedAt = 0;
   lastMessageAt = 0;
 
   constructor(
@@ -64,10 +75,21 @@ export class HyperliquidStream {
    * A held market's own context stream. allDexsAssetCtxs pushes only about every 15 s (measured on mainnet and
    * testnet, 6 Oct 2026), slower than the guard's 10 s staleness limit; activeAssetCtx pushes about once a second.
    */
-  subscribeCoin(coin: string): void {
-    if (this.coins.has(coin)) return;
+  subscribeCoin(coin: string): boolean {
+    if (this.coins.has(coin)) return true;
+    if (this.coins.size >= MAX_COIN_STREAMS) return false;
     this.coins.add(coin);
     this.add({ type: 'activeAssetCtx', coin });
+    return true;
+  }
+
+  get coinCount(): number {
+    return this.coins.size;
+  }
+
+  /** Subscriptions this connection holds (each one resent on reconnect). */
+  get subscriptionCount(): number {
+    return this.subs.length;
   }
 
   subscribeMarks(): void {
@@ -98,7 +120,7 @@ export class HyperliquidStream {
     this.socket = s;
     s.on('open', () => {
       this.isOpen = true;
-      this.backoff = 500;
+      this.openedAt = this.now();
       for (const sub of this.subs) s.send(JSON.stringify({ method: 'subscribe', subscription: sub }));
       if (this.heartbeat) clearInterval(this.heartbeat);
       this.heartbeat = setInterval(() => s.send(JSON.stringify({ method: 'ping' })), 30_000);
@@ -110,6 +132,10 @@ export class HyperliquidStream {
       this.handlers.onStatus?.('closed', this.now());
       if (this.heartbeat) clearInterval(this.heartbeat);
       if (this.closed) return;
+      // While it is down, no price arrives: each held market's last price ages past the guard's 10 s limit and the
+      // guard holds off (stale) until the resent subscriptions bring fresh ones.
+      if (this.openedAt && this.now() - this.openedAt >= STABLE_CONNECTION_MS) this.backoff = 500;
+      this.openedAt = 0;
       setTimeout(() => this.connect(), this.backoff);
       this.backoff = Math.min(this.backoff * 2, 15_000);
     });

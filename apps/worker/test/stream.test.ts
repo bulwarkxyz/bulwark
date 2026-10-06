@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { HyperliquidStream, marksFromCtxs, type SocketLike } from '../src/stream.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HyperliquidStream, MAX_COIN_STREAMS, STABLE_CONNECTION_MS, marksFromCtxs, type SocketLike } from '../src/stream.js';
 
 function fakeSocket() {
   const handlers: Record<string, (a?: unknown) => void> = {};
@@ -47,6 +47,65 @@ describe('stream', () => {
     st.dispatch(JSON.stringify({ channel: 'activeAssetCtx', data: { coin: 'xyz:GOLD', ctx: { markPx: 'x' } } }));
     expect(got).toEqual([['xyz:GOLD', 4157.2]]);
     st.stop();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('after a drop, reconnects and resends every subscription, held markets included', () => {
+    vi.useFakeTimers();
+    const socks: Array<ReturnType<typeof fakeSocket>> = [];
+    const status: string[] = [];
+    const st = new HyperliquidStream('wss://x', { onStatus: (s) => status.push(s) }, () => (socks.push(fakeSocket()), socks.at(-1)!));
+    st.start();
+    st.subscribeMarks();
+    socks[0]!.emit('open');
+    st.subscribeCoin('xyz:GOLD');
+    st.subscribeCoin('BTC');
+    socks[0]!.emit('close');
+    expect(status).toEqual(['open', 'closed']);
+    vi.advanceTimersByTime(500);
+    expect(socks).toHaveLength(2);
+    socks[1]!.emit('open');
+    expect(socks[1]!.sent.map((x) => JSON.parse(x).subscription)).toEqual([{ type: 'allDexsAssetCtxs' }, { type: 'activeAssetCtx', coin: 'xyz:GOLD' }, { type: 'activeAssetCtx', coin: 'BTC' }]);
+    st.stop();
+  });
+
+  it('keeps backing off while a connection flaps, and resets only after one stays up', () => {
+    vi.useFakeTimers();
+    let t = 0;
+    const socks: Array<ReturnType<typeof fakeSocket>> = [];
+    const st = new HyperliquidStream('wss://x', {}, () => (socks.push(fakeSocket()), socks.at(-1)!), () => t);
+    st.start();
+    const flap = (upMs: number) => {
+      const s = socks.at(-1)!;
+      s.emit('open');
+      t += upMs;
+      s.emit('close');
+    };
+    const waits: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      flap(100);
+      const before = socks.length;
+      let w = 0;
+      while (socks.length === before) (vi.advanceTimersByTime(100), (w += 100));
+      waits.push(w);
+    }
+    expect(waits).toEqual([500, 1000, 2000, 4000, 8000, 15000]);
+    flap(STABLE_CONNECTION_MS);
+    const before = socks.length;
+    vi.advanceTimersByTime(500);
+    expect(socks.length).toBe(before + 1);
+    st.stop();
+  });
+
+  it(`follows at most ${MAX_COIN_STREAMS} held markets on their own stream (inside the 1,000-subscription limit)`, () => {
+    const st = new HyperliquidStream('wss://x', {}, () => fakeSocket());
+    st.subscribeMarks();
+    for (let i = 0; i < MAX_COIN_STREAMS; i++) expect(st.subscribeCoin(`C${i}`)).toBe(true);
+    expect(st.subscribeCoin('ONE-TOO-MANY')).toBe(false);
+    expect(st.subscribeCoin('C0')).toBe(true);
+    expect(st.coinCount).toBe(MAX_COIN_STREAMS);
+    expect(st.subscriptionCount).toBe(MAX_COIN_STREAMS + 1);
   });
 
   it('caps users per connection at 10', () => {

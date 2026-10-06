@@ -69,7 +69,7 @@ For every guarded position, the guard keeps a **reduce-only stop order resting o
 
 The stop is re-priced whenever your positions, your margin (deposits, withdrawals, transfers, funding) or your rules change, and on the guard's regular sync once a minute. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone.
 
-**Measured in our replays:** when two positions in a pool fell together, the accounts that were liquidated with the old pricing (each position on its own) survived with this one. When only one of them fell, the earlier stops kept less money. This pricing is **on testnet**; mainnet keeps the old pricing until it has been checked on funded testnet accounts.
+**Measured in our replays:** when two positions in a pool fell together, the accounts that were liquidated with the old pricing (each position on its own) survived with this one. When only one of them fell, the earlier stops kept less money. This pricing runs **on testnet only**. Our funded testnet run on 6 October checked the backstop live with **one** position: placed at the planned price, then re-priced once after a deposit. The several-position case is shown in the replays but **not yet checked live**: on testnet, only one of the stock and commodity markets can share a cross pool. Mainnet keeps the old pricing until it is.
 
 ## Your own stop-loss and take-profit orders
 
@@ -82,7 +82,7 @@ The stop is re-priced whenever your positions, your margin (deposits, withdrawal
 
 ## When the guard holds off
 
-The guard acts only on fresh data: mark prices less than 10 seconds old and account state less than 30 seconds old. Otherwise it does nothing, records why in your audit log, and alerts you.
+The guard acts only on fresh data: mark prices less than 10 seconds old and account state less than 30 seconds old. Otherwise it does nothing, and its status shows Paused at once. Your backstops on Hyperliquid still stand. If the data stays late for 20 seconds more, it records why in your audit log and alerts you, at most once every 5 minutes. A few seconds' gap while a price stream reconnects is not alerted.
 
 ## The guard's status
 

@@ -28,6 +28,8 @@ import type { GuardStore } from '@bulwarkxyz/store';
 export const MARK_MAX_AGE_MS = 10_000;
 export const STATE_MAX_AGE_MS = 30_000;
 export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
+/** Data must be past its limit this long before the user is told (a reconnect's few seconds are not news). */
+export const DEGRADED_ALERT_AFTER_MS = 20_000;
 export const BACKSTOP_EVERY_MS = 60_000;
 export const OPEN_ORDERS_TTL_MS = 15_000;
 export const CHOICE_NOTICE_WHY = 'A new setting needs your choice';
@@ -305,7 +307,12 @@ export class GuardEngine {
     const needsSpot = c.abstraction === 'unifiedAccount';
     const staleState = now - c.stateAt > STATE_MAX_AGE_MS || (needsSpot && now - c.spotAt > STATE_MAX_AGE_MS);
     if (held.length && (staleMark || staleState)) {
-      if (now - c.lastDegradedAlert > DEGRADED_ALERT_EVERY_MS) {
+      // The guard holds off at once; the user hears about it only once the data has stayed late for a while, and
+      // at most every 5 minutes.
+      const markLate = staleMark ? now - (this.marks.get(staleMark) as { at: number }).at - MARK_MAX_AGE_MS : 0;
+      const stateLate = Math.max(now - c.stateAt, needsSpot ? now - c.spotAt : 0) - STATE_MAX_AGE_MS;
+      const lateFor = Math.max(markLate, staleState ? stateLate : 0);
+      if (lateFor >= DEGRADED_ALERT_AFTER_MS && now - c.lastDegradedAlert > DEGRADED_ALERT_EVERY_MS) {
         c.lastDegradedAlert = now;
         const why = staleState ? 'account data from Hyperliquid is late' : `no fresh price for ${staleMark}`;
         await this.audit({ account, at: now, kind: 'degraded', why, what: 'The guard held off; backstop orders on the exchange still stand.' });

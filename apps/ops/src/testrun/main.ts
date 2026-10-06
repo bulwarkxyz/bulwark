@@ -2,12 +2,13 @@
  * The funded test run, one command per part of reports/B11-runbook.md. The user starts it; it asks before
  * every action. See guard.ts for the limits it enforces.
  *
- *   pnpm --filter @bulwarkxyz/ops testrun part1|part2|part3|part4 [--dry-run]
+ *   pnpm --filter @bulwarkxyz/ops testrun part1|part2|part3|part3tight|part4 [--dry-run]
  */
 import { Refused } from './guard.js';
 import { part1 } from './part1.js';
 import { part2 } from './part2.js';
 import { part3 } from './part3.js';
+import { part3tight } from './part3tight.js';
 import { part4 } from './part4.js';
 
 const [part, ...rest] = process.argv.slice(2);
@@ -29,6 +30,7 @@ const parts: Record<string, () => Promise<void>> = {
   part1: () => part1({ dryRun, ...(amount !== undefined ? { amount } : {}) }),
   part2: () => part2({ dryRun, ...approval, ...flag('--residency', 'residency'), ...flag('--citizenship', 'citizenship') }),
   part3: () => part3({ dryRun, ...approval }),
+  part3tight: () => part3tight({ dryRun, ...approval }),
   part4: () => part4({ dryRun, switchMode: !rest.includes('--no-switch'), ...approval }),
 };
 

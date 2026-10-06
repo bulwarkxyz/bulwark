@@ -23,7 +23,7 @@ import { GuardEngine, STATUS_WRITE_EVERY_MS } from './guard.js';
 import { KeyService, SEALED_PREFIX } from './keys.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
 import { PgStore, migrate } from '@bulwarkxyz/store';
-import { HyperliquidStream, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
+import { HyperliquidStream, MAX_COIN_STREAMS, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
 import { BuilderStream, HYDRO_POLL_MS, HydromancerFeed, NATIVE_FALLBACK_EVERY_MS, NativeFallbackPoller, StateArbiter } from './statefeed.js';
 import { BUILDER_ADDRESS } from '@bulwarkxyz/config';
 import { TelegramBot } from './telegram-bot.js';
@@ -155,8 +155,13 @@ async function main() {
   markStream.subscribeMarks();
   markStream.start();
   // Held markets get their own ~1 s mark stream (the all-markets one arrives only every ~15 s).
+  let coinCapLogged = false;
   setInterval(() => {
-    for (const coin of engine.heldCoins()) markStream.subscribeCoin(coin);
+    for (const coin of engine.heldCoins()) {
+      if (markStream.subscribeCoin(coin) || coinCapLogged) continue;
+      coinCapLogged = true;
+      console.log(JSON.stringify({ msg: 'coin stream cap reached', cap: MAX_COIN_STREAMS, subscriptions: markStream.subscriptionCount }));
+    }
   }, 5_000);
   // Account state: Hydromancer first, Hyperliquid's own feeds as the fallback (statefeed.ts).
   const arbiter = new StateArbiter((u, states, at) => void engine.onUserState(u, states, at));

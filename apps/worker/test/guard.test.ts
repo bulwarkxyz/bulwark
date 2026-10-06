@@ -212,6 +212,23 @@ describe('guard engine', () => {
     expect(notifier.sent.at(-1)?.text).toMatch(/holding off/);
   });
 
+  it('a brief stale moment holds off quietly; a long one is told once, then at most every 5 minutes', async () => {
+    await engine.onUserState(ACCOUNT, [['xyz', xyzState(0.24, 91.5, 1)]], t);
+    await engine.onMarks(new Map([['xyz:CL', 91.5]]), t - 15_000); // 5 s past the 10 s limit: a reconnect, say
+    const before = notifier.sent.length;
+    await engine.onUserState(ACCOUNT, [['xyz', xyzState(0.24, 91.5, 1)]], t);
+    expect(sent).toEqual([]);
+    expect(store.audit.raw(ACCOUNT).some((e) => e.kind === 'degraded')).toBe(false);
+    expect(notifier.sent.length).toBe(before);
+    // Still no price 30 s later (20 s past the limit): told once.
+    for (const dt of [15_000, 1_000, 1_000, 1_000]) {
+      t += dt;
+      await engine.onUserState(ACCOUNT, [['xyz', xyzState(0.24, 91.5, 1)]], t);
+    }
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.kind === 'degraded')).toHaveLength(1);
+    expect(notifier.sent.length).toBe(before + 1);
+  });
+
   it('EU (guard off): alerts only — no orders, no backstops', async () => {
     setup({ region: 'guardOff' });
     await feed(69);
