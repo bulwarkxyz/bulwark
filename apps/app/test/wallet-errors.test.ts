@@ -47,6 +47,14 @@ describe('explainWalletError', () => {
     expect(x.next).toBeUndefined();
     expect(walletErrorText(e)).toBe(x.text);
   });
+  it('a refused sign-in site and an unreachable API say what they are, not a generic failure', () => {
+    const wd = explainWalletError(new ApiError(401, { code: 'wrong_domain', error: 'This site is not allowed to sign in to Bulwark.' }));
+    expect(wd.text).toBe('This site isn’t allowed to sign in to Bulwark.');
+    expect(wd.next).toMatch(/bulwark\.0xo\.in/);
+    const un = explainWalletError(new ApiError(502, { code: 'api_unreachable' }));
+    expect(un.text).toBe('This version of the app can’t reach Bulwark’s server.');
+    expect(un.text).not.toMatch(/could not answer/);
+  });
   it('maps API sign-in failures, region refusals, rate limits and outages', () => {
     expect(explainWalletError(new ApiError(401, { error: 'bad signature' })).next).toMatch(/Sign in again/);
     expect(explainWalletError(new ApiError(403, { error: 'not available' })).next).toMatch(/not available where you live/);
