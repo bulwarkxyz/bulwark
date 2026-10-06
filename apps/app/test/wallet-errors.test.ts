@@ -40,11 +40,20 @@ describe('explainWalletError', () => {
       if (!declined && !/^Something/.test(x.text)) expect(x.next, 'each failure says what to do next').toBeTruthy();
     });
 
-  it('shows the API’s contract-wallet answer as it is, with the next step', () => {
-    const e = new ApiError(400, { code: 'contract_wallet', error: 'Smart-contract wallets are not supported: Hyperliquid accounts are EOAs.' });
+  it('shows the API’s contract-wallet answer as it is, and nothing after it', () => {
+    const e = new ApiError(400, { code: 'contract_wallet', error: 'Smart-contract wallets aren’t supported. Connect the wallet that holds your Hyperliquid account.' });
     const x = explainWalletError(e);
-    expect(x.text).toBe('Smart-contract wallets are not supported: Hyperliquid accounts are EOAs.');
-    expect(x.next).toMatch(/ordinary wallet/);
+    expect(x.text).toBe('Smart-contract wallets aren’t supported. Connect the wallet that holds your Hyperliquid account.');
+    expect(x.next).toBeUndefined();
+    expect(walletErrorText(e)).toBe(x.text);
+  });
+  it('a refused sign-in site and an unreachable API say what they are, not a generic failure', () => {
+    const wd = explainWalletError(new ApiError(401, { code: 'wrong_domain', error: 'This site is not allowed to sign in to Bulwark.' }));
+    expect(wd.text).toBe('This site isn’t allowed to sign in to Bulwark.');
+    expect(wd.next).toMatch(/bulwark\.0xo\.in/);
+    const un = explainWalletError(new ApiError(502, { code: 'api_unreachable' }));
+    expect(un.text).toBe('This version of the app can’t reach Bulwark’s server.');
+    expect(un.text).not.toMatch(/could not answer/);
   });
   it('maps API sign-in failures, region refusals, rate limits and outages', () => {
     expect(explainWalletError(new ApiError(401, { error: 'bad signature' })).next).toMatch(/Sign in again/);

@@ -19,7 +19,8 @@ describe('nextChange', () => {
       const t = start + i * 2.3 * 86_400_000 + i * 7_919_000 + 13_000;
       for (const k of KINDS) expect(nextChange(k, t), `${k} at ${new Date(t).toISOString()}`).toBe(slowNextChange(k, t));
     }
-  });
+    // The reference scan is slow on purpose (minute by minute); give it room on a busy machine.
+  }, 30_000);
 
   it('is exact on the boundary itself', () => {
     // Monday 9 March 2026, 09:00 KST = 00:00 UTC: KRX opens.

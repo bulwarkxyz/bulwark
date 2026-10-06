@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fmtBuffer, fmtPct, fmtPx, fmtSignedUsd, upDown } from '@/components/app/format';
 import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
@@ -15,6 +15,7 @@ import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 import { walletErrorText } from '@/lib/wallet-errors';
+import { QueryParam, revealById } from '@/components/app/query-param';
 
 export default function PositionsPage() {
   const review = useReview();
@@ -23,6 +24,9 @@ export default function PositionsPage() {
   const view = useAccountView(address);
   const me = useMe();
   const g = useGuardView();
+  // ?coin=xyz:GOLD (a notification's link): mark that position and bring it into view.
+  const [mark, setMark] = useState<string | null>(null);
+  const onCoin = useCallback((c: string | null) => setMark(c), []);
   const now = useNow();
   const orders = useGuardOrders(address);
   const times = useTimes();
@@ -74,8 +78,13 @@ export default function PositionsPage() {
     }
   }
 
+  const hasMark = Boolean(mark && view.data?.risk.pools.some((p) => p.positions.some((x) => x.position.coin === mark)));
+  useEffect(() => {
+    if (hasMark && mark) revealById(window.matchMedia('(max-width: 760px)').matches ? `posc-${mark}` : `pos-${mark}`);
+  }, [hasMark, mark]);
   return (
     <div className="pg">
+      <QueryParam name="coin" onChange={onCoin} />
       <div className="ptitle">
         <h1 className="h1">Positions</h1>
         <span className="small t2">{!connected ? 'Not connected' : loading ? 'Loading…' : `${nPos} position${nPos === 1 ? '' : 's'} · ${risk?.pools.length ?? 0} margin pool${risk?.pools.length === 1 ? '' : 's'} · ${risk?.mode === 'unified' ? 'unified account' : risk?.mode === 'standard' ? 'standard account' : (risk?.mode ?? '')}`}</span>
@@ -242,7 +251,7 @@ export default function PositionsPage() {
 
           <div className="mobile-only col" style={{ gap: 10 }}>
             <b>By margin pool, riskiest first</b>
-            <PositionCards g={g} risk={risk} now={now} />
+            <PositionCards g={g} risk={risk} now={now} mark={mark} />
           </div>
           <section className="panel hide-sm" aria-label="Positions by margin pool">
             <div className="ph">
@@ -259,7 +268,7 @@ export default function PositionsPage() {
                 </span>
               </span>
             </div>
-            <PositionsTable g={g} risk={risk} now={now} />
+            <PositionsTable g={g} risk={risk} now={now} mark={mark} />
             {showClosed ? (
               closedToday.length ? (
                 <div className="tblw" style={{ borderTop: '1px solid var(--line)' }}>

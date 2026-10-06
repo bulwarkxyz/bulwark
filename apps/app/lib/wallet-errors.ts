@@ -40,7 +40,12 @@ const PHONE = 'Open the wallet app on your phone and try again.';
 export function explainWalletError(e: unknown): Explained {
   // Bulwark's API answers first: they carry their own words.
   if (e instanceof ApiError) {
-    if (e.body.code === 'contract_wallet') return { text: e.message, next: 'Connect the ordinary wallet (an address with no contract code) that holds your Hyperliquid account.' };
+    // The API's text already says what to do: show it alone.
+    if (e.body.code === 'contract_wallet') return { text: e.message };
+    // A site the API doesn't accept sign-ins from (each nonce is bound to one site).
+    if (e.body.code === 'wrong_domain') return { text: 'This site isn’t allowed to sign in to Bulwark.', next: 'Sign in at bulwark.0xo.in.' };
+    // The app's own server route couldn't reach the API: a problem with this version of the app, not your wallet.
+    if (e.body.code === 'api_unreachable') return { text: 'This version of the app can’t reach Bulwark’s server.', next: 'Nothing was signed or changed. Try again shortly, or use bulwark.0xo.in.' };
     if (e.status === 401) return { text: 'Bulwark didn’t accept your sign-in or that signature.', next: 'Sign in again. If it repeats, check your wallet shows the same address as Bulwark.' };
     if (e.status === 403) return { text: e.message, next: 'Bulwark is not available where you live or for your citizenship.' };
     if (e.status === 429) return { text: 'Too many requests in a short time.', next: 'Wait a minute and try again.' };

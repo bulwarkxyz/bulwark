@@ -5,7 +5,7 @@ import type { Hex } from '@bulwarkxyz/hyperliquid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAccount, useSignTypedData } from 'wagmi';
 import { DisconnectButton } from '@/components/app/connect';
 import { Icon } from '@/components/app/icons';
@@ -17,7 +17,7 @@ import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { approveBuilderFor, forgetTradingKey, sendUserSigned, tradingKey, type SignTypedData } from '@/lib/signing';
 import { useTimes } from '@/lib/time';
-import { useAlertActions, useAlertFeed, useAlertSettings, useUnseenAlerts } from '@/lib/alerts';
+import { useAlertActions, useAlertSettings } from '@/lib/alerts';
 import { Toggle } from '@/components/app/toggle';
 import { AccountModePanel } from '@/components/app/account-mode';
 import { useWalletChainId } from '@/lib/wallet';
@@ -98,20 +98,12 @@ function AlertsPanel() {
   const review = useReview();
   const settings = useAlertSettings();
   const actions = useAlertActions();
-  const { markSeen } = useUnseenAlerts();
   const inApp = settings.data?.inApp ?? true;
   const linked = settings.data?.telegram.linked ?? Boolean(me.data?.user?.telegramChatId);
-  const feed = useAlertFeed(Boolean(me.data?.user) && inApp);
-  const times = useTimes();
   const [code, setCode] = useState<{ code: string; bot?: string; link?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmUnlink, setConfirmUnlink] = useState(false);
-  // Opening Settings counts as seeing the alerts listed here.
-  useEffect(() => {
-    if (feed.data) markSeen();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feed.data]);
   const run = async (f: () => Promise<unknown>) => {
     setBusy(true);
     setErr(null);
@@ -181,34 +173,9 @@ function AlertsPanel() {
         <span className="tiny t3" style={{ marginTop: 10 }}>
           Alerts fire on your alert rules, when the guard acts, and when it holds off on stale data. Telegram gets every one while linked; the switch only decides what the app shows.
         </span>
-        <div style={{ marginTop: 14 }}>
-          <b className="small">Recent alerts</b>
-          {review.on ? <span className="tag" style={{ marginLeft: 8 }}>example</span> : null}
-          {!shown ? (
-            <p className="small t2" style={{ margin: '6px 0 0' }}>Finish setup to see your alerts.</p>
-          ) : !inApp ? (
-            <p className="small t2" style={{ margin: '6px 0 0' }}>In-app alerts are off.</p>
-          ) : feed.isLoading ? (
-            <span className="sk" style={{ width: '70%', marginTop: 8 }} />
-          ) : feed.error ? (
-            <p className="small ct" style={{ margin: '6px 0 0' }}>Can’t load alerts: {(feed.error as Error).message}</p>
-          ) : feed.data?.length ? (
-            <ul className="alist-feed">
-              {feed.data.map((e) => (
-                <li key={e.seq}>
-                  <span className="row nw" style={{ gap: 8 }}>
-                    <span className={`chip chip-sm ${e.kind === 'degraded' ? 'chip-risk' : 'chip-acting'}`}>{e.kind === 'degraded' ? 'Held off' : 'Alert'}</span>
-                    <span className="tiny t3 num">{times.fmt(e.at, 'short')}</span>
-                  </span>
-                  <span className="small">{e.what}</span>
-                  {e.why ? <span className="tiny t2">{e.why}</span> : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small t2" style={{ margin: '6px 0 0' }}>No alerts yet.</p>
-          )}
-        </div>
+        <Link className="small" href="/app/notifications" style={{ marginTop: 12, textDecoration: 'underline' }}>
+          Your notifications
+        </Link>
       </div>
     </section>
   );
@@ -376,6 +343,7 @@ export default function SettingsPage() {
       <nav className="panel mobile-only" aria-label="More screens">
         <ul className="morelist">
           {[
+            { href: '/app/notifications', label: 'Notifications', sub: 'alerts from the guard' },
             { href: '/app/account', label: 'Account', sub: 'pools, keys, fees' },
             { href: '/app/audit', label: 'Audit log', sub: 'every action, verified in your browser' },
             { href: '/app/simulator', label: 'Simulator', sub: 'test your rules' },
@@ -390,13 +358,37 @@ export default function SettingsPage() {
         </ul>
       </nav>
 
-      <div className="grid2 even">
-        {connected ? <KeysPanel /> : null}
-        {connected ? <AlertsPanel /> : null}
-        {connected && BUILDER_ON ? <FeePanel /> : null}
-        {connected ? <AccountModePanel /> : null}
-        <DisplayPanel />
-      </div>
+      {/* Two columns that each flow on their own, so a short section never leaves a gap beside a tall
+          one. Phones get one column in order of importance: keys and fee, alerts, account mode, display. */}
+      {connected ? (
+        <div className="cols2">
+          <div className="stack">
+            <div style={{ order: 1 }}>
+              <KeysPanel />
+            </div>
+            {BUILDER_ON ? (
+              <div style={{ order: 2 }}>
+                <FeePanel />
+              </div>
+            ) : null}
+            <div style={{ order: 5 }}>
+              <DisplayPanel />
+            </div>
+          </div>
+          <div className="stack">
+            <div style={{ order: 3 }}>
+              <AlertsPanel />
+            </div>
+            <div style={{ order: 4 }}>
+              <AccountModePanel />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ maxWidth: 720 }}>
+          <DisplayPanel />
+        </div>
+      )}
     </div>
   );
 }

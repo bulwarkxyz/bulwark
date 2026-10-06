@@ -120,6 +120,34 @@ export const Icon = {
       <circle cx="19" cy="12" r="1.5" />
     </svg>
   ),
+  copy: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+    </svg>
+  ),
+  external: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+  ),
+  swap: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M7 4L4 7l3 3M4 7h13M17 20l3-3-3-3M20 17H7" />
+    </svg>
+  ),
+  logout: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10" />
+    </svg>
+  ),
+  eye: (s = 14) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
   info: (s = 18) => (
     <svg width={s} height={s} viewBox="0 0 24 24" {...base}>
       <circle cx="12" cy="12" r="9" />

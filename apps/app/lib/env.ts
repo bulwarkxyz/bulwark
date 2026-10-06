@@ -12,3 +12,6 @@ export const BUILDER_ON = builderEnabled(NETWORK, {
  * modal offers browser wallets only (EIP-6963 discovery). Public by design: it identifies the app.
  */
 export const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
+
+/** Hyperliquid's explorer page for an address, on this app's network. */
+export const explorerAddress = (address: string) => `${NETWORK === 'mainnet' ? 'https://app.hyperliquid.xyz' : 'https://app.hyperliquid-testnet.xyz'}/explorer/address/${address}`;
