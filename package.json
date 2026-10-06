@@ -17,5 +17,10 @@
   },
   "devDependencies": {
     "playwright": "^1.63.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "cuer>qr": "0.5.5"
+    }
   }
 }
