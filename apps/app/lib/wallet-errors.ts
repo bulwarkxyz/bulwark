@@ -81,6 +81,9 @@ export function explainWalletError(e: unknown): Explained {
   if (has(/User or API Wallet .* does not exist/i))
     return { text: 'Hyperliquid didn’t recognise that signature as your account.', next: 'Check your wallet is on the address you deposited with, then sign again.' };
   if (has(/Must deposit before performing actions/i)) return { text: 'This address has no deposit on Hyperliquid yet.', next: 'Deposit USDC on Hyperliquid, then come back.' };
+  // Hyperliquid's per-connection limit (HttpError "HTTP 429: …"): nothing was accepted, so nothing was sent.
+  if (codes.includes(429) || has(/\bHTTP 429\b|too many requests|rate.?limit/i))
+    return { text: 'Hyperliquid is limiting requests from your connection right now.', next: 'Nothing was sent. Try again in a minute.' };
   if (has(/Failed to fetch|NetworkError|network request failed|Load failed/i)) return { text: 'Couldn’t reach the network.', next: 'Check your connection and try again.' };
   const first = all.find((x) => x.shortMessage || x.message);
   return { text: (first?.shortMessage ?? first?.message ?? 'Something went wrong with your wallet.').split('\n')[0]! };

@@ -30,6 +30,7 @@ describe('explainWalletError', () => {
     ['Hyperliquid: wrong signer', new Error('User or API Wallet 0xabc does not exist.'), /didn’t recognise that signature/],
     ['Hyperliquid: no deposit', new Error('Must deposit before performing actions. User: 0xabc'), /no deposit on Hyperliquid/],
     ['offline', new TypeError('Failed to fetch'), /Couldn’t reach the network/],
+    ['Hyperliquid rate limit (HttpError)', Object.assign(new Error('HTTP 429: null'), { status: 429 }), /limiting requests from your connection/],
     ['contract-wallet signature (local)', new Error('This looks like a smart-contract wallet’s signature. Hyperliquid accounts need an ordinary wallet.'), /Smart-contract wallets/],
   ];
   for (const [name, err, re, declined] of cases)

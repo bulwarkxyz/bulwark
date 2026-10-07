@@ -72,6 +72,7 @@ describe('TP/SL: Hyperliquid’s oracle band', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.problem).toMatch(/too far from the price for now/);
+    expect(r.problem).toMatch(/accepts wider ones when they're placed; whether it fills beyond about 6% .* isn't tested yet/);
     const band = allowedTriggers(false, 4151, 1);
     expect(r.problem).toContain(String(nearestValidPrice(band.lo, 4)));
     expect(r.problem).toContain(String(nearestValidPrice(band.hi, 4)));

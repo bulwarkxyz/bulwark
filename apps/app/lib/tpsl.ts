@@ -11,8 +11,9 @@ import { roundPrice, toWire } from '@bulwarkxyz/guard-core';
 import { orderAction, orderWire, type OrderAction, type OrderWire } from '@bulwarkxyz/hyperliquid';
 
 /**
- * Hyperliquid refuses an order whose price is too far from its oracle: a buy limit 8% above was refused
- * on testnet; 4% and 1% were accepted. Until a wider band is proven, every limit stays inside this.
+ * How far from Hyperliquid's oracle a trigger's worst fill may be. A plain buy 8% above the oracle was
+ * refused on testnet; stop triggers with limits 6%, 8% and 10% below were accepted at placement (7 Oct).
+ * Whether a fill that far out goes through when one triggers isn't tested, so the app stays inside this.
  */
 export const ORACLE_BAND = 0.06;
 
@@ -94,10 +95,10 @@ export function buildPositionTpsl(i: PositionTpslInput): TpslResult {
     if (typed === null) continue;
     const triggerPx = nearestValidPrice(typed, i.szDecimals);
     const limitPx = roundPrice(triggerPx * (closeIsBuy ? 1 + slip / 100 : 1 - slip / 100), i.szDecimals, closeIsBuy ? 'up' : 'down');
-    // Inside the band, or Hyperliquid refuses it. Moving the limit instead would make a stop that triggers
-    // and then can't fill, so the user picks a nearer price.
+    // Inside the tested band. Moving the limit instead would make a stop that triggers and then can't fill,
+    // so the user picks a nearer price.
     if (limitPx < i.oracle * (1 - ORACLE_BAND) || limitPx > i.oracle * (1 + ORACLE_BAND))
-      return { ok: false, problem: `Your ${label[kind]} is too far from the price for now. With ${slip}% slippage, Hyperliquid accepts trigger prices from ${nearestValidPrice(band.lo, i.szDecimals)} to ${nearestValidPrice(band.hi, i.szDecimals)}: it refuses order prices more than about ${ORACLE_BAND * 100}% from its oracle, and wider ones aren't tested yet.` };
+      return { ok: false, problem: `Your ${label[kind]} is too far from the price for now. With ${slip}% slippage, Hyperliquid accepts trigger prices from ${nearestValidPrice(band.lo, i.szDecimals)} to ${nearestValidPrice(band.hi, i.szDecimals)}. Hyperliquid accepts wider ones when they're placed; whether it fills beyond about ${ORACLE_BAND * 100}% from its oracle when one triggers isn't tested yet.` };
     legs.push({
       kind,
       typed,
