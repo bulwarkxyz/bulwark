@@ -147,3 +147,41 @@ export function planBackstops(
 }
 
 const dexOf = (coin: string): string => (coin.includes(':') ? (coin.split(':')[0] as string) : '');
+
+/** Why a position has no backstop resting below (above, for a short) its price. */
+export type NoBackstop =
+  /** The pool is at or past the lowest line: the live guard acts instead. */
+  | { reason: 'line_crossed'; line: number; buffer: number }
+  /**
+   * Margin large next to the position: a fall lowers maintenance faster than equity, so the buffer rises as the
+   * price falls and never reaches the line. Happens to a long once the pool's buffer is at or above
+   * `ceiling` (its notional over its maintenance, about 1 / its maintenance rate: 50× for a 2% rate).
+   */
+  | { reason: 'margin_too_large'; line: number; buffer: number; ceiling: number };
+
+/**
+ * For each position the planner would leave without a backstop, why, so the app can say it in words. Positions
+ * that get one are absent. Mirrors planBackstops' pricing (single, or together for pools with several positions).
+ */
+export function whyNoBackstop(policy: Policy, snapshot: AccountSnapshot, marks: Marks | undefined, pricing: BackstopPricing = 'single'): Record<string, NoBackstop> {
+  const out: Record<string, NoBackstop> = {};
+  const risk = assessRisk(snapshot, marks);
+  const lines = policy.rules.flatMap((r) => (r.when.kind === 'buffer' ? [r.when.below] : []));
+  if (!risk.supported || !lines.length) return out;
+  const line = Math.min(...lines);
+  for (const pool of risk.pools) {
+    const together = pricing === 'together' && pool.positions.length > 1 ? togetherMove(snapshot, marks, pool.pool.id, line) : null;
+    for (const row of pool.positions) {
+      const p = row.position;
+      if (!(pool.buffer > line)) {
+        out[p.coin] = { reason: 'line_crossed', line, buffer: pool.buffer };
+        continue;
+      }
+      const single = priceAtBuffer(pool, row, line);
+      const losing = (px: number | null) => px !== null && (p.size > 0 ? px < row.mark : px > row.mark);
+      if (losing(single) || together !== null) continue;
+      out[p.coin] = { reason: 'margin_too_large', line, buffer: pool.buffer, ceiling: row.maintenance > 0 ? row.notional / row.maintenance : Number.POSITIVE_INFINITY };
+    }
+  }
+  return out;
+}
