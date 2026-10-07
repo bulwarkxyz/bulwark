@@ -14,7 +14,7 @@ import { OrderBook } from '@/components/app/order-book';
 import { GuardCell } from '@/components/app/positions-table';
 import { Ticket } from '@/components/app/ticket';
 import { NETWORK } from '@/lib/env';
-import { describeAction, orderLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
+import { NO_BACKSTOP_LINE, describeAction, marginTooLarge, orderLabel, useGuardOrders, useGuardView, useNow } from '@/lib/guard';
 import { useAccountView, useCandleHistory, useMarketActivity, useTrades, useXyzMarkets, type MarketCtx } from '@/lib/hl';
 import { MARKETS, hasData, homeOpen, marketByTicker, rankMarkets, sessionLabel, type Market } from '@/lib/markets';
 import { useReview, useViewer } from '@/lib/review';
@@ -250,7 +250,7 @@ export function TradeScreen({ ticker }: { ticker: string }) {
           <span className="small t3">Loading candles from Hyperliquid…</span>
         </div>
       ) : candles.data?.length ? (
-        <CandleChart key={`${m.coin}-${tf.id}`} candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} onNeedOlder={candles.loadOlder} loadingOlder={candles.loadingOlder} noOlder={candles.noOlder} />
+        <CandleChart key={`${m.coin}-${tf.id}`} candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} note={marginTooLarge(g, m.coin) ? NO_BACKSTOP_LINE : undefined} onNeedOlder={candles.loadOlder} loadingOlder={candles.loadingOlder} noOlder={candles.noOlder} />
       ) : (
         <div className="empty">
           <div className="ico">{Icon.markets(18)}</div>

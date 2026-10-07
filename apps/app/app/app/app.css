@@ -464,3 +464,6 @@ button.wallet[aria-expanded="true"]{border-color:var(--field-focus)}
 /* TP/SL on a position (components/app/position-tpsl.tsx). */
 .tpsl-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .tpsl-list li{gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--s2)}
+/* A reason the chart has no backstop line (lib/guard.ts NO_BACKSTOP_LINE): neutral, not a warning. */
+.cchart-why{position:absolute;left:8px;top:6px;max-width:calc(100% - 90px);padding:3px 8px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface);color:var(--text-2)}
+.cchart-why + .cchart-note{top:34px}

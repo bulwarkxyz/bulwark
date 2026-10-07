@@ -16,6 +16,7 @@ import { Icon } from './icons';
 import { PositionsTable } from './positions-table';
 import { useTimes } from '@/lib/time';
 import { AccountUnavailable } from '@/components/app/account-unavailable';
+import { NoBackstopNotes } from './guard-ui';
 
 type Tab = 'positions' | 'orders' | 'guard' | 'fills' | 'funding' | 'history';
 
@@ -143,6 +144,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
         ) : (
           <div className="pb small t2">{guardOrders.error ? `Can’t load the guard’s orders: ${guardOrders.error.message}` : g.lines.length ? 'Nothing resting right now.' : 'No rules yet, so the guard has placed nothing.'}</div>
         )}
+        <NoBackstopNotes g={g} restingCoins={new Set(guardOrders.orders.map((o) => o.coin))} />
         <div className="ph sub">
           <b className="small">Recent guard actions</b>
           <span className="tiny t3">{review.on ? 'example entries' : 'from your audit log'} · a retry is its own row</span>

@@ -2,9 +2,10 @@
 
 import type { AccountRisk, PoolRisk, PositionRisk } from '@bulwarkxyz/guard-core';
 import Link from 'next/link';
-import { describeAction, orderLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
+import { NO_BACKSTOP_LINE, describeAction, marginTooLarge, noBackstopText, orderLabel, tickerOf, useGuardOrders, type GuardState, type GuardView } from '@/lib/guard';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { PositionTpslButton } from './position-tpsl';
+import { Tip } from './tip';
 import { useViewer } from '@/lib/review';
 import { closeIntent, ticketIntent } from '@/lib/ticket-intent';
 import { BufferMeter, GuardChip } from './guard-ui';
@@ -60,6 +61,10 @@ export function GuardActsAt({ g, pool, row, align, noResting }: { g: GuardView; 
             const r = g.rules.find((x) => x.when.kind === 'buffer' && x.when.below === line);
             return `Below ${line}×: ${r ? r.then.map(describeAction).join(', then ') : 'acting'}`;
           })()}</span>
+        ) : armed && marginTooLarge(g, row.position.coin) && !resting.length ? (
+          <Tip className="tiny t2" text={noBackstopText(marginTooLarge(g, row.position.coin)!)}>
+            {NO_BACKSTOP_LINE}
+          </Tip>
         ) : armed ? (
           <span className="tiny t3">{g.lines.length ? 'No line in reach' : 'No buffer lines'}</span>
         ) : null}

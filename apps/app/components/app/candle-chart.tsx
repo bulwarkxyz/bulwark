@@ -27,7 +27,7 @@ const PAD_B = 22;
  * oldest loaded candle asks for older ones (onNeedOlder). The price axis always fits the visible candles
  * and every level line, so guard, liquidation and price tags stay right at any zoom.
  */
-export function CandleChart({ candles, lines, stale, onNeedOlder, loadingOlder, noOlder }: { candles: readonly Candle[]; lines: readonly ChartLine[]; stale?: string; onNeedOlder?: () => void; loadingOlder?: boolean; noOlder?: boolean }) {
+export function CandleChart({ candles, lines, stale, note, onNeedOlder, loadingOlder, noOlder }: { candles: readonly Candle[]; lines: readonly ChartLine[]; stale?: string; note?: string; onNeedOlder?: () => void; loadingOlder?: boolean; noOlder?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const clipId = `cc${useId().replace(/:/g, '')}`;
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -266,6 +266,7 @@ export function CandleChart({ candles, lines, stale, onNeedOlder, loadingOlder, 
           Reset view
         </button>
       ) : null}
+      {note ? <span className="tiny cchart-why">{note}</span> : null}
       {loadingOlder ? <span className="tiny t3 cchart-note">Loading older candles…</span> : noOlder && left < 1 ? <span className="tiny t3 cchart-note">No older candles on Hyperliquid</span> : null}
     </div>
   );

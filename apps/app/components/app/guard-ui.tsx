@@ -1,6 +1,6 @@
 'use client';
 
-import { GUARD_CHIP, GUARD_LABEL, meterPos, meterTop, type GuardState } from '@/lib/guard';
+import { GUARD_CHIP, GUARD_LABEL, NO_BACKSTOP_LINE, marginTooLarge, meterPos, meterTop, noBackstopText, tickerOf, type GuardState, type GuardView } from '@/lib/guard';
 import { Icon } from './icons';
 
 const ICON: Partial<Record<GuardState, () => React.ReactNode>> = {
@@ -95,6 +95,30 @@ export function BufferMeter({ buffer, lines, draft = [], state, size = 'full', l
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Positions the guard leaves without a backstop because a fall can't bring the pool to the line (margin
+ * large next to the position), each with the full reason. Nothing for the user to do. Wording from the
+ * guard session (lib/guard.ts).
+ */
+export function NoBackstopNotes({ g, restingCoins }: { g: GuardView; restingCoins: ReadonlySet<string> }) {
+  const rows = Object.keys(g.noBackstop)
+    .map((coin) => ({ coin, nb: marginTooLarge(g, coin) }))
+    .filter((x): x is { coin: string; nb: NonNullable<ReturnType<typeof marginTooLarge>> } => Boolean(x.nb) && !restingCoins.has(x.coin));
+  if (!rows.length) return null;
+  return (
+    <div className="pb col" style={{ gap: 10, borderTop: '1px solid var(--line)' }}>
+      {rows.map(({ coin, nb }) => (
+        <div key={coin} className="col" style={{ gap: 3 }}>
+          <span className="small">
+            <b>{tickerOf(coin)}</b> · {NO_BACKSTOP_LINE}
+          </span>
+          <span className="tiny t2">{noBackstopText(nb)}</span>
+        </div>
+      ))}
     </div>
   );
 }

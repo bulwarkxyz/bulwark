@@ -1,10 +1,11 @@
 'use client';
 
-import { bufferLines, guardActsAt, nextTimeIn, priceAtLine, type WindowName, type Action, type GuardLevel, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
+import { bufferLines, guardActsAt, nextTimeIn, priceAtLine, whyNoBackstop, type WindowName, type Action, type GuardLevel, type NoBackstop, type PoolRisk, type PositionRisk, type Rule } from '@bulwarkxyz/guard-core';
 import type { GuardOrder } from '@bulwarkxyz/store';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, useSignedIn } from './api';
+import { NETWORK } from './env';
 import { useAccountView, useXyzMarkets } from './hl';
 import { useMe } from './me';
 import { REVIEW_WEEKEND, useReview, useViewer } from './review';
@@ -196,6 +197,8 @@ export interface GuardView {
   rules: Rule[];
   exampleRules: boolean;
   worst: PoolRisk | null;
+  /** Positions the guard leaves without a backstop, and why (guard-core whyNoBackstop), by coin. */
+  noBackstop: Record<string, NoBackstop>;
   /** Hyperliquid didn't answer the account read and there's no earlier answer: unknown, not empty. */
   accountUnavailable: boolean;
   next: NextAction | null;
@@ -259,6 +262,10 @@ export function useGuardView(): GuardView {
 
   const risk = view.data?.risk;
   const worst = risk?.worst ?? null;
+  // The same planner the worker runs: 'together' pricing on testnet (BACKSTOP_PRICING), 'single' on mainnet.
+  const policy = me.data?.policy?.policy;
+  const snapshot = view.data?.snapshot;
+  const noBackstop = useMemo(() => (policy && snapshot ? whyNoBackstop(policy, snapshot, undefined, NETWORK === 'testnet' ? 'together' : 'single') : {}), [policy, snapshot]);
   const ageMs = view.dataUpdatedAt ? now - view.dataUpdatedAt : null;
 
   let next: NextAction | null = null;
@@ -299,7 +306,7 @@ export function useGuardView(): GuardView {
   const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
   if (reported && !clientOnly) state = FROM_API[reported.state];
 
-  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, noKey: !me.data?.agent, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, accountUnavailable: Boolean(address) && !view.data && view.isError, next, ageMs, levelFor };
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, noKey: !me.data?.agent, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, noBackstop, accountUnavailable: Boolean(address) && !view.data && view.isError, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */
@@ -315,3 +322,18 @@ export function nextWindowOpen(name: WindowName, now: number): number | null {
   const t = nextTimeIn(name, now);
   return t === now ? null : t;
 }
+
+// ------------------------------------------------------------------ no backstop needed (wording: the guard session)
+
+/** Whole numbers above 10, otherwise one decimal. */
+const roundX = (x: number) => (!Number.isFinite(x) ? '∞' : x > 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1));
+/** One line, for the positions table and the chart. */
+export const NO_BACKSTOP_LINE = 'No backstop needed: a fall can’t bring this pool to your line';
+/** The full reason, for the guard panels. */
+export const noBackstopText = (nb: Extract<NoBackstop, { reason: 'margin_too_large' }>) =>
+  `Your margin is large next to this position (buffer ${roundX(nb.buffer)}×, above ${roundX(nb.ceiling)}×), so a falling price raises the buffer instead of lowering it, and a stop below the price would never be reached. The guard still watches the position and places a backstop by itself if the buffer drops below ${roundX(nb.ceiling)}×, for example after you add to the position or move margin out.`;
+/** The margin-too-large case only: a crossed line keeps its own wording (the guard is acting). */
+export const marginTooLarge = (g: Pick<GuardView, 'noBackstop'>, coin: string) => {
+  const nb = g.noBackstop[coin];
+  return nb?.reason === 'margin_too_large' ? nb : null;
+};

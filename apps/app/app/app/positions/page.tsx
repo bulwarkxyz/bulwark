@@ -17,6 +17,7 @@ import { useTimes } from '@/lib/time';
 import { walletErrorText } from '@/lib/wallet-errors';
 import { QueryParam, revealById } from '@/components/app/query-param';
 import { AccountUnavailable } from '@/components/app/account-unavailable';
+import { NoBackstopNotes } from '@/components/app/guard-ui';
 
 export default function PositionsPage() {
   const review = useReview();
@@ -364,6 +365,7 @@ export default function PositionsPage() {
               ) : (
                 <div className="pb small t2">{orders.error ? `Can’t load the guard’s orders: ${orders.error.message}` : me.data?.policy ? 'None resting right now.' : 'No rules yet, so no backstops.'}</div>
               )}
+              <NoBackstopNotes g={g} restingCoins={new Set(orders.orders.map((o) => o.coin))} />
               <div className="pb tiny t3" style={{ borderTop: '1px solid var(--line)' }}>
                 They rest on Hyperliquid, so they fill even if Bulwark’s engine is offline.
               </div>
