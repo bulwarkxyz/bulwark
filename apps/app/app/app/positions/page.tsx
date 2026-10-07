@@ -16,6 +16,7 @@ import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 import { walletErrorText } from '@/lib/wallet-errors';
 import { QueryParam, revealById } from '@/components/app/query-param';
+import { AccountUnavailable } from '@/components/app/account-unavailable';
 
 export default function PositionsPage() {
   const review = useReview();
@@ -38,6 +39,8 @@ export default function PositionsPage() {
 
   const risk = view.data?.risk;
   const loading = review.state === 'loading' || (connected && !risk && !view.isError);
+  // The read failed and there is no earlier answer: the account is unknown, not empty.
+  const unavailable = connected && !risk && view.isError;
   const paused = g.state === 'paused';
   const nPos = risk?.pools.reduce((s, p) => s + p.positions.length, 0) ?? 0;
   const closedMarkets = (risk?.pools ?? []).flatMap((p) => p.positions).filter((r) => {
@@ -87,7 +90,7 @@ export default function PositionsPage() {
       <QueryParam name="coin" onChange={onCoin} />
       <div className="ptitle">
         <h1 className="h1">Positions</h1>
-        <span className="small t2">{!connected ? 'Not connected' : loading ? 'Loading…' : `${nPos} position${nPos === 1 ? '' : 's'} · ${risk?.pools.length ?? 0} margin pool${risk?.pools.length === 1 ? '' : 's'} · ${risk?.mode === 'unified' ? 'unified account' : risk?.mode === 'standard' ? 'standard account' : (risk?.mode ?? '')}`}</span>
+        <span className="small t2">{!connected ? 'Not connected' : loading ? 'Loading…' : unavailable ? 'Account data unavailable' : `${nPos} position${nPos === 1 ? '' : 's'} · ${risk?.pools.length ?? 0} margin pool${risk?.pools.length === 1 ? '' : 's'} · ${risk?.mode === 'unified' ? 'unified account' : risk?.mode === 'standard' ? 'standard account' : (risk?.mode ?? '')}`}</span>
         <span className="sp" />
         {g.exampleRules ? <span className="tag">Example rules</span> : null}
       </div>
@@ -137,6 +140,10 @@ export default function PositionsPage() {
             <span className="sk" style={{ width: '94%' }} />
           </div>
         </>
+      ) : unavailable ? (
+        <div className="panel">
+          <AccountUnavailable view={view} />
+        </div>
       ) : !nPos ? (
         <div className="panel">
           <div className="empty" style={{ padding: '80px 16px' }}>

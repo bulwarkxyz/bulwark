@@ -196,6 +196,8 @@ export interface GuardView {
   rules: Rule[];
   exampleRules: boolean;
   worst: PoolRisk | null;
+  /** Hyperliquid didn't answer the account read and there's no earlier answer: unknown, not empty. */
+  accountUnavailable: boolean;
   next: NextAction | null;
   /** Data age of the account state, ms. */
   ageMs: number | null;
@@ -297,7 +299,7 @@ export function useGuardView(): GuardView {
   const clientOnly = state === 'disconnected' || state === 'loading' || state === 'unsupported';
   if (reported && !clientOnly) state = FROM_API[reported.state];
 
-  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, noKey: !me.data?.agent, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, next, ageMs, levelFor };
+  return { state, source: reported && !clientOnly ? 'guard' : 'fallback', reason: reported?.state === 'paused' ? (reported.reason ?? null) : null, reasonText: reported?.state === 'paused' && reported.reason ? pauseText(reported.reason, me.data?.agent, now) : null, noKey: !me.data?.agent, lastEvaluatedAt: reported?.lastEvaluatedAt ?? null, statusUpdatedAt: reported?.updatedAt ?? null, crossed, lines, rules, exampleRules: me.data?.policy?.hash === 'example', worst, accountUnavailable: Boolean(address) && !view.data && view.isError, next, ageMs, levelFor };
 }
 
 /** Position on the log meter (liquidation at 0%, `top` at 100%). */

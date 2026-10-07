@@ -14,6 +14,7 @@ import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { loadDraft } from '@/lib/draft-store';
 import { draftChanges, draftPolicy } from '@/lib/rule-builder';
+import { AccountUnavailable } from '@/components/app/account-unavailable';
 
 /** Path resolution: the guard looks once per step. */
 const STEPS = 120;
@@ -283,6 +284,10 @@ export default function SimulatorPage() {
               Write rules
             </Link>
           </div>
+        </div>
+      ) : !view.data && view.isError ? (
+        <div className="panel">
+          <AccountUnavailable view={view} />
         </div>
       ) : !positions.length ? (
         <div className="panel">

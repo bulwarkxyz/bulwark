@@ -9,12 +9,13 @@ import { useSignedIn } from '@/lib/api';
 import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { NETWORK } from '@/lib/env';
 import { TOGETHER_NOTE, orderLabel, tickerOf, useGuardOrders, type GuardView } from '@/lib/guard';
-import { info, useFills, useOpenOrders } from '@/lib/hl';
+import { info, useAccountView, useFills, useOpenOrders } from '@/lib/hl';
 import { useReview } from '@/lib/review';
 import { fmtPx, fmtSignedUsd, fmtUsd, upDown } from './format';
 import { Icon } from './icons';
 import { PositionsTable } from './positions-table';
 import { useTimes } from '@/lib/time';
+import { AccountUnavailable } from '@/components/app/account-unavailable';
 
 type Tab = 'positions' | 'orders' | 'guard' | 'fills' | 'funding' | 'history';
 
@@ -46,6 +47,8 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
   const ts = (t: number) => times.fmt(t, 'short');
   const signedIn = useSignedIn() || review.on;
   const orders = useOpenOrders(address);
+  // Shared with the trade screen (same query): only read here to tell "can't load" from "no positions".
+  const view = useAccountView(address);
   const fills = useFills(address);
   // Only the open tab's history is fetched.
   const funding = useFunding(tab === 'funding' ? address : undefined);
@@ -83,7 +86,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
       </div>
     );
   } else if (tab === 'positions') {
-    body = !risk ? null : nPos ? <PositionsTable g={g} risk={risk} now={now} highlight={coin} compact /> : <Empty>No open positions.</Empty>;
+    body = !risk ? (view.isError ? <AccountUnavailable view={view} compact /> : null) : nPos ? <PositionsTable g={g} risk={risk} now={now} highlight={coin} compact /> : <Empty>No open positions.</Empty>;
   } else if (tab === 'orders') {
     body = orders.data?.length ? (
       <div className="tblw">

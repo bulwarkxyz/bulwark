@@ -24,7 +24,7 @@ function ruleStatus(r: Rule, g: GuardView): { text: string; cls: string } {
     const line = r.when.below;
     const below = (g.worst && g.worst.buffer < line) || false;
     if (below) return { text: `Crossed now: the lowest pool is at ${fmtBuffer(g.worst!.buffer)}`, cls: g.state === 'risk' ? 'ct' : 'wt' };
-    return { text: g.worst ? `Idle · lowest buffer ${fmtBuffer(g.worst.buffer)}` : 'Idle · no positions', cls: 't3' };
+    return { text: g.worst ? `Idle · lowest buffer ${fmtBuffer(g.worst.buffer)}` : g.accountUnavailable ? 'Waiting for your account data from Hyperliquid' : 'Idle · no positions', cls: 't3' };
   }
   return { text: r.window ? 'Watching during its window' : 'Watching', cls: 't3' };
 }

@@ -11,6 +11,8 @@ import { stream } from './ws';
 
 export const info = new InfoClient(NETWORK);
 const REFRESH_MS = 5_000;
+/** Retry waits: 0.8 s, 1.6 s, 3.2 s. */
+const BACKOFF = (n: number) => Math.min(8_000, 800 * 2 ** n);
 
 export function useAssets() {
   return useQuery({
@@ -21,6 +23,8 @@ export function useAssets() {
       return { assets: buildAssetIndex(perpDexs, metas) as AssetIndex, collateral: dexCollateral(perpDexs, metas) };
     },
     staleTime: 10 * 60_000,
+    retry: 3,
+    retryDelay: BACKOFF,
   });
 }
 
@@ -108,6 +112,10 @@ export function useAccountView(address: Hex | undefined) {
     },
     staleTime: REFRESH_MS - 1_000,
     refetchInterval: REFRESH_MS,
+    // Hyperliquid answers 429 under load: a few quick retries hide a brief limit; a failed refetch keeps
+    // the last good data on screen.
+    retry: 3,
+    retryDelay: BACKOFF,
   });
 }
 

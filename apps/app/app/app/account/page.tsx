@@ -15,6 +15,7 @@ import { useAccountView, useFills } from '@/lib/hl';
 import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
+import { AccountUnavailable } from '@/components/app/account-unavailable';
 
 const MODE: Record<string, string> = {
   standard: 'Standard',
@@ -35,6 +36,7 @@ export default function AccountPage() {
   const fills = useFills(address);
   const risk = view.data?.risk;
   const loading = review.state === 'loading' || (connected && !risk && !view.isError);
+  const unavailable = connected && !risk && view.isError;
   const error = review.state === 'error' || view.isError;
   const upnl = risk ? risk.pools.reduce((s, p) => s + p.positions.reduce((t, r) => t + r.unrealizedPnl, 0), 0) : 0;
   const available = risk ? risk.idle.reduce((s, i) => s + i.available, 0) : 0;
@@ -219,6 +221,8 @@ export default function AccountPage() {
                 </table>
               </div>
               </>
+            ) : unavailable ? (
+              <AccountUnavailable view={view} compact />
             ) : (
               <div className="pb small t2">No open positions, so no margin pools.</div>
             )}
