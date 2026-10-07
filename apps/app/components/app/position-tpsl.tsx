@@ -167,7 +167,8 @@ function TpslPanel({ coin, size, liquidationPx }: { coin: string; size: number; 
                   {kindOf(o)} at <span className="num">{fmtPx(Number(o.triggerPx))}</span>
                 </span>
                 <span className="tiny t3">
-                  {o.triggerCondition ?? o.orderType} · fills down to <span className="num">{fmtPx(Number(o.limitPx))}</span> · reduce-only
+                  {/below/i.test(o.triggerCondition ?? '') ? 'Price below' : /above/i.test(o.triggerCondition ?? '') ? 'Price above' : o.orderType}{' '}
+                  {o.triggerCondition ? <span className="num">{fmtPx(Number(o.triggerPx))}</span> : null} · fills {o.side === 'A' ? 'down' : 'up'} to <span className="num">{fmtPx(Number(o.limitPx))}</span> · reduce-only
                 </span>
               </span>
               <button type="button" className="btn btn-sm" disabled={busy !== null || Boolean(blocked)} onClick={() => void cancel(o)}>
