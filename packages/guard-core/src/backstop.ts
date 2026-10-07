@@ -93,7 +93,10 @@ export function planBackstops(
     for (const row of pool.positions) {
       const p = row.position;
       const mine = existing.filter((o) => o.coin === p.coin);
-      const single = priceAtBuffer(pool, row, line);
+      // A single-position price on the wrong side of the mark is no price: this position alone can't take the
+      // pool to the line (7 Oct 2026, testnet: ETH's came back far above its mark and hid the valid joint price).
+      const alone = priceAtBuffer(pool, row, line);
+      const single = alone !== null && (p.size > 0 ? alone < row.mark : alone > row.mark) ? alone : null;
       const joint = together === null ? null : row.mark * (p.size > 0 ? 1 - together : 1 + together);
       // The earlier of the two: higher for a long, lower for a short.
       const px = single === null ? joint : joint === null ? single : p.size > 0 ? Math.max(single, joint) : Math.min(single, joint);
