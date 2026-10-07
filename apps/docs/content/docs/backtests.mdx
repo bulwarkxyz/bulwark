@@ -195,7 +195,7 @@ At the highest leverage of each day, with each sweep setting (our server on time
 
 ## Backstops with several positions
 
-On testnet, the guard now prices the backstop of a pool with several positions as if every position moves against you at once ([why](/how-the-guard-works#backstops-on-the-exchange)). These replays are the evidence for several positions; it has not yet been checked live with more than one. To test it, each crash day is replayed with **two cross longs in one pool**, half the exposure each: the crash market and a related market. Example settings as above; the guard as it runs, with its backstop. Cells: share kept **before** (each stop priced for its position alone) **→ after** (priced together).
+On testnet, the guard now prices the backstop of a pool with several positions as if every position moves against you at once ([why](/how-the-guard-works#backstops-on-the-exchange)). It has since been checked live on testnet with two positions in one pool (BTC and ETH, 7 October): both backstops were placed where the planner priced them and re-priced once each after a deposit ([what has been checked live](/how-the-guard-works#what-has-been-checked-live)). Mainnet keeps pricing each position on its own for now. To test it, each crash day is replayed with **two cross longs in one pool**, half the exposure each: the crash market and a related market. Example settings as above; the guard as it runs, with its backstop. Cells: share kept **before** (each stop priced for its position alone) **→ after** (priced together).
 
 #### Oil and Brent, 23 March 2026
 | Leverage | No guard | On time: before → after | Server 1 min late: before → after | Server 5 min late: before → after |

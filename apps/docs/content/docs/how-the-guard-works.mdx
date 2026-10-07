@@ -69,10 +69,31 @@ For every guarded position, the guard keeps a **reduce-only stop order resting o
 
 The stop is re-priced whenever your positions, your margin (deposits, withdrawals, transfers, funding) or your rules change, and on the guard's regular sync once a minute. It is replaced when it drifts more than 0.5% from where it should be, and removed when the position is gone.
 
-**Measured in our replays:** when two positions in a pool fell together, the accounts that were liquidated with the old pricing (each position on its own) survived with this one. When only one of them fell, the earlier stops kept less money. This pricing runs **on testnet only**. Our funded testnet run on 6 October checked the backstop live with **one** position: placed at the planned price, then re-priced once after a deposit. The several-position case is shown in the replays but **not yet checked live**: on testnet, only one of the stock and commodity markets can share a cross pool. Mainnet keeps the old pricing until it is.
+**Measured in our replays:** when two positions in a pool fell together, the accounts that were liquidated with the old pricing (each position on its own) survived with this one. When only one of them fell, the earlier stops kept less money. This pricing runs **on testnet only**. It has been checked live on testnet with one position (6 October) and with two positions in one pool (7 October, BTC and ETH): see [what has been checked live](#what-has-been-checked-live). Mainnet keeps pricing each position on its own until that testnet audit log has been reviewed.
+
+**When no backstop can rest.** A long gets no backstop when your margin is large next to it: once the pool's buffer is at or above the position's notional divided by its maintenance margin (about 1 ÷ its maintenance rate, so about 50× at a 2% rate), a falling price lowers the maintenance faster than the equity. The buffer then *rises* as the price falls, so no stop below the price would ever be reached. This is common in **unified mode**, where your whole balance backs every position: on our testnet account, about $998 backed a $25 GOLD long, a buffer near 2,000×. The guard still watches the position, and it places a backstop as soon as the buffer drops below that level, for example after you add to the position or move margin out. The app says "No backstop needed" in that case. Shorts always get one.
+
+## What has been checked live
+
+Everything below ran on **Hyperliquid testnet**, with real signed orders and mock USDC, on our own test account. Each step is in that account's audit log, with Hyperliquid's order ids. Nothing has run on mainnet yet: a funded mainnet canary (one position, real money) is next.
+
+| Behaviour | Positions | Date | Result |
+|---|---|---|---|
+| A stage set to "once per fall" acts once on a flat market | 1 (GOLD) | 6 Oct | One trim, nothing more through a re-sign and the next minutes |
+| Top-up from your idle balance | 1 | 6 Oct | $2 moved once |
+| Backstop resting on Hyperliquid at the planned price | 1 | 6 Oct | Placed where the guard's planner priced it |
+| The same, several positions priced together | 2 in one pool (BTC, ETH) + 1 in another (GOLD) | 7 Oct | All three where the planner priced them; BTC and ETH priced together |
+| Re-priced once after a deposit | 1 | 6 Oct | One re-placement, to the planner's new price |
+| The same, several positions | 2 in one pool | 7 Oct | BTC and ETH re-placed once each; GOLD, in the other pool, untouched |
+| Large margin in unified mode: no backstop | 1 | 6 Oct | None placed, by design (see above) |
+| Your own stop-loss and take-profit next to the guard's backstop | 1 | 6–7 Oct | Accepted; the guard never moved them. Placed and cancelled from the app on 7 Oct |
+| One guard at a time while Bulwark deploys a new version | n/a | 7 Oct | The new guard waited for the old one to stop |
+
+Our runs also caught four bugs, each fixed with a test that fails on the old code: a stage re-arming on a flat market, the guard keeping a stale account mode after a switch, two guards acting during a deploy, and a position that could not reach the line alone missing its joint backstop.
 
 ## Your own stop-loss and take-profit orders
 
+- **Setting them in Bulwark (testnet):** the **TP/SL** button on a trade.xyz position row. You type the price and your slippage; nothing is pre-filled. Each becomes a reduce-only market trigger for the whole position, signed by your trading key. The panel lists your own triggers with a Cancel button and never shows the guard's. It refuses a trigger whose worst fill would be more than about 6% from Hyperliquid's oracle, and shows the range it accepts now.
 - **Never touched by the guard:** your reduce-only orders, including your stop-loss and take-profit, are never cancelled. The guard's only cancelling action, "cancel orders that would add to a position", leaves every reduce-only order alone. The kill switch and wipe cancel only the guard's own orders.
 - **When your stop and the guard's backstop sit on the same position:**
   - both rest on Hyperliquid and fire on the mark price, so whichever is reached first fires;
