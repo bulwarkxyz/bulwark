@@ -75,7 +75,7 @@ The stop is re-priced whenever your positions, your margin (deposits, withdrawal
 
 ## What has been checked live
 
-Everything below ran on **Hyperliquid testnet**, with real signed orders and mock USDC, on our own test account. Each step is in that account's audit log, with Hyperliquid's order ids. Nothing has run on mainnet yet: a funded mainnet canary (one position, real money) is next.
+Everything below ran on **Hyperliquid testnet**, with real signed orders and mock USDC, on our own test account. Each step is in that account's audit log, with Hyperliquid's order ids. One run so far used real money on mainnet (the last row): the guard's own engine code ran on our machine against Hyperliquid mainnet, because Bulwark's hosted guard is testnet-only.
 
 | Behaviour | Positions | Date | Result |
 |---|---|---|---|
@@ -88,6 +88,7 @@ Everything below ran on **Hyperliquid testnet**, with real signed orders and moc
 | Large margin in unified mode: no backstop | 1 | 6 Oct | None placed, by design (see above) |
 | Your own stop-loss and take-profit next to the guard's backstop | 1 | 6–7 Oct | Accepted; the guard never moved them. Placed and cancelled from the app on 7 Oct |
 | One guard at a time while Bulwark deploys a new version | n/a | 7 Oct | The new guard waited for the old one to stop |
+| **Mainnet, real money:** a stage acts once, the alert reaches Telegram | 1 (CL, about $24) | 7 Oct | One trim of 0.135 CL at 88.702 (order 568051240311), reduce-only, 0.86 s from decision to Hyperliquid's answer; the Telegram alert arrived; nothing more in the next 60 s; the run cost $0.0126 |
 
 Our runs also caught four bugs, each fixed with a test that fails on the old code: a stage re-arming on a flat market, the guard keeping a stale account mode after a switch, two guards acting during a deploy, and a position that could not reach the line alone missing its joint backstop.
 
