@@ -222,7 +222,7 @@ async function main() {
   const assumptions = {
     account: `A cross long on the xyz dex, opened at the first mark of each window, with ${EQUITY.toLocaleString('en-US')} USDC of equity and nothing else in the account`,
     exampleSettings: `Example settings chosen for the test (not product defaults): ${STAGE_TEXT.join('; ')}. Except in the repeat comparison, stages act every time the line is crossed (how policies behaved before the choice existed)`,
-    repeat: 'Repeat comparison: every stage set to "every crossing" or to "once per breach" (acts again only after the market recovers to where it was when the stage acted)',
+    repeat: 'Repeat comparison: every stage set to "every crossing" or to "once per breach" (acts again only once its line is no longer crossed and the market is back where it was when the stage acted)',
     sweep: 'Every combination of three line sets and three trim sizes; each is an example chosen for the test',
     setups: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])),
     serverLate: `The server's orders and its re-placing of resting orders reach the exchange ${DELAYS.join(', ')} minutes after the decision; resting orders already on the exchange fire on the mark regardless`,
