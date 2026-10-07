@@ -31,7 +31,7 @@ PREV_ID=$(serving id); PREV_URL=$(serving url)
 [ -n "$PREV_ID" ] && [ -n "$PREV_URL" ] || { echo "Could not read the serving deployment; not deploying."; exit 1; }
 
 say "Deploying to production"
-NEW_URL=$(vercel deploy --prod --yes 2>/tmp/bw-deploy.log | grep -m1 -o 'https://[^ ]*')
+NEW_URL=$(vercel deploy --prod --yes 2>/tmp/bw-deploy.log | grep -m1 -oE 'https://[a-z0-9.-]+')
 [ -n "$NEW_URL" ] || fail "vercel deploy (see /tmp/bw-deploy.log)"
 vercel promote "$NEW_URL" --yes >/tmp/bw-promote.log 2>&1 || true
 for i in $(seq 1 30); do [ "$(serving id)" != "$PREV_ID" ] && break; sleep 4; done
