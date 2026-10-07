@@ -9,7 +9,9 @@ import { part1 } from './part1.js';
 import { part2 } from './part2.js';
 import { part3 } from './part3.js';
 import { part3tight } from './part3tight.js';
+import { part3multi } from './part3multi.js';
 import { part4 } from './part4.js';
+import { part5 } from './part5.js';
 
 const [part, ...rest] = process.argv.slice(2);
 const dryRun = rest.includes('--dry-run');
@@ -19,8 +21,8 @@ const amount = amountArg >= 0 ? Number(rest[amountArg + 1]) : undefined;
 // The owner's advance approval of every step (testnet parts only), quoted into the run log with each plan.
 const approvedArg = rest.indexOf('--owner-approved');
 const ownerApproved = approvedArg >= 0 ? rest[approvedArg + 1] : undefined;
-if (ownerApproved !== undefined && (!ownerApproved || part === 'part1')) {
-  console.error('--owner-approved needs a note, and is for the testnet parts (2–4) only; part 1 moves real money and always asks.');
+if (ownerApproved !== undefined && (!ownerApproved || part === 'part1' || (part === 'part5' && !rest.includes('--rehearse')))) {
+  console.error('--owner-approved needs a note, and is for the testnet parts only; parts 1 and 5 move real money and always ask.');
   process.exit(2);
 }
 const approval = ownerApproved ? { ownerApproved } : {};
@@ -31,7 +33,9 @@ const parts: Record<string, () => Promise<void>> = {
   part2: () => part2({ dryRun, ...approval, ...flag('--residency', 'residency'), ...flag('--citizenship', 'citizenship') }),
   part3: () => part3({ dryRun, ...approval }),
   part3tight: () => part3tight({ dryRun, ...approval }),
+  part3multi: () => part3multi({ dryRun, ...approval }),
   part4: () => part4({ dryRun, switchMode: !rest.includes('--no-switch'), ...approval }),
+  part5: () => part5({ dryRun, rehearse: rest.includes('--rehearse'), ...approval }),
 };
 
 const run = part ? parts[part] : undefined;

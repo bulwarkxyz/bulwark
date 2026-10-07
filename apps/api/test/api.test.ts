@@ -423,7 +423,10 @@ describe('command results and alerts', () => {
   it('unlinking Telegram removes the chat id', async () => {
     const token = await signIn();
     store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: '0x0000000000000000000000000000000000000001', region: 'allowed', telegramChatId: '42', killSwitch: false, builderApproved: false });
+    expect(await (await app.request('/v1/telegram', { headers: authed(token) })).json()).toEqual({ linked: true, chatId: '42' });
+    expect((await app.request('/v1/telegram')).status).toBe(401);
     expect(await (await app.request('/v1/telegram', { method: 'DELETE', headers: authed(token) })).json()).toEqual({ linked: false });
+    expect(await (await app.request('/v1/telegram', { headers: authed(token) })).json()).toEqual({ linked: false, chatId: null });
     expect((await store.user(ACCOUNT))?.telegramChatId).toBeNull();
   });
 

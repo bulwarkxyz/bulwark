@@ -1,5 +1,5 @@
 /**
- * Test run, part 4 (testnet, no real money): close every xyz position, cancel your own open orders, wait for
+ * Test run, part 4 (testnet, no real money): close every position (main dex and xyz), cancel your own open orders, wait for
  * the guard to remove its backstops, then switch the account to unified mode (userSetAbstraction, signed by the
  * wallet, as the app's Settings > Account mode does). After this, run part3 again for the unified repeat.
  *
@@ -21,8 +21,8 @@ export async function part4(opts: { dryRun: boolean; ownerApproved?: string; swi
   const s = new Session(log, opts.dryRun ? null : loadWallet());
   if (!opts.dryRun) await s.signIn();
   const state = await s.risk();
-  const positions = state.snapshot.positions.filter((p) => p.coin.startsWith('xyz:') && p.size !== 0);
-  const open = await s.openOrders('xyz');
+  const positions = state.snapshot.positions.filter((p) => p.size !== 0);
+  const open = [...(await s.openOrders('')), ...(await s.openOrders('xyz'))];
   const go = (await s.api<Array<{ oid: number }>>('/v1/guard-orders')).body;
   const guardOids = new Set((Array.isArray(go) ? go : []).map((o) => o.oid));
   const mine = open.filter((o) => !guardOids.has(o.oid));
@@ -61,7 +61,7 @@ export async function part4(opts: { dryRun: boolean; ownerApproved?: string; swi
   for (let i = 0; i < 24; i++) {
     const lb = (await s.api<unknown[]>('/v1/guard-orders')).body;
     const left = Array.isArray(lb) ? lb : [];
-    const still = (await s.risk()).snapshot.positions.filter((p) => p.coin.startsWith('xyz:') && p.size !== 0);
+    const still = (await s.risk()).snapshot.positions.filter((p) => p.size !== 0);
     if (!left.length && !still.length) break;
     if (i === 23) console.log(`  Still open after 2 minutes: ${still.length} position(s), ${left.length} guard order(s). Run part4 again.`);
     await sleep(5000);

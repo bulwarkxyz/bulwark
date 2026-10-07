@@ -445,6 +445,12 @@ export function createApp(deps: ApiDeps) {
   });
 
   // -------------------------------------------------------------- telegram linking
+  // The signed-in owner's own link, with the chat id: a guard run outside the hosted worker (the funded mainnet
+  // canary, run on the owner's machine) sends its alerts to the same chat through the same bot.
+  app.get('/v1/telegram', async (c) => {
+    const user = await deps.store.user(c.get('account'));
+    return c.json({ linked: Boolean(user?.telegramChatId), chatId: user?.telegramChatId ?? null });
+  });
   // Unlink: the chat id is removed; alerts then show in the app only.
   app.delete('/v1/telegram', async (c) => {
     const account = c.get('account');
