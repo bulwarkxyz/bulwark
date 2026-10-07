@@ -105,6 +105,8 @@ export interface RestingOrders {
   orders: GuardOrder[];
   /** True for review builds, where the orders are worked out from the example rules, not read. */
   example: boolean;
+  /** The list was actually read (signed in and answered): only then can the app tell the guard's orders from others. */
+  known: boolean;
   forCoin(coin: string): GuardOrder[];
   isLoading: boolean;
   error: Error | null;
@@ -140,7 +142,7 @@ export function useGuardOrders(address: `0x${string}` | undefined): RestingOrder
           if (lvl) orders.push({ oid: -orders.length - 1, coin: row.position.coin, kind: 'backstop', triggerPx: lvl.price, size: -row.position.size, placedAt: REVIEW_PLACED_AT, line: low, pricing: 'single' }); // priced for the position alone, so labelled single
         }
   }
-  return { orders, example, forCoin: (coin) => orders.filter((o) => o.coin === coin), isLoading: q.isLoading, error: (q.error as Error | null) ?? null };
+  return { orders, example, known: review.on || (signedIn && q.isSuccess), forCoin: (coin) => orders.filter((o) => o.coin === coin), isLoading: q.isLoading, error: (q.error as Error | null) ?? null };
 }
 const REVIEW_PLACED_AT = Date.UTC(2026, 9, 5, 7, 29);
 

@@ -90,3 +90,15 @@ describe('TP/SL: Hyperliquid’s oracle band', () => {
     expect(buy.hi * 1.01).toBeCloseTo(100 * (1 + ORACLE_BAND));
   });
 });
+
+describe('TP/SL: whose stops are listed', async () => {
+  const { ownTriggers } = await import('@/components/app/position-tpsl');
+  const row = (oid: number, extra: Record<string, unknown> = {}) => ({ coin: 'xyz:GOLD', side: 'A' as const, limitPx: '3900', sz: '0.0061', oid, timestamp: 0, orderType: 'Stop Market', reduceOnly: true, isTrigger: true, triggerPx: '3950', ...extra });
+  const orders = [row(1), row(2), row(3, { coin: 'xyz:SILVER' }), row(4, { reduceOnly: false }), row(5, { isTrigger: false })];
+  it('lists only the user’s own reduce-only triggers on this market, never the guard’s', () => {
+    expect(ownTriggers(orders, new Set([2]), 'xyz:GOLD', true).map((o) => o.oid)).toEqual([1]);
+  });
+  it('lists nothing while the guard’s orders are unknown (signed out): a backstop must never look like the user’s', () => {
+    expect(ownTriggers(orders, new Set(), 'xyz:GOLD', false)).toEqual([]);
+  });
+});

@@ -31,13 +31,23 @@ export function useTpslOn(): boolean {
   );
 }
 
-/** The user's own TP/SL triggers on a market: reduce-only triggers that aren't the guard's. */
+/**
+ * The user's own TP/SL triggers on a market: reduce-only triggers that aren't the guard's. The guard's
+ * backstops are the same kind of order on Hyperliquid, so this is only known once the guard's own list has
+ * been read (signed in). Until then nothing is listed as the user's, and nothing can be cancelled here.
+ */
 function useOwnTriggers(coin: string) {
   const { address } = useViewer();
   const orders = useOpenOrders(address);
   const guard = useGuardOrders(address);
   const mine = new Set(guard.orders.map((o) => o.oid));
-  return { q: orders, list: (orders.data ?? []).filter((o) => o.coin === coin && o.isTrigger && o.reduceOnly && !mine.has(o.oid)) };
+  const list = ownTriggers(orders.data ?? [], mine, coin, guard.known);
+  return { q: orders, known: guard.known, list };
+}
+
+/** Pure: the user's own reduce-only triggers on `coin`, or none while the guard's orders are unknown. */
+export function ownTriggers(orders: readonly OpenOrder[], guardOids: ReadonlySet<number>, coin: string, known: boolean): OpenOrder[] {
+  return known ? orders.filter((o) => o.coin === coin && o.isTrigger && o.reduceOnly && !guardOids.has(o.oid)) : [];
 }
 
 const kindOf = (o: OpenOrder) => (/take profit/i.test(o.orderType) ? 'Take profit' : /stop/i.test(o.orderType) ? 'Stop loss' : o.orderType);
@@ -71,7 +81,7 @@ function TpslPanel({ coin, size, liquidationPx }: { coin: string; size: number; 
   const markets = useXyzMarkets();
   const assets = useAssets();
   const qc = useQueryClient();
-  const { q, list } = useOwnTriggers(coin);
+  const { q, known, list } = useOwnTriggers(coin);
   const [tp, setTp] = useState('');
   const [sl, setSl] = useState('');
   const [slip, setSlip] = useState('');
@@ -144,7 +154,9 @@ function TpslPanel({ coin, size, liquidationPx }: { coin: string; size: number; 
         </span>
       </div>
 
-      {q.isLoading ? (
+      {!known ? (
+        <span className="small t2">Sign in to see the stops already on this position: the guard’s own backstops rest on Hyperliquid too, and the app only lists yours once it knows which are the guard’s.</span>
+      ) : q.isLoading ? (
         <span className="sk" style={{ width: '70%' }} />
       ) : list.length ? (
         <ul className="tpsl-list">
