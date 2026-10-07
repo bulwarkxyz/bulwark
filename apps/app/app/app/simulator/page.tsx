@@ -70,6 +70,29 @@ const fmtDur = (ms: number) => {
   return m < 60 ? `+${m}m` : `+${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 };
 
+/**
+ * Where each marker's label goes: just above its dot, or a step higher, or below, whichever doesn't overlap
+ * a label already placed. A label with no free spot is left off; its dot stays, and the table lists it.
+ */
+function placeLabels<T extends { label: string; cx: number; cy: number }>(marks: T[], W: number, H: number): Array<T & { at: { x: number; y: number } | null }> {
+  const boxes: Array<{ x1: number; x2: number; y1: number; y2: number }> = [];
+  return [...marks]
+    .sort((a, b) => a.cx - b.cx)
+    .map((m) => {
+      if (!m.label) return { ...m, at: null };
+      const w = m.label.length * 6.8 + 4;
+      const x = Math.min(m.cx + 7, W - 12 - w);
+      for (const y of [m.cy - 8, m.cy - 22, m.cy - 36, m.cy + 20]) {
+        const box = { x1: x, x2: x + w, y1: y - 12, y2: y + 3 };
+        if (box.y1 < 0 || box.y2 > H - 20) continue;
+        if (boxes.some((o) => box.x1 < o.x2 && box.x2 > o.x1 && box.y1 < o.y2 && box.y2 > o.y1)) continue;
+        boxes.push(box);
+        return { ...m, at: { x, y } };
+      }
+      return { ...m, at: null };
+    });
+}
+
 /** Buffer along the path (log scale, liquidation at the bottom), with the user's lines. */
 type Marker = { step: number; label: string; tone: 'warn' | 'crit' };
 function BufferChart({ guarded, unguarded, lines, markers }: { guarded: number[]; unguarded: number[]; lines: number[]; markers: Marker[] }) {
@@ -93,21 +116,23 @@ function BufferChart({ guarded, unguarded, lines, markers }: { guarded: number[]
       ))}
       <polyline fill="none" stroke="var(--text-2)" strokeWidth="2" strokeDasharray="6 5" points={line(unguarded)} />
       <polyline fill="none" stroke="var(--guard-g)" strokeWidth="2.5" points={line(guarded)} />
-      {markers.map((mk) => {
-        const b = mk.tone === 'crit' ? 1 : guarded[mk.step]!;
-        const cx = x(mk.step);
-        const cy = y(Number.isFinite(b) ? b : top);
-        return (
-          <g key={`${mk.step}-${mk.label}`}>
-            <circle cx={cx} cy={cy} r="4.5" fill={mk.tone === 'crit' ? 'var(--crit)' : 'var(--warn)'} />
-            {mk.label ? (
-              <text x={Math.min(cx + 7, W - 70)} y={cy - 8} fontSize="12" fill={mk.tone === 'crit' ? 'var(--crit)' : 'var(--text)'}>
-                {mk.label}
-              </text>
-            ) : null}
-          </g>
-        );
-      })}
+      {placeLabels(
+        markers.map((mk) => {
+          const b = mk.tone === 'crit' ? 1 : guarded[mk.step]!;
+          return { ...mk, cx: x(mk.step), cy: y(Number.isFinite(b) ? b : top) };
+        }),
+        W,
+        H,
+      ).map((mk) => (
+        <g key={`${mk.step}-${mk.label}`}>
+          <circle cx={mk.cx} cy={mk.cy} r="4.5" fill={mk.tone === 'crit' ? 'var(--crit)' : 'var(--warn)'} />
+          {mk.at ? (
+            <text x={mk.at.x} y={mk.at.y} fontSize="12" fill={mk.tone === 'crit' ? 'var(--crit)' : 'var(--text)'}>
+              {mk.label}
+            </text>
+          ) : null}
+        </g>
+      ))}
       <text x={L} y={H - 4} fontSize="11" fill="var(--text-3)">start</text>
       <text x={W - 12} y={H - 4} textAnchor="end" fontSize="11" fill="var(--text-3)">end of path</text>
     </svg>

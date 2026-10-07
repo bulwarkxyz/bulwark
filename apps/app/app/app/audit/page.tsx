@@ -97,7 +97,7 @@ export default function AuditPage() {
         <h1 className="h1">Audit log</h1>
         {chip}
         <span className="sp" />
-        <div className="seg" role="tablist" aria-label="Filter" style={{ width: 'min(520px, 100%)' }}>
+        <div className="seg seg-scroll" role="tablist" aria-label="Filter" style={{ width: 'min(520px, 100%)' }}>
           {FILTERS.map((f) => (
             <button key={f.id} type="button" role="tab" aria-selected={filter === f.id} className={filter === f.id ? 'on' : ''} onClick={() => setFilter(f.id)}>
               {f.label}

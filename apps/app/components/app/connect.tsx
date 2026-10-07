@@ -66,6 +66,15 @@ export function useEndSession() {
   };
 }
 
+/** A wallet was connected in this browser before (wagmi remembers the last connector). */
+function hadWallet(): boolean {
+  try {
+    return Boolean(localStorage.getItem('wagmi.recentConnectorId'));
+  } catch {
+    return false;
+  }
+}
+
 /** `stepSignIn`: the page has its own Sign in (setup), so phones skip the header's to keep it on one line. */
 export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) {
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
@@ -86,7 +95,8 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
       <>
         <button ref={btn} type="button" className="wallet" aria-haspopup="dialog" aria-expanded={open} aria-label="Watched account (review build): open menu" onClick={() => setOpen((o) => !o)}>
           <span className="num small">{shortAddr(review.watch)}</span>
-          <span className="tag">Watching</span>
+          {/* Phones keep the title room; the menu says what "Watching" means. */}
+          <span className="tag hide-sm">Watching</span>
         </button>
         <Popover anchor={btn} open={open} onClose={close} label="Watched account" width={340}>
           <WatchingMenu address={review.watch} onClose={close} />
@@ -95,8 +105,10 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
     );
   }
   if (!isConnected) {
-    // The modal being open isn't "connecting": that starts when a wallet is chosen.
-    const busy = wallet.loading || isConnecting || isReconnecting;
+    // The modal being open isn't "connecting": that starts when a wallet is chosen. wagmi also runs a
+    // reconnect pass on every page load and calls it "connecting", even for a visitor who never connected:
+    // only say so when a wallet was connected here before.
+    const busy = wallet.loading || ((isConnecting || isReconnecting) && hadWallet());
     return (
       <button type="button" className="btn btn-sm btn-ink" onClick={wallet.open}>
         {busy ? 'Connecting…' : 'Connect wallet'}
@@ -115,7 +127,9 @@ export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) 
         </button>
       ) : null}
       <button ref={btn} type="button" className="wallet" aria-haspopup="dialog" aria-expanded={open} aria-label="Wallet menu" onClick={() => setOpen((o) => !o)}>
-        <span className="num small">{shortAddr(address as string)}</span>
+        {/* Phones, not yet signed in: Sign in sits next to it, so the address gives way to an icon. */}
+        <span className={`num small ${signedIn ? '' : 'hide-sm'}`}>{shortAddr(address as string)}</span>
+        {signedIn ? null : <span className="mobile-only">{Icon.account(14)}</span>}
         {Icon.caret()}
       </button>
       <Popover anchor={btn} open={open} onClose={close} label="Wallet" width={340}>

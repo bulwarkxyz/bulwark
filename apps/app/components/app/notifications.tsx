@@ -29,10 +29,10 @@ export function NotificationRow({ n, read, onOpen, full = false }: { n: Notifica
       <Link href={n.href} className="nmain" onClick={onOpen}>
         <span className="ndot" aria-hidden="true" />
         <span className="col" style={{ gap: 3, minWidth: 0 }}>
-          <span className="row nw" style={{ gap: 8 }}>
+          <span className="row" style={{ gap: 6, rowGap: 4 }}>
             <span className={`chip chip-sm ${TYPE_CHIP[n.type]}`}>{TYPE_LABEL[n.type]}</span>
             {/* Relative in the panel, the exact time on the full page (as Binance's notification page does). */}
-            <span className="tiny t3 num" title={full ? when(n.at) : `${times.fmt(n.at, 'minute')} ${times.label}`}>
+            <span className="tiny t3 num" style={{ whiteSpace: 'nowrap' }} title={full ? when(n.at) : `${times.fmt(n.at, 'minute')} ${times.label}`}>
               {full ? `${times.fmt(n.at, 'minute')} ${times.label}` : when(n.at)}
             </span>
             {n.example ? <span className="tag">example</span> : null}

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { Icon } from '@/components/app/icons';
 import { NotificationRow, notificationState } from '@/components/app/notifications';
 import { useNotifications } from '@/lib/alerts';
 import { RANGE_LABEL, TYPE_LABEL, rangeStart, type DateRange, type NotificationType } from '@/lib/notifications';
@@ -31,21 +32,32 @@ export default function NotificationsPage() {
         <h1 className="h1">Notifications</h1>
         {review.on ? <span className="tag">example alerts</span> : null}
         <span className="sp" />
-        <button type="button" className="btn btn-sm" disabled={!q.unread} onClick={() => void q.markAllRead()}>
-          Mark all read
-        </button>
-        <Link className="btn btn-sm btn-ghost" href="/app/settings#alerts">
-          Alert settings
-        </Link>
+        {q.ready ? (
+          <>
+            <button type="button" className="btn btn-sm" disabled={!q.unread} onClick={() => void q.markAllRead()}>
+              Mark all read
+            </button>
+            <Link className="btn btn-sm btn-ghost" href="/app/settings#alerts">
+              Alert settings
+            </Link>
+          </>
+        ) : null}
       </div>
 
-      {!connected ? (
-        <div className="banner">
-          <span>Connect a wallet and sign in to see your notifications.</span>
-        </div>
-      ) : !q.ready ? (
-        <div className="banner">
-          <span>Sign in (top right) to see your notifications.</span>
+      {!q.ready ? (
+        <div className="panel">
+          <div className="empty" style={{ padding: '80px 16px' }}>
+            <div className="ico">{Icon.bell(18)}</div>
+            <b>{connected ? 'Sign in to see your notifications.' : 'No wallet connected.'}</b>
+            <span className="small" style={{ maxWidth: 460 }}>
+              The guard posts here when one of your alert lines is crossed, when it can’t act, when it holds off on stale data, and if Hyperliquid liquidates a position.
+            </span>
+            {connected ? null : (
+              <Link className="btn btn-sm btn-ink" href="/app/onboarding">
+                Connect wallet
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <>

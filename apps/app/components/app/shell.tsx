@@ -307,8 +307,8 @@ function StatusBar() {
       </span>
       {live.active > 0 ? (
         <span className="row nw" style={{ gap: 6 }}>
-          <span className={`dot ${live.open ? 'dot-ok' : 'dot-crit'}`} />
-          {live.open ? `Book and trades · streaming · last update ${age(live.lastMessageAt)} ago` : 'Book and trades · stream down, polling'}
+          <span className={`dot ${live.open ? 'dot-ok' : live.connecting ? '' : 'dot-crit'}`} />
+          {live.open ? `Book and trades · streaming · last update ${age(live.lastMessageAt)} ago` : live.connecting ? 'Book and trades · connecting' : 'Book and trades · stream down, polling'}
         </span>
       ) : null}
       {g.ageMs !== null ? (

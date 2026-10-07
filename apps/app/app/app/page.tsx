@@ -115,6 +115,8 @@ export default function MarketsPage() {
   const [sel, setSel] = useState(MARKETS[0]!.coin);
   const activity = useMarketActivity();
   const [picked, setPicked] = useState(false);
+  // Nothing is shown as selected until the default is known, so the detail never flashes another market.
+  const selReady = picked || !activity.isLoading;
   // Until the visitor picks one, the detail shows the market the trade screen would open (one with data).
   useEffect(() => {
     if (!picked && activity.data) setSel(defaultMarket(activity.data, NETWORK, Date.now(), readLastMarket()).coin);
@@ -146,7 +148,7 @@ export default function MarketsPage() {
       <div className="ptitle">
         <h1 className="h1">Markets</h1>
         <span className="chip chip-sm">HIP-3 · trade.xyz</span>
-        <label className="input" style={{ minHeight: 36, width: 'min(320px, 100%)' }}>
+        <label className="input msearch" style={{ minHeight: 36, width: 'min(320px, 100%)' }}>
           {Icon.search(14)}
           <input type="search" placeholder="Search oil, gold, NVDA…" aria-label="Search markets" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
@@ -221,7 +223,7 @@ export default function MarketsPage() {
                       const c = markets.data?.get(m.coin);
                       const open = homeOpen(m.session, now);
                       return (
-                        <tr key={m.coin} className={sel === m.coin ? 'sel' : ''} onClick={() => (setSel(m.coin), setPicked(true))} style={{ cursor: 'pointer' }}>
+                        <tr key={m.coin} className={selReady && sel === m.coin ? 'sel' : ''} onClick={() => (setSel(m.coin), setPicked(true))} style={{ cursor: 'pointer' }}>
                           <td>
                             <Link className="sym" href={`/app/trade/${m.ticker}`} prefetch={false} onClick={(e) => e.stopPropagation()}>
                               <span className="glyph">{m.ticker.slice(0, 2)}</span>
@@ -278,7 +280,16 @@ export default function MarketsPage() {
           )}
         </div>
         <div className="hide-sm">
-          <Detail
+          {selReady ? null : (
+            <div className="panel pb col" style={{ gap: 12 }} aria-busy="true">
+              <span className="sk" style={{ width: '55%', height: 18 }} />
+              <span className="sk" style={{ width: '35%', height: 28 }} />
+              <span className="sk" style={{ width: '90%' }} />
+              <span className="sk" style={{ width: '80%' }} />
+              <span className="sk" style={{ width: '85%' }} />
+            </div>
+          )}
+          {selReady ? <Detail
             m={selected}
             ctx={markets.data?.get(selected.coin)}
             now={now}
@@ -296,7 +307,7 @@ export default function MarketsPage() {
                 </div>
               ) : null;
             })()}
-          />
+          /> : null}
         </div>
       </div>
     </div>

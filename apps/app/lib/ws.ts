@@ -22,8 +22,11 @@ class Stream {
   private retry = 0;
   private ping: ReturnType<typeof setInterval> | null = null;
   private statusListeners = new Set<() => void>();
-  /** Whether the socket is open, how many subscriptions are active, and when the last data message arrived (ms). */
-  status = { open: false, active: 0, lastMessageAt: 0 };
+  /**
+   * Whether the socket is open, how many subscriptions are active, when the last data message arrived (ms),
+   * and whether a connection attempt is under way (so a first load says "connecting", not "down").
+   */
+  status = { open: false, active: 0, lastMessageAt: 0, connecting: false };
 
   subscribe(sub: Sub, fn: Listener): () => void {
     const k = keyOf(sub);
@@ -66,9 +69,10 @@ class Stream {
     if (typeof window === 'undefined' || this.ws) return;
     const ws = new WebSocket(URL);
     this.ws = ws;
+    this.setStatus({ connecting: true });
     ws.onopen = () => {
       this.retry = 0;
-      this.setStatus({ open: true });
+      this.setStatus({ open: true, connecting: false });
       for (const { sub } of this.subs.values()) this.send({ method: 'subscribe', subscription: sub });
       this.ping = setInterval(() => this.send({ method: 'ping' }), PING_MS);
     };
@@ -93,7 +97,7 @@ class Stream {
       if (this.ping) clearInterval(this.ping);
       this.ping = null;
       this.ws = null;
-      this.setStatus({ open: false });
+      this.setStatus({ open: false, connecting: false });
       if (this.subs.size === 0) return;
       const wait = Math.min(15_000, 500 * 2 ** this.retry++);
       setTimeout(() => this.ensure(), wait);

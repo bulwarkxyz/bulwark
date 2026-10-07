@@ -314,11 +314,7 @@ export default function SettingsPage() {
           </span>
         </div>
       ) : null}
-      {!connected ? (
-        <div className="banner">
-          <span>Display settings work without a wallet. Guard settings need one: connect and sign in.</span>
-        </div>
-      ) : !signedIn ? (
+      {!connected ? null : !signedIn ? (
         <div className="banner">
           <span>Sign in (top right) to load your guard settings.</span>
         </div>
@@ -385,8 +381,27 @@ export default function SettingsPage() {
           </div>
         </div>
       ) : (
-        <div style={{ maxWidth: 720 }}>
-          <DisplayPanel />
+        <div className="cols2">
+          <div className="stack">
+            <DisplayPanel />
+          </div>
+          <div className="stack">
+            <section className="panel" aria-labelledby="guard-settings-h">
+              <div className="ph">
+                <h2 id="guard-settings-h">Your guard settings</h2>
+              </div>
+              <div className="empty" style={{ padding: '40px 16px' }}>
+                <div className="ico">{Icon.settings(18)}</div>
+                <b>No wallet connected.</b>
+                <span className="small" style={{ maxWidth: 400 }}>
+                  Connect and sign in to manage your guard key and trading key, alerts and Telegram, the Bulwark fee, the kill switch and your account mode. Display settings work without a wallet.
+                </span>
+                <Link className="btn btn-sm btn-ink" href="/app/onboarding">
+                  Connect wallet
+                </Link>
+              </div>
+            </section>
+          </div>
         </div>
       )}
     </div>
