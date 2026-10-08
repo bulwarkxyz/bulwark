@@ -1,3 +1,5 @@
+import { securityHeaders } from './security-headers.mjs';
+
 /**
  * Review mode (lib/review.tsx) is for design-review previews only. It is on only when the build sets
  * NEXT_PUBLIC_REVIEW_MODE=1 and the deployment is not Vercel production; the value is inlined at build
@@ -19,8 +21,9 @@ const nextConfig = {
   // No smart-contract wallets (lib/wallet.tsx): their SDKs are replaced by an empty module, which also
   // keeps their optional dependencies (x402, Solana) out of the build.
   turbopack: { resolveAlias: { '@base-org/account': './lib/no-smart-wallets.js', '@coinbase/wallet-sdk': './lib/no-smart-wallets.js' } },
-  // Review previews are shared by link only: never indexed, whatever the host does by default.
-  ...(reviewMode === '1' ? { headers: async () => [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] }] } : {}),
+  // Security headers on every response (security-headers.mjs). Review previews are shared by link only:
+  // never indexed, whatever the host does by default.
+  headers: async () => [{ source: '/:path*', headers: [...securityHeaders(), ...(reviewMode === '1' ? [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] : [])] }],
 };
 
 export default nextConfig;

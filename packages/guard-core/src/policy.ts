@@ -3,6 +3,10 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { z } from 'zod';
 import { FIXED_WINDOWS } from './windows.js';
 
+// In a browser, Zod's fast path needs eval, which the app's Content Security Policy refuses, and Zod probes
+// for it as soon as the schemas below are built. The path without eval is plenty for schemas this small.
+if ('document' in globalThis) z.config({ jitless: true });
+
 /**
  * Guard policy: what the plain-language layer compiles to and what the evaluator runs.
  * Every number in a policy is one the user typed (decision D5); the schema carries no defaults.

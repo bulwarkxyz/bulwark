@@ -2,7 +2,8 @@
 # Everything a change to the app must pass before it merges to main (the bar agreed on 6 Oct 2026), in one
 # run, with each result saved next to the screenshots:
 #   typecheck, all tests, contrast, review mode compiled out, public-repo check;
-#   a production build: tab-switch budgets (phone and laptop) and every wallet in the connect modal;
+#   a production build: tab-switch budgets (phone and laptop), every wallet in the connect modal, the
+#   Content Security Policy, a returning wallet, titles and the 404 pages;
 #   a local review build: grid gaps at three widths, the bell and wallet-menu checks, and screenshots of
 #   the given screens at 1440 and 390 in both themes.
 # Stops at the first failure. Uses port 3230.
@@ -45,6 +46,14 @@ tail -1 "$out/wallet-modal.txt"
 # Again as a visitor with no wallet at all, as most production visitors are (the 7 Oct rollback).
 node scripts/wallet-modal-check.mjs "$base" --no-test-wallet >"$out/wallet-modal-bare.txt" || { cat "$out/wallet-modal-bare.txt"; exit 1; }
 tail -1 "$out/wallet-modal-bare.txt"
+# The Content Security Policy must block nothing the app does: every screen, every wallet, a connection.
+node scripts/csp-check.mjs "$base" >"$out/csp.txt" || { grep -E "FAIL|policy" "$out/csp.txt"; exit 1; }
+echo "csp: $(tail -1 "$out/csp.txt")"
+# A returning user's wallet reconnecting never shows "No wallet connected"; every route has its own title.
+node scripts/returning-wallet.mjs "$base" "$out/returning-wallet" >"$out/returning-wallet.txt" || { grep FAIL "$out/returning-wallet.txt"; exit 1; }
+echo "returning wallet: $(tail -1 "$out/returning-wallet.txt")"
+node scripts/titles-404.mjs "$base" "$out/titles-404" >"$out/titles-404.txt" || { grep FAIL "$out/titles-404.txt"; exit 1; }
+echo "titles and 404: $(tail -1 "$out/titles-404.txt")"
 
 echo "== review build (local only)"
 (cd apps/app && NEXT_PUBLIC_REVIEW_MODE=1 npx next build >/dev/null)
@@ -53,6 +62,9 @@ serve
 # testnet may then slow the next account reads.
 node scripts/nav-check.mjs "$base" >"$out/nav-check.txt" || { grep FAIL "$out/nav-check.txt"; exit 1; }
 tail -1 "$out/nav-check.txt"
+# The policy again with real account data on every screen.
+node scripts/csp-check.mjs "$base" --watch "$watch" >"$out/csp-watch.txt" || { grep -E "FAIL|policy" "$out/csp-watch.txt"; exit 1; }
+echo "csp with account data: $(tail -1 "$out/csp-watch.txt")"
 q="watch=$watch&rules=example"
 : >"$out/grid-gaps.txt"
 for w in 1440 1100 900; do
