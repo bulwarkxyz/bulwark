@@ -142,6 +142,6 @@ Every action passes seven checks twice: once when it is decided, and again in th
 
 - **Kill switch:** stops the guard at once and cancels only the orders it placed. Your positions and your own orders are left alone.
 - **Panic unwind:** closes every position with reduce-only orders over the time you choose (5 minutes to 7 days): a TWAP for positions of $100 or more, an IOC below that.
-- **Wipe guard key:** stops the guard, cancels the orders it placed, and retires your guard key: a KMS key is disabled and scheduled for deletion; an encrypted key is destroyed. (Available through the API today; the button arrives with the app's next design update.)
+- **Wipe guard key:** stops the guard, cancels the orders it placed, and retires your guard key: a KMS key is disabled and scheduled for deletion; an encrypted key is destroyed. In the app: Settings › Wipe my guard key.
 
 Each command is signed in your wallet and must reach the server within 60 seconds of signing.
