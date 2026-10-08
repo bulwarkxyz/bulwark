@@ -7,6 +7,7 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { verifyChain } from '../src/audit.js';
 import { PgStore, migrate } from '../src/pg-store.js';
+import { GUARD_STATES, PAUSED_REASONS } from '../src/store.js';
 
 const url = process.env.DATABASE_URL;
 const A = '0x9959260f1aa229f8a70e0c495ca9b251106c1a86' as const;
@@ -101,6 +102,9 @@ describe.skipIf(!url)('postgres store', () => {
     await store.setGuardStatus(A, { state: 'protected', reason: null, lastEvaluatedAt: 30, updatedAt: 30 });
     expect(await store.guardStatus(A)).toEqual({ state: 'protected', reason: null, lastEvaluatedAt: 30, updatedAt: 30 });
     await expect(store.setGuardStatus(A, { state: 'protected', reason: 'stale_data', lastEvaluatedAt: 30, updatedAt: 31 })).rejects.toThrow();
+    // Every reason the worker can report is accepted by the table (8 Oct 2026: two new reasons failed every guard run).
+    for (const reason of PAUSED_REASONS) await store.setGuardStatus(A, { state: 'paused', reason, lastEvaluatedAt: 40, updatedAt: 40 });
+    for (const state of GUARD_STATES) if (state !== 'paused') await store.setGuardStatus(A, { state, reason: null, lastEvaluatedAt: 41, updatedAt: 41 });
   });
 
   it('redeems a Telegram link code once, before it expires', async () => {

@@ -23,6 +23,27 @@ const base = args.find((a) => !a.startsWith('--')) ?? 'http://localhost:3230';
 const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) && !bare;
 let failed = 0;
 const browser = await chromium.launch();
+// A navigation that never reaches "load" (8 Oct 2026: /app once took 85 s, once over 30 s): name the requests still
+// open when it times out, with how long each has been open, before failing.
+async function go(page, url) {
+  const open = new Map();
+  const start = (r) => open.set(r, Date.now());
+  const end = (r) => open.delete(r);
+  page.on('request', start);
+  page.on('requestfinished', end);
+  page.on('requestfailed', end);
+  try {
+    await page.goto(url);
+  } catch (e) {
+    console.log(`slow load of ${url}: requests still open after ${String(e.message).match(/Timeout (\d+)ms/)?.[1] ?? '?'} ms:`);
+    for (const [r, t] of open) console.log(`  ${Date.now() - t} ms  ${r.resourceType()}  ${r.url().slice(0, 160)}`);
+    throw e;
+  } finally {
+    page.off('request', start);
+    page.off('requestfinished', end);
+    page.off('requestfailed', end);
+  }
+}
 for (const w of [1440, 390]) {
   const phone = w < 500;
   const opts = { viewport: { width: w, height: phone ? 844 : 900 }, ...(phone ? { isMobile: true, hasTouch: true } : {}) };
@@ -31,7 +52,7 @@ for (const w of [1440, 390]) {
   if (local) await installTestWallet(probe);
   let p = await probe.newPage();
   if (first) await p.goto(first, { timeout: 120_000 });
-  await p.goto(`${base}/app`);
+  await go(p, `${base}/app`);
   await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click();
   await p.locator('[data-testid^="rk-wallet-option-"]').first().waitFor({ timeout: 60_000 });
   const ids = await p.locator('[data-testid^="rk-wallet-option-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
@@ -43,7 +64,7 @@ for (const w of [1440, 390]) {
     if (first) await p.goto(first, { timeout: 120_000 });
     const errors = [];
     p.on('pageerror', (e) => errors.push(e.message.split('\n')[0]));
-    await p.goto(`${base}/app`);
+    await go(p, `${base}/app`);
     await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click();
     await p.locator(`[data-testid="${id}"]`).click();
     await p.waitForTimeout(4000);

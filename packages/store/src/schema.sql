@@ -195,3 +195,8 @@ create table if not exists operator_state (
 -- The country of the user's latest request, from the app's proxy (regions are re-checked at every guard action).
 alter table users add column if not exists last_country text;
 alter table users add column if not exists last_subdivision text;
+
+-- Paused reasons gain resign_required (rules signed before signatures named the network) and operator_stop (the
+-- global stop). Kept in step with PAUSED_REASONS in store.ts; pg-store.test.ts writes every one.
+alter table guard_status drop constraint if exists guard_status_reason_check;
+alter table guard_status add constraint guard_status_reason_check check (reason in ('stale_data', 'exchange_unreachable', 'signer_error', 'agent_expired', 'resign_required', 'operator_stop'));
