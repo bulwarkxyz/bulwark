@@ -24,6 +24,8 @@ export const hydroWeight = (users: number) => Math.min(2 * users, 100);
 /** REST fallback: Hyperliquid allows 1200 weight a minute per IP; clearinghouseState weighs 2. Half is ours. */
 export const NATIVE_FALLBACK_WEIGHT_PER_MIN = 600;
 export const NATIVE_FALLBACK_EVERY_MS = 5_000;
+/** The REST fallback refreshes an account's state once it is this old (the guard holds off past 30 s). */
+export const NATIVE_FALLBACK_REFRESH_AFTER_MS = 24_000;
 
 export type StateSource = 'hydromancer' | 'native';
 type Entry = { state: RawClearinghouseState; at: number };
@@ -70,6 +72,11 @@ export class StateArbiter {
   hydroFresh(user: string, dex: string): boolean {
     const h = this.acc.get(user.toLowerCase())?.get(dex)?.hydromancer;
     return Boolean(h && this.now() - h.at <= HYDRO_STALE_MS);
+  }
+
+  /** When the native state for `dex` was last received, if ever. */
+  nativeAt(user: string, dex: string): number | undefined {
+    return this.acc.get(user.toLowerCase())?.get(dex)?.native?.at;
   }
 
   /** True when the native state for `dex` is fresh (it can stand in for Hydromancer). */
@@ -242,25 +249,44 @@ export class NativeFallbackPoller {
     private readonly dexes: readonly string[],
     private readonly now: () => number = Date.now,
     perMinute = NATIVE_FALLBACK_WEIGHT_PER_MIN,
+    /** The guard's own limit on account state (guard.ts STATE_MAX_AGE_MS). */
+    private readonly maxAgeMs = 30_000,
   ) {
     this.budget = new WeightBudget(perMinute, now);
   }
 
   async poll(users: Iterable<string>): Promise<void> {
-    for (const user of users) {
+    // Accounts still within the guard's age limit first, then the rest; oldest first within each. Walking the list
+    // in a fixed order spent the budget on the same accounts and never reached the end (8 Oct 2026 bench: 45 of 75
+    // accounts stale). Plain oldest-first fails everyone at once when demand exceeds the budget; this keeps as many
+    // accounts fresh as the budget allows and leaves the rest held off (the guard pauses them; their backstops stand).
+    const due: Array<{ user: string; dex: string; at: number }> = [];
+    for (const user of users)
       for (const dex of this.dexes) {
-        if (this.arbiter.hydroFresh(user, dex) || this.arbiter.nativeFresh(user, dex)) continue;
-        if (!this.budget.take(2)) {
-          this.stats.skippedForBudget++;
-          return;
-        }
-        this.stats.requests++;
-        try {
-          const state = await this.clearinghouseState(user, dex);
-          this.arbiter.native(user, [[dex, state]], this.now());
-        } catch {
-          this.stats.failures++;
-        }
+        if (this.arbiter.hydroFresh(user, dex)) continue;
+        const at = this.arbiter.nativeAt(user, dex) ?? Number.NEGATIVE_INFINITY;
+        // Refreshed as late as safely possible (24 s; polls every 5 s; the guard holds off past 30 s), to serve the most accounts.
+        if (this.now() - at < NATIVE_FALLBACK_REFRESH_AFTER_MS) continue;
+        due.push({ user, dex, at });
+      }
+    const now = this.now();
+    const lapsed = (at: number) => (now - at > this.maxAgeMs ? 1 : 0);
+    due.sort((a, b) => lapsed(a.at) - lapsed(b.at) || a.at - b.at);
+    // Paced: each poll spends at most its share of the minute's budget, so refreshes run steadily instead of the
+    // first polls of every minute spending it all and the rest waiting.
+    let share = Math.max(2, Math.ceil((this.budget.perMinute * NATIVE_FALLBACK_EVERY_MS) / 60_000));
+    for (const { user, dex } of due) {
+      if (share < 2 || !this.budget.take(2)) {
+        this.stats.skippedForBudget++;
+        return;
+      }
+      share -= 2;
+      this.stats.requests++;
+      try {
+        const state = await this.clearinghouseState(user, dex);
+        this.arbiter.native(user, [[dex, state]], this.now());
+      } catch {
+        this.stats.failures++;
       }
     }
   }

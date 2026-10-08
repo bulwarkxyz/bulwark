@@ -145,22 +145,31 @@ describe('Hydromancer feed', () => {
 });
 
 describe('native REST fallback', () => {
-  it('polls only dexes with neither a fresh Hydromancer nor a fresh native state, within its weight budget', async () => {
+  it('polls only dexes without a fresh Hydromancer state, refreshes native ones at 24 s, within its weight budget', async () => {
     const t = { now: 1_000_000 };
     const { a, last } = arbiter(t);
     const V = '0x0000000000000000000000000000000000000002';
     a.hydromancer(U, '', st('10'), t.now);
     a.hydromancer(U, 'xyz', st('20'), t.now);
     const asked: string[] = [];
-    const poller = new NativeFallbackPoller(a, async (u, dex) => (asked.push(`${u}|${dex}`), st('7')), ['', 'xyz'], () => t.now, 6);
+    const poller = new NativeFallbackPoller(a, async (u, dex) => (asked.push(`${u}|${dex}`), st('7')), ['', 'xyz'], () => t.now, 600);
     await poller.poll([U, V]);
-    expect(asked).toEqual([`${V}|`, `${V}|xyz`]);
+    expect(asked).toEqual([`${V}|`, `${V}|xyz`]); // U is fresh on Hydromancer
     expect(value(last().states, 'xyz')).toBe('7');
-    t.now += HYDRO_STALE_MS + 1;
+    t.now += HYDRO_STALE_MS + 1; // U's Hydromancer state is stale; V's native state is 15 s old
     asked.length = 0;
     await poller.poll([U, V]);
-    expect(asked).toEqual([`${U}|`]); // budget: 6 weight a minute = 3 calls
-    expect(poller.stats.skippedForBudget).toBe(1);
+    expect(asked).toEqual([`${U}|`, `${U}|xyz`]); // V waits until 24 s
+    t.now += 10_000;
+    asked.length = 0;
+    await poller.poll([U, V]);
+    expect(asked).toEqual([`${V}|`, `${V}|xyz`]);
+    // A budget too small for the next request: skipped, not overspent.
+    const tiny = new NativeFallbackPoller(a, async () => st('1'), ['', 'xyz'], () => t.now, 12);
+    t.now += 60_000;
+    await tiny.poll([U, V]);
+    expect(tiny.stats.requests).toBe(1);
+    expect(tiny.stats.skippedForBudget).toBe(1);
   });
 
   it('weight budget slides over one minute', () => {
@@ -200,5 +209,14 @@ describe('builderApproved streams', () => {
     stream.onMessage(JSON.stringify({ type: 'ping' }));
     expect(JSON.parse(sock.sent.at(-1)!)).toEqual({ type: 'pong' });
     stream.stop();
+  });
+});
+
+describe('REST fallback under load (8 Oct 2026)', () => {
+  it('serves accounts fairly and, beyond its budget, keeps as many fresh as it can instead of starving the end of the list', async () => {
+    const { simulate } = await import('../bench/feed-capacity.js');
+    expect((await simulate(70, 4)).staleAccounts).toBe(0); // before: 40 of 70 went stale, the end of the list never refreshed
+    const over = await simulate(300, 4);
+    expect(300 - over.staleAccounts).toBeGreaterThanOrEqual(65); // before: about 10 stayed fresh
   });
 });
