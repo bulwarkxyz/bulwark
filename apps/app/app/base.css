@@ -6,3 +6,5 @@ html.light body { background: #F3F4F0; }
 h1, h2, h3, h4, p { margin: 0; }
 button, input, select, textarea { font: inherit; }
 img, svg { display: block; max-width: 100%; }
+html.dark .root-404 { color: #E6E9EE; }
+html.light .root-404 { color: #14181D; }
