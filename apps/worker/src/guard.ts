@@ -52,6 +52,7 @@ const AGENT_GONE = /does not exist|agent.*expired|api wallet.*(expired|invalid)/
 
 /** Size an order record actually filled (0 when it missed, was held back or failed). */
 export function filledSize(r: ExecutionRecord): number {
+  if (r.assumedFilled !== undefined) return r.assumedFilled;
   if (r.status !== 'sent') return 0;
   return (r.result?.statuses ?? []).reduce((n, s) => n + (s.kind === 'filled' ? Number(s.totalSz) : 0), 0);
 }
@@ -86,6 +87,11 @@ export interface EngineDeps {
   onAgentGone?(account: Hex): Promise<void>;
   /** Agents the user has approved on Hyperliquid (`extraAgents`), to tell when the guard key expired or was removed. */
   agents?(user: Hex): Promise<Array<{ address: string; validUntil?: number | null }>>;
+  /**
+   * An order's state by its client order id: null when Hyperliquid has no such order (it never arrived).
+   * Used after a send that got no answer, before anything is retried.
+   */
+  orderStatus?(user: Hex, cloid: Hex): Promise<{ status: string; origSz: number; sz: number } | null>;
   now(): number;
 }
 
@@ -512,6 +518,25 @@ export class GuardEngine {
       now,
     });
     for (const r of records) {
+      // Sent but no answer came back (a timeout, a dropped connection): the order may have filled. Find out by its
+      // client order id before anything retries it; if that can't be read either, treat it as filled. A missed
+      // trim leaves the backstop resting; a second trim would act twice on one fall.
+      if (r.status === 'failed' && r.failedAt === 'send' && r.cloid && r.action.type === 'order') {
+        let known: { status: string; origSz: number; sz: number } | null | undefined;
+        try {
+          known = this.deps.orderStatus ? await this.deps.orderStatus(account, r.cloid) : undefined;
+        } catch {
+          known = undefined;
+        }
+        if (known === null) r.error = `${r.error}; Hyperliquid has no such order, so it never arrived`;
+        else if (known) {
+          r.assumedFilled = Math.max(0, known.origSz - known.sz);
+          r.error = `${r.error}; Hyperliquid shows it ${known.status}, filled ${r.assumedFilled}`;
+        } else {
+          r.assumedFilled = r.action.size;
+          r.error = `${r.error}; its outcome could not be read, so it is treated as filled and not retried`;
+        }
+      }
       if (r.status === 'sent' || r.status === 'failed') await store.addAction(account, now());
       // Health: an answer from the exchange means it is reachable and the key signed.
       if (r.result) {

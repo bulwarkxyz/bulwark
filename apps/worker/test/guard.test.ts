@@ -327,6 +327,55 @@ describe('guard retry', () => {
     expect(iocs()).toHaveLength(2); // done: no more orders while the stage stays latched
   });
 
+  // An order sent with no answer back (a timeout): it may have filled. A retry sized from zero would trim twice.
+  const LOST = () => {
+    throw new Error('fetch failed: timeout');
+  };
+  const setOrderStatus = (fn: () => Promise<unknown>) => ((engine as unknown as { deps: { orderStatus: unknown } }).deps.orderStatus = fn);
+
+  it('a trim whose answer was lost but which filled is not sent again (looked up by its client order id)', async () => {
+    await feed(91.5);
+    sent = [];
+    orderReplies = [LOST];
+    setOrderStatus(async () => ({ status: 'filled', origSz: 0.145, sz: 0 }));
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 69]]), t);
+    expect(iocs()).toHaveLength(1);
+    expect(await store.retries(ACCOUNT)).toEqual([]);
+    await tick(68.5);
+    await tick(68.4);
+    expect(iocs()).toHaveLength(1);
+    const e = store.audit.raw(ACCOUNT).filter((x) => x.kind === 'guard_action' && /^order/.test(x.what)).at(-1)!;
+    expect(e.what).toMatch(/Hyperliquid shows it filled, filled 0.145/);
+  });
+
+  it('when the outcome cannot be read either, it is treated as filled and not retried', async () => {
+    await feed(91.5);
+    sent = [];
+    orderReplies = [LOST];
+    setOrderStatus(async () => {
+      throw new Error('exchange unreachable');
+    });
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 69]]), t);
+    await tick(68.5);
+    await tick(68.4);
+    expect(iocs()).toHaveLength(1);
+    expect(store.audit.raw(ACCOUNT).some((x) => /treated as filled and not retried/.test(x.what))).toBe(true);
+  });
+
+  it('when Hyperliquid has no such order (it never arrived), the retry goes ahead as for a miss', async () => {
+    await feed(91.5);
+    sent = [];
+    orderReplies = [LOST];
+    setOrderStatus(async () => null);
+    t += 1000;
+    await engine.onMarks(new Map([['xyz:CL', 69]]), t);
+    expect(await store.retries(ACCOUNT)).toMatchObject([{ coin: 'xyz:CL', remaining: 0.145 }]);
+    await tick(68.5);
+    expect(iocs()).toHaveLength(2);
+  });
+
   it(`after ${RETRY_ALERT_AFTER} misses: a critical alert saying it cannot fill within the slippage, and it keeps trying`, async () => {
     await feed(91.5);
     sent = [];

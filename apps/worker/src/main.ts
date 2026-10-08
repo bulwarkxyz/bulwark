@@ -168,6 +168,11 @@ async function main() {
     askRepeatChoice: process.env.REPEAT_CHOICE_REQUIRED === '1',
     onAgentGone: async (account) => void (await keys.promoteRotations([account])),
     agents: async (user) => (await info.extraAgents(user)) as Array<{ address: string; validUntil?: number | null }>,
+    orderStatus: async (user, cloid) => {
+      const r = await info.request<{ status: string; order?: { status: string; order: { origSz: string; sz: string } } }>({ type: 'orderStatus', user, oid: cloid });
+      if (r.status !== 'order' || !r.order) return null;
+      return { status: r.order.status, origSz: Number(r.order.order.origSz), sz: Number(r.order.order.sz) };
+    },
     now: Date.now,
   });
 
@@ -332,7 +337,7 @@ async function main() {
       const markAgeMs = status.lastMarkAt ? Date.now() - status.lastMarkAt : null;
       res.statusCode = markAgeMs !== null && markAgeMs < 15_000 ? 200 : 503;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ...status, markAgeMs, state: { hydromancer: hydro ? { url: HYDRO_URL, disabled: hydro.disabled, ...hydro.stats, pointsLastMinute: hydro.budget.used(), usage: hydroUsage } : 'off', nativeWsUsers: nativeWs.size, restFallback: fallback.stats, infoBudget: { perMinute: INFO_WEIGHT_PER_MIN, usedLastMinute: limiter.used(), ...limiter.stats }, builderStream: builderStream ? { lastMessageAt: builderStream.lastMessageAt, events: builderStream.events } : 'off' } }));
+      res.end(JSON.stringify({ ...status, markAgeMs, staleAccounts: [...tracked].filter((u) => !['', 'xyz'].every((d) => arbiter.hydroFresh(u, d) || Date.now() - (arbiter.nativeAt(u, d) ?? 0) <= 30_000)).length, state: { hydromancer: hydro ? { url: HYDRO_URL, disabled: hydro.disabled, ...hydro.stats, pointsLastMinute: hydro.budget.used(), usage: hydroUsage } : 'off', nativeWsUsers: nativeWs.size, restFallback: fallback.stats, infoBudget: { perMinute: INFO_WEIGHT_PER_MIN, usedLastMinute: limiter.used(), ...limiter.stats }, builderStream: builderStream ? { lastMessageAt: builderStream.lastMessageAt, events: builderStream.events } : 'off' } }));
     })
     .listen(Number(process.env.PORT ?? 8080));
   console.log(JSON.stringify({ msg: 'worker started', network }));

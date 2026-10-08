@@ -40,6 +40,11 @@ export interface ExecutionRecord {
   latencyMs: number;
   /** For `failed`: whether signing failed or the exchange could not be reached (no response). */
   failedAt?: 'sign' | 'send';
+  /**
+   * For an order sent without an answer back: how much it filled as far as the guard can tell (looked up by its
+   * client order id, or the whole order when that lookup fails). A retry is sized from this, never from zero.
+   */
+  assumedFilled?: number;
 }
 
 /** Bulwark client order ids start with these bytes so they are recognisable in the user's order history. */
@@ -103,7 +108,7 @@ export async function executeActions(actions: readonly GuardAction[], check: Gua
       if (e instanceof InvariantViolation) {
         records.push({ action, status: 'rejected', violation: e.violation, builderRetried: false, latencyMs: now() - started });
       } else {
-        records.push({ action, status: 'failed', error: e instanceof Error ? e.message : String(e), builderRetried: false, latencyMs: now() - started, failedAt: leg });
+        records.push({ action, status: 'failed', error: e instanceof Error ? e.message : String(e), builderRetried: false, latencyMs: now() - started, failedAt: leg, ...(cloid && (leg as 'sign' | 'send') === 'send' ? { cloid } : {}) });
       }
     }
   }
