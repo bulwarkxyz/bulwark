@@ -148,6 +148,12 @@ function StateNote({ g }: { g: GuardView }) {
               <Link href="/app/onboarding?step=4" style={{ textDecoration: 'underline' }}>
                 {g.noKey ? 'Create it' : 'Approve again'}
               </Link>
+            ) : g.reason === 'resign_required' ? (
+              <Link href="/app/rules" style={{ textDecoration: 'underline' }}>
+                Sign your rules again
+              </Link>
+            ) : g.reason === 'operator_stop' ? (
+              'It resumes when Bulwark lifts the stop.'
             ) : (
               'It holds off until this clears, then resumes by itself.'
             )}

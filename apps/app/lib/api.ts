@@ -66,6 +66,10 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  // A read the API refuses with 401 means the session itself is no longer accepted (expired, or from before
+  // sessions named the network): drop it, so every screen asks to sign in again instead of showing an
+  // error. A 401 on a write can be about that write's signature, so the session stays.
+  if (res.status === 401 && token && (init.method ?? (init.body ? 'POST' : 'GET')) === 'GET') setSessionToken(null);
   if (!res.ok) throw new ApiError(res.status, body);
   return body as T;
 }

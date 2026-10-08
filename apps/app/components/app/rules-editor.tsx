@@ -56,6 +56,7 @@ export function usePolicyDraft() {
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm }>({ id: null, form: EMPTY_FORM });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [resignMsg, setResignMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Rule ids the API refused for want of the repeat choice (400 { needsChoice }).
   const [refused, setRefused] = useState<string[]>([]);
   // A newly signed (or first loaded) version replaces the draft.
@@ -92,8 +93,36 @@ export function usePolicyDraft() {
     }
   }
 
+  /**
+   * Sign the same rules again as the next version: for a policy signed before signatures named the network
+   * (me.policy.needsResign). Nothing about the rules changes.
+   */
+  async function resign() {
+    const cur = me.data?.policy;
+    if (!cur || !address || review.on) return;
+    setBusy(true);
+    setResignMsg(null);
+    try {
+      const again = { ...cur.policy, version: cur.version + 1 };
+      const signature = await signPolicy(signTypedDataAsync as unknown as SignTypedData, chainId, again);
+      await api('/v1/policy', { body: { policy: again, signature, chainId } });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      await qc.invalidateQueries({ queryKey: ['guard-status'] });
+      setResignMsg({ ok: true, text: `Version ${again.version} signed with the same rules. The guard runs them again.` });
+      setRefused([]);
+    } catch (e) {
+      const need = e instanceof ApiError && Array.isArray(e.body.needsChoice) ? (e.body.needsChoice as string[]) : [];
+      setRefused(need);
+      setResignMsg({ ok: false, text: need.length ? `Not signed: ${need.length} rule${need.length > 1 ? 's need' : ' needs'} your choice first, marked below. Choose, then sign.` : walletErrorText(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return {
     signed,
+    resign,
+    resignMsg,
     signedVersion: me.data?.policy?.version ?? 0,
     draft,
     setDraft,

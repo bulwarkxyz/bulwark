@@ -17,6 +17,7 @@ import { homeOpen, marketByCoin } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { useReview, useViewer } from '@/lib/review';
 import { signPolicy, type SignTypedData } from '@/lib/signing';
+import { NETWORK } from '@/lib/env';
 import { useTimes } from '@/lib/time';
 
 function ruleStatus(r: Rule, g: GuardView): { text: string; cls: string } {
@@ -64,6 +65,23 @@ export default function RulesPage() {
         </Link>
       </div>
 
+      {policy?.needsResign ? (
+        <div className="banner b-warn" role="status">
+          {Icon.alert()}
+          <span>
+            <b>Sign your rules again.</b> Bulwark’s signatures now name the network ({NETWORK}), so a signature made here can never be used on {NETWORK === 'testnet' ? 'mainnet' : 'testnet'}. Your rules stay exactly as they are. Until you sign them again, as version {policy.version + 1}, the guard takes no new action; its resting backstops stay on Hyperliquid.
+          </span>
+          <span className="sp" />
+          <button type="button" className="btn btn-sm btn-ink" disabled={draft.busy || review.on || !signedIn} onClick={() => void draft.resign()}>
+            {draft.busy ? 'Signing…' : 'Sign again'}
+          </button>
+        </div>
+      ) : null}
+      {draft.resignMsg ? (
+        <div className={`banner ${draft.resignMsg.ok ? 'b-guard' : 'b-crit'}`} role={draft.resignMsg.ok ? 'status' : 'alert'}>
+          <span>{draft.resignMsg.text}</span>
+        </div>
+      ) : null}
       {policy?.needsRepeatChoice?.length ? (
         <div className="banner b-warn" role="status">
           <span>

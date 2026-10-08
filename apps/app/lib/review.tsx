@@ -13,6 +13,8 @@ import { useAccount } from 'wagmi';
  *   ?state=empty|loading|error|closed   force a screen state
  *   ?guard=paused:signer_error   stand in for the guard status endpoint
  *   ?key=sealed|wiped            an older encrypted key, or a key already wiped (default: a KMS key)
+ *   ?resign=1                    the example rules need signing again (signed before signatures named the network)
+ *   ?region=blocked|alerts_only|unknown   stand in for the region check at the trade ticket
  * Nothing here can sign, send or store anything.
  */
 export const REVIEW_BUILD = process.env.NEXT_PUBLIC_REVIEW_MODE === '1';
@@ -29,8 +31,12 @@ interface Review {
   guard?: string;
   /** ?key=sealed|kms: where the example guard key lives (default kms, the active custody). */
   key?: 'sealed' | 'kms' | 'wiped';
+  /** ?resign=1: the example rules were signed before signatures named the network. */
+  resign: boolean;
+  /** ?region=allowed|alerts_only|blocked|unknown: stand in for GET /v1/region at the ticket. */
+  region?: 'allowed' | 'alerts_only' | 'blocked' | 'unknown';
 }
-const OFF: Review = { on: false, exampleRules: false, state: null };
+const OFF: Review = { on: false, exampleRules: false, state: null, resign: false };
 const Ctx = createContext<Review>(OFF);
 
 export function ReviewProvider({ children }: { children: React.ReactNode }) {
@@ -44,8 +50,10 @@ export function ReviewProvider({ children }: { children: React.ReactNode }) {
       on: true,
       ...(watch && /^0x[0-9a-fA-F]{40}$/.test(watch) ? { watch: watch.toLowerCase() as Hex } : {}),
       exampleRules: q.get('rules') === 'example',
+      resign: q.get('resign') === '1',
+      ...(['allowed', 'alerts_only', 'blocked', 'unknown'].includes(q.get('region') ?? '') ? { region: q.get('region') as 'allowed' | 'alerts_only' | 'blocked' | 'unknown' } : {}),
       ...(['sealed', 'kms', 'wiped'].includes(q.get('key') ?? '') ? { key: q.get('key') as 'sealed' | 'kms' | 'wiped' } : {}),
-      ...(q.get('guard') && /^(protected|acting|at_risk|paused|stopped|no_rules|alerts_only)(:(stale_data|exchange_unreachable|signer_error|agent_expired))?$/.test(q.get('guard')!) ? { guard: q.get('guard')! } : {}),
+      ...(q.get('guard') && /^(protected|acting|at_risk|paused|stopped|no_rules|alerts_only)(:(stale_data|exchange_unreachable|signer_error|agent_expired|resign_required|operator_stop))?$/.test(q.get('guard')!) ? { guard: q.get('guard')! } : {}),
       state: state === 'empty' || state === 'loading' || state === 'error' || state === 'closed' ? state : null,
     });
   }, []);

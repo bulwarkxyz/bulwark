@@ -80,7 +80,7 @@ export const PAUSE_TEXT: Record<PauseReason, string> = {
   exchange_unreachable: 'The guard can’t reach Hyperliquid.',
   signer_error: 'The guard’s signer failed.',
   agent_expired: 'Your guard key’s approval on Hyperliquid has expired. Approve it again in setup.',
-  resign_required: 'Your rules were signed before signatures named the network. Sign them again in Guard rules; until then the guard takes no new action, and its resting backstops stay on Hyperliquid.',
+  resign_required: 'Your rules need signing again: signatures now name the network. Until then the guard takes no new action; its resting backstops stay on Hyperliquid.',
   operator_stop: 'Bulwark has paused the guard for everyone. Your resting backstops stay on Hyperliquid.',
 };
 /**

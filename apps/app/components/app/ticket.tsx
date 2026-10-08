@@ -11,6 +11,7 @@ import { realisedFeeBps, useAccountView, useAssets, useFills, type MarketCtx } f
 import type { Market } from '@/lib/markets';
 import { useMe } from '@/lib/me';
 import { previewOrder } from '@/lib/preview';
+import { regionHold, regionNote, useTicketRegion } from '@/lib/region';
 import { useViewer } from '@/lib/review';
 import { sendWithTradingKey, tradingKey } from '@/lib/signing';
 import { ticketIntent } from '@/lib/ticket-intent';
@@ -73,6 +74,10 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
   const attachBuilder = BUILDER_ON && builderApproved;
   const paidBps = realisedFeeBps(fills.data, m.coin);
   const hasKey = Boolean(address && tradingKey(address));
+  // Asked when the ticket opens and again before each new order (submit).
+  const { region, refresh: refreshRegion } = useTicketRegion(connected);
+  const held = connected ? regionHold(region, reduceOnly) : null;
+  const note = connected ? regionNote(region) : null;
   const ruleAt = (line: number) => g.rules.find((r) => r.when.kind === 'buffer' && r.when.below === line);
 
   const problem = stale
@@ -81,7 +86,9 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
       ? `${m.ticker} is delisted${NETWORK === 'testnet' ? ' on testnet' : ''}.`
       : !connected
         ? null
-        : !hasKey
+        : held
+          ? held
+          : !hasKey
           ? 'Approve a trading key first (Settings or setup).'
           : !(sizeN > 0)
             ? 'Type a size.'
@@ -101,6 +108,12 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
     setBusy(true);
     setResult(null);
     try {
+      // The region again, right before a new order: where the user is now, not when the ticket opened.
+      const hold = regionHold(await refreshRegion(), reduceOnly);
+      if (hold) {
+        setResult({ error: hold });
+        return;
+      }
       if (!reduceOnly && (!existing || existing.leverage !== levN)) {
         const res = await sendWithTradingKey(address, updateLeverageAction(asset.assetId, !asset.onlyIsolated, levN));
         if (!res.ok) throw new Error(`leverage: ${res.error}`);
@@ -276,7 +289,8 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
           {busy ? 'Sending…' : stale ? 'Paused: market data is stale' : `${side === 'long' ? 'Long' : 'Short'} ${size || ''} ${m.ticker} ${type === 'market' ? 'at market' : 'limit'}`}
         </button>
       )}
-      {problem && connected && !stale ? <span className="tiny t3">{problem}</span> : null}
+      {problem && connected && !stale ? <span className={held && held === problem && region.kind === 'answer' ? 'small ct' : 'tiny t3'}>{problem}</span> : null}
+      {note && !problem ? <span className="tiny t2">{note}</span> : null}
       {result ? (
         'error' in result && !('statuses' in result) ? (
           <span className="small ct">{result.error}</span>

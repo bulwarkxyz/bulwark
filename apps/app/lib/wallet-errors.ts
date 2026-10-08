@@ -37,6 +37,18 @@ function chain(e: unknown): Shape[] {
 
 const PHONE = 'Open the wallet app on your phone and try again.';
 
+/** Seconds until a cap frees, in words: "in about 40 seconds", "in about 3 minutes", "in about 5 hours". */
+export function retryIn(seconds: number): string {
+  if (!(seconds > 0)) return 'now';
+  if (seconds < 60) return `in about ${Math.ceil(seconds)} seconds`;
+  if (seconds < 5400) {
+    const m = Math.ceil(seconds / 60);
+    return `in about ${m} minute${m === 1 ? '' : 's'}`;
+  }
+  const h = Math.round(seconds / 3600);
+  return `in about ${h} hours`;
+}
+
 export function explainWalletError(e: unknown): Explained {
   // Bulwark's API answers first: they carry their own words.
   if (e instanceof ApiError) {
@@ -48,7 +60,11 @@ export function explainWalletError(e: unknown): Explained {
     if (e.body.code === 'api_unreachable') return { text: 'This version of the app can’t reach Bulwark’s server.', next: 'Nothing was signed or changed. Try again shortly, or use bulwark.0xo.in.' };
     if (e.status === 401) return { text: 'Bulwark didn’t accept your sign-in or that signature.', next: 'Sign in again. If it repeats, check your wallet shows the same address as Bulwark.' };
     if (e.status === 403) return { text: e.message, next: 'Bulwark is not available where you live or for your citizenship.' };
-    if (e.status === 429) return { text: 'Too many requests in a short time.', next: 'Wait a minute and try again.' };
+    // Bulwark's caps (guard keys, translations) say which limit in `error` and when it frees in `retryAfter`.
+    if (e.status === 429) {
+      const wait = typeof e.body.retryAfter === 'number' ? retryIn(e.body.retryAfter) : null;
+      return { text: typeof e.body.error === 'string' ? e.body.error : 'Too many requests in a short time.', next: wait ? `Nothing was changed. You can try again ${wait}.` : 'Nothing was changed. Wait a minute and try again.' };
+    }
     if (e.status >= 500) return { text: 'Bulwark’s server could not answer.', next: 'Try again in a minute. Nothing was signed or changed.' };
     return { text: e.message };
   }
