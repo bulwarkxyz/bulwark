@@ -2,7 +2,7 @@
 
 import type { Policy } from '@bulwarkxyz/guard-core';
 import type { Hex } from '@bulwarkxyz/hyperliquid';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { useAccount } from 'wagmi';
 
 /**
@@ -60,12 +60,30 @@ export function ReviewProvider({ children }: { children: React.ReactNode }) {
 export const useReview = () => useContext(Ctx);
 
 /** The address the screens show: the connected wallet, or (review builds only) a watched account. */
-export function useViewer(): { address: Hex | undefined; connected: boolean } {
-  const { address } = useAccount();
+export function useViewer(): { address: Hex | undefined; connected: boolean; pending: boolean } {
+  const { address, status } = useAccount();
   const r = useReview();
-  if (r.state === 'empty') return { address: undefined, connected: false };
-  if (r.on && r.watch) return { address: r.watch, connected: true };
-  return { address: address as Hex | undefined, connected: Boolean(address) };
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
+  if (r.state === 'empty') return { address: undefined, connected: false, pending: false };
+  if (r.on && r.watch) return { address: r.watch, connected: true, pending: false };
+  // Not known yet: the server's page and the first paint can't see the wallet, and a wallet connected here
+  // before reconnects after load (wagmi starts that a moment after hydration). Screens show a placeholder
+  // until it settles, not "No wallet connected".
+  if (status !== 'disconnected') reconnectStarted = true;
+  const pending = !address && (!hydrated || (REVIEW_BUILD && !r.on) || (hadWallet() && (!reconnectStarted || status === 'reconnecting' || status === 'connecting')));
+  return { address: address as Hex | undefined, connected: Boolean(address), pending };
+}
+
+const noop = () => () => {};
+/** wagmi has begun its reconnect on load (once per page load; it always runs). */
+let reconnectStarted = false;
+/** A wallet was connected in this browser before, so wagmi's reconnect on load is a real one. */
+export function hadWallet(): boolean {
+  try {
+    return Boolean(localStorage.getItem('wagmi.recentConnectorId'));
+  } catch {
+    return false;
+  }
 }
 
 /** Example rules for review screenshots only. Every screen that shows them also shows "Example rules". */

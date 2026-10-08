@@ -10,6 +10,7 @@ import { GUARD_KINDS, attemptOf, useAudit } from '@/lib/audit';
 import { useReview, useViewer } from '@/lib/review';
 import { useTimes } from '@/lib/time';
 import { QueryParam, revealById } from '@/components/app/query-param';
+import { WalletPending } from '@/components/app/connect';
 
 const KIND_LABEL: Record<string, string> = {
   key: 'Guard key',
@@ -52,7 +53,7 @@ function exportJson(entries: readonly AuditEntry[], account: string | undefined)
 
 export default function AuditPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const signedIn = useSignedIn();
   const [open, setOpen] = useState<number | null>(null);
   const [filter, setFilter] = useState('all');
@@ -138,7 +139,9 @@ export default function AuditPage() {
       ) : null}
 
       <section className="panel">
-        {empty ? (
+        {pending ? (
+          <WalletPending pad={90} panel={false} />
+        ) : empty ? (
           <div className="empty" style={{ padding: '90px 16px' }}>
             <div className="ico">{Icon.audit(18)}</div>
             <b>{connected ? 'No entries yet.' : 'No wallet connected.'}</b>

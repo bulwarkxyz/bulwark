@@ -77,7 +77,7 @@ function RegionStep() {
 
 export default function OnboardingPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const me = useMe();
   const signedIn = useSignedIn() || review.on;
   const view = useAccountView(address);
@@ -119,7 +119,7 @@ export default function OnboardingPage() {
   const firstOpen = done.findIndex((d) => !d);
   const current = step ?? (firstOpen === -1 ? STEPS.length - 1 : firstOpen);
   const name = STEPS[current]!.name;
-  const loading = review.state === 'loading' || (connected && signedIn && !me.isFetched);
+  const loading = pending || review.state === 'loading' || (connected && signedIn && !me.isFetched);
   const anyClosed = MARKETS.some((m) => !homeOpen(m.session, now));
 
   let body: React.ReactNode;

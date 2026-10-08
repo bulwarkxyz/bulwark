@@ -7,6 +7,7 @@ import { NotificationRow, notificationState } from '@/components/app/notificatio
 import { useNotifications } from '@/lib/alerts';
 import { RANGE_LABEL, TYPE_LABEL, rangeStart, type DateRange, type NotificationType } from '@/lib/notifications';
 import { useReview, useViewer } from '@/lib/review';
+import { WalletPending } from '@/components/app/connect';
 
 const TYPES: Array<NotificationType | 'all'> = ['all', 'liquidation', 'alert', 'choice', 'heldOff'];
 const RANGES: DateRange[] = ['today', '7d', '30d', 'all'];
@@ -14,7 +15,7 @@ const RANGES: DateRange[] = ['today', '7d', '30d', 'all'];
 /** Every notification, filtered by type and date; the bell's "See all". */
 export default function NotificationsPage() {
   const review = useReview();
-  const { connected } = useViewer();
+  const { connected, pending } = useViewer();
   const [type, setType] = useState<NotificationType | 'all'>('all');
   const [range, setRange] = useState<DateRange>('30d');
   // The range is the request's start, rounded to the minute so the query key stays put between renders.
@@ -44,7 +45,9 @@ export default function NotificationsPage() {
         ) : null}
       </div>
 
-      {!q.ready ? (
+      {pending ? (
+        <WalletPending />
+      ) : !q.ready ? (
         <div className="panel">
           <div className="empty" style={{ padding: '80px 16px' }}>
             <div className="ico">{Icon.bell(18)}</div>

@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from 'react';
 import { createSiweMessage } from 'viem/siwe';
 import { useAccount, useDisconnect, useSignMessage } from 'wagmi';
 import { api, setSessionToken, useSignedIn } from '@/lib/api';
-import { useReview, useViewer } from '@/lib/review';
+import { hadWallet, useReview, useViewer } from '@/lib/review';
 import { NETWORK, explorerAddress } from '@/lib/env';
 import { useWalletChainId, useWalletModal } from '@/lib/wallet';
 import { explainWalletError, type Explained } from '@/lib/wallet-errors';
@@ -67,14 +67,6 @@ export function useEndSession() {
 }
 
 /** A wallet was connected in this browser before (wagmi remembers the last connector). */
-function hadWallet(): boolean {
-  try {
-    return Boolean(localStorage.getItem('wagmi.recentConnectorId'));
-  } catch {
-    return false;
-  }
-}
-
 /** `stepSignIn`: the page has its own Sign in (setup), so phones skip the header's to keep it on one line. */
 export function ConnectButton({ stepSignIn = false }: { stepSignIn?: boolean }) {
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
@@ -311,4 +303,16 @@ export function DisconnectButton() {
       Disconnect
     </button>
   );
+}
+
+/** Stands where "No wallet connected" would, while the wallet isn't known yet (useViewer().pending). */
+export function WalletPending({ pad = 80, panel = true }: { pad?: number; panel?: boolean }) {
+  const body = (
+    <div className="empty" style={{ padding: `${pad}px 16px` }} aria-busy="true" aria-label="Loading your wallet">
+      <span className="sk" style={{ width: 36, height: 36, borderRadius: 8 }} />
+      <span className="sk" style={{ width: 180 }} />
+      <span className="sk" style={{ width: 300, maxWidth: '80%' }} />
+    </div>
+  );
+  return panel ? <div className="panel">{body}</div> : body;
 }

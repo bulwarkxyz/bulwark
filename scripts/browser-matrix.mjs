@@ -140,7 +140,7 @@ for (const t of TARGETS) {
     });
     await step(p, 'wallet-connected-menu', async () => {
       // Phones list an in-app browser's wallet as "Browser wallet"; desktops list it by name (EIP-6963).
-    await p.locator('[role="dialog"]').getByText(/^(Test Wallet|Browser wallet)$/).first().click();
+      await p.locator('[role="dialog"]').getByText(/^(Test Wallet|Browser wallet)$/).first().click();
       const wb = p.locator('header button.wallet').filter({ visible: true }).first();
       await wb.waitFor({ timeout: 30_000 });
       await wb.click();

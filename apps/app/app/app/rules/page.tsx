@@ -31,7 +31,7 @@ function ruleStatus(r: Rule, g: GuardView): { text: string; cls: string } {
 
 export default function RulesPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const signedIn = useSignedIn() || review.on;
   const me = useMe();
   const g = useGuardView();
@@ -94,10 +94,10 @@ export default function RulesPage() {
           </span>
         </div>
       ) : null}
-      {!connected || !signedIn ? (
+      {pending ? null : !connected || !signedIn ? (
         <div className="banner">
           <span>
-            Connect a wallet and sign in to see and change your rules. <Link href="/app/onboarding" style={{ textDecoration: 'underline' }}>Set up</Link>
+            {connected ? 'Sign in (top right) to see and change your rules.' : 'Connect a wallet and sign in to see and change your rules.'} <Link href="/app/onboarding" style={{ textDecoration: 'underline' }}>Set up</Link>
           </span>
         </div>
       ) : me.data && !me.data.user ? (

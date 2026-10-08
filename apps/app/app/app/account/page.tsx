@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { DisconnectButton } from '@/components/app/connect';
+import { DisconnectButton, WalletPending } from '@/components/app/connect';
 import { fmtBuffer, fmtSignedUsd, fmtUsd, shortAddr, upDown } from '@/components/app/format';
 import { BufferMeter, GuardChip } from '@/components/app/guard-ui';
 import { Icon } from '@/components/app/icons';
@@ -28,7 +28,7 @@ const poolLabel = (kind: string, dex: string | null, token: number | null, coin?
 
 export default function AccountPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const view = useAccountView(address);
   const me = useMe();
   const g = useGuardView();
@@ -84,7 +84,9 @@ export default function AccountPage() {
         </div>
       ) : null}
 
-      {!connected ? (
+      {pending ? (
+        <WalletPending pad={90} />
+      ) : !connected ? (
         <div className="panel">
           <div className="empty" style={{ padding: '90px 16px' }}>
             <div className="ico">{Icon.account(18)}</div>

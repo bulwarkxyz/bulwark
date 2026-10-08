@@ -18,10 +18,11 @@ import { walletErrorText } from '@/lib/wallet-errors';
 import { QueryParam, revealById } from '@/components/app/query-param';
 import { AccountUnavailable } from '@/components/app/account-unavailable';
 import { NoBackstopNotes } from '@/components/app/guard-ui';
+import { WalletPending } from '@/components/app/connect';
 
 export default function PositionsPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const signedIn = useSignedIn();
   const view = useAccountView(address);
   const me = useMe();
@@ -118,7 +119,9 @@ export default function PositionsPage() {
         </div>
       ) : null}
 
-      {!connected ? (
+      {pending ? (
+        <WalletPending pad={80} />
+      ) : !connected ? (
         <div className="panel">
           <div className="empty" style={{ padding: '80px 16px' }}>
             <div className="ico">{Icon.positions(18)}</div>

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useState } from 'react';
 import { useAccount, useSignTypedData } from 'wagmi';
-import { DisconnectButton } from '@/components/app/connect';
+import { DisconnectButton, WalletPending } from '@/components/app/connect';
 import { Icon } from '@/components/app/icons';
 import { GuardKeyCard, KEY_STORAGE, KillSwitchCard, TradingKeyCard, guardKeyStatus, shownCustody } from '@/components/app/keys';
 import { api, useMounted, useSignedIn } from '@/lib/api';
@@ -290,10 +290,10 @@ function DisplayPanel() {
 
 export default function SettingsPage() {
   const review = useReview();
-  const { connected } = useViewer();
+  const { connected, pending } = useViewer();
   const signedIn = useSignedIn() || review.on;
   const me = useMe();
-  const loading = connected && signedIn && !me.isFetched;
+  const loading = pending || connected && signedIn && !me.isFetched;
 
   return (
     <div className="pg">
@@ -390,16 +390,20 @@ export default function SettingsPage() {
               <div className="ph">
                 <h2 id="guard-settings-h">Your guard settings</h2>
               </div>
-              <div className="empty" style={{ padding: '40px 16px' }}>
-                <div className="ico">{Icon.settings(18)}</div>
-                <b>No wallet connected.</b>
-                <span className="small" style={{ maxWidth: 400 }}>
-                  Connect and sign in to manage your guard key and trading key, alerts and Telegram, the Bulwark fee, the kill switch and your account mode. Display settings work without a wallet.
-                </span>
-                <Link className="btn btn-sm btn-ink" href="/app/onboarding">
-                  Connect wallet
-                </Link>
-              </div>
+              {pending ? (
+                <WalletPending pad={40} panel={false} />
+              ) : (
+                <div className="empty" style={{ padding: '40px 16px' }}>
+                  <div className="ico">{Icon.settings(18)}</div>
+                  <b>No wallet connected.</b>
+                  <span className="small" style={{ maxWidth: 400 }}>
+                    Connect and sign in to manage your guard key and trading key, alerts and Telegram, the Bulwark fee, the kill switch and your account mode. Display settings work without a wallet.
+                  </span>
+                  <Link className="btn btn-sm btn-ink" href="/app/onboarding">
+                    Connect wallet
+                  </Link>
+                </div>
+              )}
             </section>
           </div>
         </div>

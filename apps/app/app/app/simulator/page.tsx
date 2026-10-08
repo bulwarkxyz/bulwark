@@ -15,6 +15,7 @@ import { useReview, useViewer } from '@/lib/review';
 import { loadDraft } from '@/lib/draft-store';
 import { draftChanges, draftPolicy } from '@/lib/rule-builder';
 import { AccountUnavailable } from '@/components/app/account-unavailable';
+import { WalletPending } from '@/components/app/connect';
 
 /** Path resolution: the guard looks once per step. */
 const STEPS = 120;
@@ -141,7 +142,7 @@ function BufferChart({ guarded, unguarded, lines, markers }: { guarded: number[]
 
 export default function SimulatorPage() {
   const review = useReview();
-  const { address, connected } = useViewer();
+  const { address, connected, pending } = useViewer();
   const signedIn = useSignedIn() || review.on;
   const view = useAccountView(address);
   const me = useMe();
@@ -277,7 +278,9 @@ export default function SimulatorPage() {
         </div>
       ) : null}
 
-      {!connected ? (
+      {pending ? (
+        <WalletPending pad={80} />
+      ) : !connected ? (
         <div className="panel">
           <div className="empty" style={{ padding: '80px 16px' }}>
             <div className="ico">{Icon.simulator(18)}</div>
