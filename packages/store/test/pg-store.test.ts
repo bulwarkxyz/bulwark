@@ -17,7 +17,7 @@ describe.skipIf(!url)('postgres store', () => {
   const store = new PgStore(sql);
 
   beforeAll(async () => {
-    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands, agent_keys, agent_key_requests, guard_status cascade`;
+    await sql`drop table if exists users, policies, latches, baselines, guard_orders, actions, audit_log, telegram_links, commands, agent_keys, agent_key_requests, guard_status, operator_state cascade`;
     await migrate(sql);
     await migrate(sql); // idempotent
     await store.upsertUser({ account: A, agentKeyRef: 'kms:key-1', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false }, 1);
@@ -32,6 +32,21 @@ describe.skipIf(!url)('postgres store', () => {
     const active = await store.policy(A);
     expect(active?.policy.version).toBe(2);
     expect(active?.hash).toBe(policyHash(p2));
+  });
+
+  it('8 Oct 2026 fields: the chain and network of a policy and a command, operator state, the latest country', async () => {
+    const p: Policy = { version: 3, account: A, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }] }], execution: { maxSlippagePct: 1 } };
+    await store.confirmPolicy(A, { policy: p, hash: policyHash(p), signature: '0xsig3', signatureVerified: true, confirmedAt: 3, chainId: 42161, signedNetwork: 'testnet' });
+    expect(await store.policy(A)).toMatchObject({ chainId: 42161, signedNetwork: 'testnet' });
+    expect(await store.operatorState('global_stop')).toBeNull();
+    await store.setOperatorState('global_stop', { on: true, reason: 'test' }, 5);
+    await store.setOperatorState('global_stop', { on: false }, 6);
+    expect(await store.operatorState('global_stop')).toEqual({ value: { on: false }, at: 6 });
+    await store.setLastSeen(A, 'SG', null);
+    expect(await store.user(A)).toMatchObject({ lastCountry: 'SG', lastSubdivision: null });
+    const id = await store.addCommand({ account: A, command: 'resume', minutes: 0, issuedAt: 7, signature: '0xs-net', chainId: 42161, network: 'testnet' }, 8);
+    expect((await store.pendingCommands()).find((c) => c.id === id)).toMatchObject({ chainId: 42161, network: 'testnet' });
+    await store.finishCommand(id, {}, 9);
   });
 
   it('round-trips latches, baselines, guard orders and actions', async () => {
