@@ -248,6 +248,12 @@ export async function part5(opts: { dryRun: boolean; rehearse?: boolean; ownerAp
       builder: null,
       backstopPricing: 'single',
       agents: async (user: Hex) => (await info.extraAgents(user)) as Array<{ address: string; validUntil?: number | null }>,
+    // As the hosted worker: an order sent without an answer back is looked up by its client order id before any retry.
+    orderStatus: async (user: Hex, cloid: Hex) => {
+      const r = await info.request<{ status: string; order?: { status: string; order: { origSz: string; sz: string } } }>({ type: 'orderStatus', user, oid: cloid });
+      if (r.status !== 'order' || !r.order) return null;
+      return { status: r.order.status, origSz: Number(r.order.order.origSz), sz: Number(r.order.order.sz) };
+    },
       now: Date.now,
     });
     const stream = new HyperliquidStream(opts.rehearse ? 'wss://api.hyperliquid-testnet.xyz/ws' : 'wss://api.hyperliquid.xyz/ws', { onCoinMark: (coin, mark, at) => void engine.onMarks(new Map([[coin, mark]]), at) });
