@@ -70,11 +70,18 @@ export default function RulesPage() {
           {Icon.alert()}
           <span>
             <b>Sign your rules again.</b> Bulwark’s signatures now name the network ({NETWORK}), so a signature made here can never be used on {NETWORK === 'testnet' ? 'mainnet' : 'testnet'}. Your rules stay exactly as they are. Until you sign them again, as version {policy.version + 1}, the guard takes no new action; its resting backstops stay on Hyperliquid.
+            {policy.needsRepeatChoice?.length ? ' First make the choice below: signing it signs your rules again too.' : null}
           </span>
           <span className="sp" />
-          <button type="button" className="btn btn-sm btn-ink" disabled={draft.busy || review.on || !signedIn} onClick={() => void draft.resign()}>
-            {draft.busy ? 'Signing…' : 'Sign again'}
-          </button>
+          {policy.needsRepeatChoice?.length ? (
+            <button type="button" className="btn btn-sm btn-ink" onClick={() => document.getElementById(`need-${policy.needsRepeatChoice![0]}`)?.scrollIntoView({ block: 'center' })}>
+              Choose, then sign
+            </button>
+          ) : (
+            <button type="button" className="btn btn-sm btn-ink" disabled={draft.busy || review.on || !signedIn} onClick={() => void draft.resign()}>
+              {draft.busy ? 'Signing…' : 'Sign again'}
+            </button>
+          )}
         </div>
       ) : null}
       {draft.resignMsg ? (

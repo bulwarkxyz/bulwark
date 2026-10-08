@@ -33,6 +33,16 @@ async function context(opts = {}) {
   });
   return ctx;
 }
+/** Open the connect modal once the page is interactive; a click before hydration does nothing, so retry once. */
+async function openModal(p) {
+  await p.waitForLoadState('load', { timeout: 30_000 }).catch(() => {});
+  const options = p.locator('[data-testid^="rk-wallet-option-"]').first();
+  for (let i = 0; i < 2; i++) {
+    await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click({ timeout: 60_000 });
+    if (await options.waitFor({ timeout: 30_000 }).then(() => true, () => false)) return;
+  }
+  throw new Error('the connect modal did not open');
+}
 async function collect(p, where) {
   const v = await p.evaluate(() => window.__csp ?? []).catch(() => []);
   for (const x of v) seen.set(x, [...(seen.get(x) ?? []), where]);
@@ -50,7 +60,7 @@ if (header === 'none') {
   const ctx = await context();
   const p = await ctx.newPage();
   for (const s of SCREENS) {
-    await p.goto(`${base}${s}${q}`, { timeout: 120_000 });
+    await p.goto(`${base}${s}${q}`, { timeout: 120_000, waitUntil: 'domcontentloaded' });
     await p.waitForTimeout(5000);
     await collect(p, s);
   }
@@ -61,17 +71,16 @@ for (const phone of [false, true]) {
   const opts = phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {};
   const probe = await context(opts);
   let p = await probe.newPage();
-  await p.goto(`${base}/app`);
-  await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click({ timeout: 60_000 });
-  await p.locator('[data-testid^="rk-wallet-option-"]').first().waitFor({ timeout: 60_000 });
+  await p.goto(`${base}/app`, { timeout: 120_000, waitUntil: 'domcontentloaded' });
+  await openModal(p);
   const ids = await p.locator('[data-testid^="rk-wallet-option-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
   await collect(p, `${phone ? 'phone' : 'desktop'} wallet window`);
   await probe.close();
   for (const id of ids) {
     const ctx = await context(opts);
     p = await ctx.newPage();
-    await p.goto(`${base}/app`);
-    await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click({ timeout: 60_000 });
+    await p.goto(`${base}/app`, { timeout: 120_000, waitUntil: 'domcontentloaded' });
+    await openModal(p);
     await p.locator(`[data-testid="${id}"]`).click();
     await p.waitForTimeout(6000);
     const qr = await p.locator('[role="dialog"]').getByText('Scan with your phone').count();
@@ -85,7 +94,7 @@ if (local) {
   const ctx = await context();
   await installTestWallet(ctx);
   const p = await ctx.newPage();
-  await p.goto(`${base}/app/positions`);
+  await p.goto(`${base}/app/positions`, { timeout: 120_000, waitUntil: 'domcontentloaded' });
   await p.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().click({ timeout: 60_000 });
   await p.locator('[role="dialog"]').getByText(/^(Test Wallet|Browser wallet)$/).first().click({ timeout: 30_000 });
   const wb = p.locator('header button.wallet').filter({ visible: true }).first();

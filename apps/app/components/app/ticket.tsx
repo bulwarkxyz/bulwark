@@ -290,7 +290,7 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
         </button>
       )}
       {problem && connected && !stale ? <span className={held && held === problem && region.kind === 'answer' ? 'small ct' : 'tiny t3'}>{problem}</span> : null}
-      {note && !problem ? <span className="tiny t2">{note}</span> : null}
+      {note ? <span className="tiny t2">{note}</span> : null}
       {result ? (
         'error' in result && !('statuses' in result) ? (
           <span className="small ct">{result.error}</span>
