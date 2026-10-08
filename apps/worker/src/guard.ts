@@ -32,8 +32,11 @@ export const DEGRADED_ALERT_EVERY_MS = 5 * 60_000;
  * How long the account's mode (standard or unified) is trusted before it is read again. The user can switch it at
  * any time (the app's Settings > Account mode); until 6 Oct 2026 it was read once, so after a switch the guard kept
  * pricing a unified account as standard (testnet run: a 10x buffer alert and a backstop for a ~1,999x account).
+ * Every 10 minutes, not 30 s: each read costs 20 of Hyperliquid's 1,200 weight a minute per IP, and at 30 s these
+ * reads alone capped a worker at about 16 guarded accounts (8 Oct 2026). The cost: after a switch the guard can price
+ * the account on its old mode for up to 10 minutes (in the testnet case, it erred towards closing early).
  */
-export const ABSTRACTION_TTL_MS = 30_000;
+export const ABSTRACTION_TTL_MS = 10 * 60_000;
 /** Data must be past its limit this long before the user is told (a reconnect's few seconds are not news). */
 export const DEGRADED_ALERT_AFTER_MS = 20_000;
 export const BACKSTOP_EVERY_MS = 60_000;
@@ -43,8 +46,11 @@ export const CHOICE_NOTICE_WHY = 'A new setting needs your choice';
 export const OPEN_ORDERS_RETRY_MS = 5_000;
 /** The status is written when it changes, and at least this often while the account is evaluated. */
 export const STATUS_WRITE_EVERY_MS = 15_000;
-/** How often the guard key is checked: still approved on Hyperliquid, not expired, loadable by the signer. */
-export const KEY_CHECK_EVERY_MS = 60_000;
+/**
+ * How often the guard key is checked: still approved on Hyperliquid, not expired, loadable by the signer. Every 10
+ * minutes (each check costs 20 weight); an exchange refusal that names the agent triggers a check at once anyway.
+ */
+export const KEY_CHECK_EVERY_MS = 10 * 60_000;
 /** After the exchange did not answer, the guard shows as paused this long unless a later request gets through. */
 export const EXCHANGE_DOWN_HOLD_MS = 120_000;
 /** Exchange errors that mean the guard key is no longer approved for the account. */
