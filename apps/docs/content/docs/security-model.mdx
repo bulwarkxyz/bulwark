@@ -136,7 +136,7 @@ The app reads the log back to its first entry, page by page (up to 20,000 entrie
 
 These were found in the same review and are not fixed yet. None lets anyone withdraw your funds.
 
-- **No enforced Content Security Policy in the app.** The optional trading key lives in your browser's storage, so a script injected into the app (for example through a compromised dependency) could read it. Framing and other browser protections are being added, with the policy reported before it is enforced.
+- **The app's Content Security Policy is not enforced yet.** Since 8 October it is sent in report-only mode, so violations are logged but nothing is blocked. The optional trading key lives in your browser's storage, so a script injected into the app (for example through a compromised dependency) could read it. The app refuses to be framed by other sites (`X-Frame-Options: DENY`).
 - **The builder-fee check in the guard cannot fail today** (I7). It does not matter yet: the guard never attaches a builder code to its own orders. It will be fixed before it does.
 - **Build hygiene.** The CI workflow's token permissions and action versions are not pinned, the services run as root with development tools installed, and dependency updates are not automated.
 - **Bad input can return a generic error** in a few API endpoints, instead of a clear message. Nothing is exposed.
@@ -144,14 +144,12 @@ These were found in the same review and are not fixed yet. None lets anyone with
 
 ## Dependency check
 
-On **8 October 2026**, `pnpm audit` reported **33 advisories**: 5 critical, 11 high, 16 moderate and 1 low.
+On **8 October 2026**, `pnpm audit` first reported **33 advisories** (5 critical, 11 high, 16 moderate, 1 low), all in the web framework, the wallet-connection libraries and the test runner. None was in the packages the API, the guard service, the signer or the guard engine run in production.
 
-- **Where they are.** All of them are in:
-  - the web framework used by the app and these docs (Next.js and the image and CSS libraries it bundles);
-  - the wallet-connection libraries in the app;
-  - the test runner, which does not run in production.
-- **What is clean.** None is in the packages the API, the guard service, the signer or the guard engine run in production.
-- **Exposure.** Most of the framework advisories concern features the app does not use. The framework upgrade is still due.
+The same day, the web framework (Next.js) and the test runner were upgraded. **One moderate advisory is left:**
+- **What:** `decode-uri-component` can be slowed down by malformed percent-encoding.
+- **Where:** it comes in through WalletConnect's libraries, in the browser.
+- **Why it stays:** the fixed version cannot be loaded by the library that uses it, so forcing it would break WalletConnect. It goes when WalletConnect moves off that library.
 
 This section will be updated with each check.
 
