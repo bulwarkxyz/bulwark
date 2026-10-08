@@ -13,6 +13,7 @@ import { part3multi } from './part3multi.js';
 import { part4 } from './part4.js';
 import { part5 } from './part5.js';
 import { part6 } from './part6.js';
+import { demoState } from './demo-state.js';
 import { linkTelegram } from './link-telegram.js';
 
 const [part, ...rest] = process.argv.slice(2);
@@ -39,6 +40,7 @@ const parts: Record<string, () => Promise<void>> = {
   part4: () => part4({ dryRun, switchMode: !rest.includes('--no-switch'), ...approval }),
   'link-telegram': () => linkTelegram(),
   part6: () => part6({ dryRun }),
+  'demo-state': () => demoState({ ...approval }),
   part5: () => part5({ dryRun, rehearse: rest.includes('--rehearse'), ...approval }),
 };
 
