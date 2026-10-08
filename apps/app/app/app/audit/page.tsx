@@ -57,7 +57,7 @@ export default function AuditPage() {
   const signedIn = useSignedIn();
   const [open, setOpen] = useState<number | null>(null);
   const [filter, setFilter] = useState('all');
-  const log = useAudit();
+  const log = useAudit({ whole: true });
   const times = useTimes();
   const all = [...(log.data ?? [])].sort((a, b) => b.seq - a.seq);
   // ?seq=12 (a notification's link): show every kind, open that entry and bring it into view.
@@ -72,7 +72,7 @@ export default function AuditPage() {
   }, [found, target]);
   const kinds = FILTERS.find((f) => f.id === filter)?.kinds ?? null;
   const entries = kinds ? all.filter((e) => kinds.includes(e.kind)) : all;
-  // The API returns the newest 500; the chain is checked from the oldest one returned.
+  // The whole chain is read back page by page (lib/audit.ts); it is checked only when it reaches entry #1.
   const fromStart = all.some((e) => e.seq === 1);
   const broken = review.state === 'error' ? 4 : log.data && fromStart && !review.on ? verifyChain(log.data) : null;
   const loading = review.state === 'loading' || (Boolean(address && (signedIn || review.on)) && log.isLoading);
@@ -86,8 +86,8 @@ export default function AuditPage() {
     <span className="chip">Example entries · chain not checked</span>
   ) : all.length ? (
     <span className="chip">
-      {Icon.check()}
-      {fromStart ? `Chain verified in your browser · ${all.length} entries` : 'Showing the newest 500'}
+      {fromStart ? Icon.check() : null}
+      {fromStart ? `Chain verified in your browser · ${all.length} entries` : `Showing the newest ${all.length} · older entries not checked`}
     </span>
   ) : null;
 

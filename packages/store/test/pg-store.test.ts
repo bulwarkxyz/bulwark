@@ -114,7 +114,9 @@ describe.skipIf(!url)('postgres store', () => {
 
   it('queues signed commands and flips the kill switch', async () => {
     const id = await store.addCommand({ account: A, command: 'stop', minutes: 0, issuedAt: 5, signature: '0xs' }, 6);
-    expect(await store.pendingCommands()).toEqual([{ id, account: A, command: 'stop', minutes: 0, issuedAt: 5 }]);
+    expect(await store.pendingCommands()).toEqual([{ id, account: A, command: 'stop', minutes: 0, issuedAt: 5, acceptedAt: 6, signature: '0xs', chainId: null, network: null }]);
+    // F5: a signature is stored once, so a signed command cannot be replayed.
+    await expect(store.addCommand({ account: A, command: 'stop', minutes: 0, issuedAt: 5, signature: '0xs' }, 7)).rejects.toThrow(/commands_signature_once/);
     await store.finishCommand(id, { cancelled: 2 }, 7);
     expect(await store.pendingCommands()).toEqual([]);
     await store.setKillSwitch(A, true);
@@ -155,7 +157,7 @@ describe.skipIf(!url)('postgres store', () => {
   });
 
   it('accepts the wipe command', async () => {
-    const id = await store.addCommand({ account: A, command: 'wipe', minutes: 0, issuedAt: 20, signature: '0xsig' }, 20);
+    const id = await store.addCommand({ account: A, command: 'wipe', minutes: 0, issuedAt: 20, signature: '0xsig-wipe-2' }, 20);
     expect((await store.pendingCommands()).find((c) => c.id === id)?.command).toBe('wipe');
   });
 });

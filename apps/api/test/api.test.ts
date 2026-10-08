@@ -4,7 +4,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { REPEAT_QUESTION, anthropicProvider } from '@bulwarkxyz/compiler';
-import { STATUS_MAX_AGE_MS, createApp, retireKmsKeys } from '../src/app.js';
+import { DRAFTS_PER_HOUR_ALL, STATUS_MAX_AGE_MS, createApp, retireKmsKeys } from '../src/app.js';
 
 const user = privateKeyToAccount(`0x${'77'.repeat(32)}`);
 const stranger = privateKeyToAccount(`0x${'78'.repeat(32)}`);
@@ -151,7 +151,7 @@ describe('policy confirmation', () => {
     expect(me.policy.needsRepeatChoice).toEqual(['stage-1']);
   });
   const sign = (signer = user, p = policy) =>
-    signer.signTypedData({ domain: policyConfirmationDomain(42161), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: ACCOUNT, version: BigInt(p.version), policyHash: policyHash(p) } });
+    signer.signTypedData({ domain: policyConfirmationDomain(42161), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { network: 'testnet', account: ACCOUNT, version: BigInt(p.version), policyHash: policyHash(p) } });
 
   it('stores a policy the user signed and logs it', async () => {
     const token = await signIn();
@@ -172,7 +172,7 @@ describe('policy confirmation', () => {
 
 describe('commands', () => {
   const sign = (command: string, minutes: number, issuedAt: number) =>
-    user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: ACCOUNT, command, minutes, issuedAt: BigInt(issuedAt) } });
+    user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { network: 'testnet', account: ACCOUNT, command, minutes, issuedAt: BigInt(issuedAt) } });
 
   it('kill switch takes effect at once and is queued for the worker; resume turns it off', async () => {
     const token = await signIn();
@@ -213,6 +213,23 @@ describe('AI translator', () => {
   const withTranslator = (out: unknown) => createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: anthropicProvider(reply(out)) });
   const draft = (a: ReturnType<typeof createApp>, token: string, text: string, extra: Record<string, unknown> = {}) => a.request('/v1/rules/draft', { method: 'POST', headers: authed(token), body: JSON.stringify({ text, ...extra }) });
   const confirm = () => store.confirmPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x', signatureVerified: true, confirmedAt: now });
+  // Translations are for onboarded users in a region where Bulwark is offered (F6).
+  beforeEach(() => store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: null, region: 'allowed', residency: 'IN', citizenship: 'IN', telegramChatId: null, killSwitch: false, builderApproved: false }));
+
+  it('cost caps (F6): no translations before onboarding or from a blocked region, and a cap across all accounts', async () => {
+    const token = await signIn();
+    const t = withTranslator({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }, message: '' });
+    await confirm();
+    store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: null, region: 'allowed', residency: 'US', citizenship: 'IN', telegramChatId: null, killSwitch: false, builderApproved: false });
+    expect((await draft(t, token, 'below 2x alert me, only once')).status).toBe(403); // before 8 Oct: any signed-in wallet
+    store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', agentAddress: null, region: 'allowed', residency: 'IN', citizenship: 'IN', telegramChatId: null, killSwitch: false, builderApproved: false });
+    // Many fresh accounts each under their own cap still meet the cap across all accounts.
+    const fresh = createApp({ store, info, jwtSecret: new TextEncoder().encode('test-secret-test-secret-test-secret'), proxySecret: PROXY, siweDomain: DOMAIN, keyCustody: 'kms' as const, network: 'testnet' as const, now: () => now, translator: anthropicProvider(reply({ outcome: 'rule', rule: { when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }, message: '' })), limits: { draftsPerHour: 1000 } });
+    let last = 0;
+    for (let i = 0; i < DRAFTS_PER_HOUR_ALL + 1; i++) last = (await draft(fresh, token, 'below 2x alert me, only once')).status;
+    expect(last).toBe(429);
+  });
+
 
   it('is off without a key; for a first policy it needs the slippage limit the user typed, and drafts version 1', async () => {
     const token = await signIn();
@@ -306,7 +323,7 @@ describe('encrypted-at-rest guard keys (sealed custody)', () => {
   it('wipe is a signed command that stops the guard at once', async () => {
     const token = await signIn();
     await app.request('/v1/onboarding/attest', { method: 'POST', headers: authed(token, fromProxy('IN')), body: JSON.stringify({ residency: 'IN', citizenship: 'IN' }) });
-    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: ACCOUNT, command: 'wipe', minutes: 0, issuedAt: BigInt(now) } });
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { network: 'testnet', account: ACCOUNT, command: 'wipe', minutes: 0, issuedAt: BigInt(now) } });
     const res = await app.request('/v1/commands', { method: 'POST', headers: authed(token), body: JSON.stringify({ command: 'wipe', issuedAt: now, signature: sig, chainId: 42161 }) });
     expect(res.status).toBe(200);
     expect((await store.user(ACCOUNT))?.killSwitch).toBe(true);
@@ -424,7 +441,7 @@ describe('command results and alerts', () => {
   it('returns a command and, once the worker has done it, its result; never another account’s', async () => {
     const token = await signIn();
     onboard();
-    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: BigInt(now) } });
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { network: 'testnet', account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: BigInt(now) } });
     const { id } = (await (await app.request('/v1/commands', { method: 'POST', headers: authed(token), body: JSON.stringify({ command: 'stop', issuedAt: now, signature: sig, chainId: 42161 }) })).json()) as { id: number };
     expect(await (await app.request(`/v1/commands/${id}`, { headers: authed(token) })).json()).toMatchObject({ id, command: 'stop', doneAt: null, result: null });
     await store.finishCommand(id, { cancelled: 1 }, now + 2000);

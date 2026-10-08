@@ -29,3 +29,13 @@ describe('audit chain', () => {
     expect(verifyChain(chain)).toBe(3);
   });
 });
+
+describe('a database belongs to one network (mainnet prerequisites)', () => {
+  it('the first service stamps it; a service for the other network refuses to start against it', async () => {
+    const { MemoryStore, stampNetwork } = await import('../src/store.js');
+    const store = new MemoryStore();
+    await stampNetwork(store, 'testnet', 1);
+    await stampNetwork(store, 'testnet', 2);
+    await expect(stampNetwork(store, 'mainnet', 3)).rejects.toThrow(/belongs to testnet/);
+  });
+});

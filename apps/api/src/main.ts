@@ -1,5 +1,6 @@
 /**
- * Bulwark API (Railway). Env: DATABASE_URL, JWT_SECRET, PROXY_SECRET, SIWE_DOMAIN, NETWORK, PORT.
+ * Bulwark API (Railway). Env: DATABASE_URL, JWT_SECRET, PROXY_SECRET, SIWE_DOMAIN, NETWORK (required: testnet or mainnet), PORT,
+ * SIGNUP_ALLOWLIST (optional, comma-separated accounts: only these can sign in).
  * KMS key provisioning turns on when AWS credentials for the bulwark-provisioner IAM user are set
  * (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION=ap-southeast-1). The AI translator turns on with
  * TRANSLATOR_ENABLED=1 and OPENAI_API_KEY (TRANSLATOR_PROVIDER=anthropic with ANTHROPIC_API_KEY to switch back).
@@ -10,12 +11,13 @@ import { KMSClient } from '@aws-sdk/client-kms';
 import { anthropicProvider, openAIProvider, type MessagesClient } from '@bulwarkxyz/compiler';
 import { InfoClient, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { ProvisionerKms, createGuardKey, retireGuardKey } from '@bulwarkxyz/signer';
-import { PgStore, migrate } from '@bulwarkxyz/store';
+import { PgStore, migrate, stampNetwork } from '@bulwarkxyz/store';
+import { parseNetwork } from '@bulwarkxyz/config';
 import postgres from 'postgres';
 import { arbitrumCode } from './signatures.js';
 import { createApp, retireKmsKeys } from './app.js';
 
-const network = (process.env.NETWORK ?? 'testnet') as Network;
+const network = parseNetwork(process.env.NETWORK) as Network;
 const need = (k: string) => {
   const v = process.env[k];
   if (!v) throw new Error(`missing ${k}`);
@@ -35,6 +37,7 @@ async function main() {
   }
   const kms = process.env.AWS_ACCESS_KEY_ID ? new ProvisionerKms(new KMSClient({ region: process.env.AWS_REGION ?? 'ap-southeast-1' })) : null;
   const store = new PgStore(sql);
+  await stampNetwork(store, network, Date.now());
   // The translator runs only when switched on (after the eval's adversarial set passed) and keyed.
   const translator =
     process.env.TRANSLATOR_ENABLED !== '1'
@@ -47,6 +50,7 @@ async function main() {
           ? anthropicProvider(new Anthropic({ maxRetries: 2, timeout: 60_000 }) as unknown as MessagesClient)
           : null;
   const app = createApp({
+    signupAllowlist: process.env.SIGNUP_ALLOWLIST ? new Set(process.env.SIGNUP_ALLOWLIST.split(',').map((a) => a.trim().toLowerCase()).filter(Boolean)) : undefined,
     store,
     info: new InfoClient(network),
     jwtSecret: new TextEncoder().encode(need('JWT_SECRET')),
@@ -59,6 +63,15 @@ async function main() {
     network,
     ...(kms ? { provisionAgent: (account: Hex) => createGuardKey(kms, { user: account, env: network }) } : {}),
     telegramBot: process.env.TELEGRAM_BOT_USERNAME ?? 'BulwarkGuardBot',
+    // Operator alerting: off until both are set (the bot token and the operator's own chat id).
+    ...(process.env.TELEGRAM_BOT_TOKEN && process.env.OPERATOR_ALERT_CHAT_ID
+      ? {
+          operatorAlert: async (text: string) => {
+            const r = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: process.env.OPERATOR_ALERT_CHAT_ID, text }), signal: AbortSignal.timeout(5000) });
+            if (!r.ok) throw new Error(`telegram ${r.status}`);
+          },
+        }
+      : {}),
     codeAt: arbitrumCode(),
     now: Date.now,
   });
@@ -68,6 +81,8 @@ async function main() {
     setInterval(() => void retireKmsKeys(retire).catch((e) => console.error('retireKmsKeys', e)), 15_000);
   }
   serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) });
+  // The operator watchdog (does nothing until operator alerting is configured).
+  setInterval(() => void app.watchdog().catch((e) => console.error('watchdog', e)), 30_000);
   console.log(JSON.stringify({ msg: 'api started', network, kms: Boolean(kms), translator: translator?.id ?? null }));
 }
 

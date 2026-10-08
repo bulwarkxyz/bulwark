@@ -221,7 +221,7 @@ export async function part5(opts: { dryRun: boolean; rehearse?: boolean; ownerAp
     const policy: Policy = { version: 1, account: WALLET.toLowerCase() as Hex, rules: [{ id: 'canary-trim', when: { kind: 'buffer', below: line }, then: [{ kind: 'reduce', target: { kind: 'first_position' }, fraction: CANARY.trimFraction }], repeat: { mode: 'oncePerBreach' } }], execution: { maxSlippagePct: CANARY.slippagePct } };
     if (!(await ask(`Sign the rule: "when the xyz pool's buffer is below ${line}x, trim the first position by 50%, once per fall". Your buffer is ${buffer.toFixed(2)}x, so the guard trims at once.`, `About half the ${ticker} position (about $${((Math.abs(held.szi) * mark0) / 2).toFixed(2)}).`))) return closeAll('stopped before the rule');
     const domain = policyConfirmationDomain(42161);
-    const message = { account: WALLET, version: BigInt(policy.version), policyHash: policyHash(policy) };
+    const message = { account: WALLET, network: net, version: BigInt(policy.version), policyHash: policyHash(policy) };
     const signature = await wallet.signTypedData({ domain, types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message });
     const verified = await verifyTypedData({ address: WALLET, domain, types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message, signature });
     step('rule signed', { policy, hash: policyHash(policy), signature, verified });
@@ -230,7 +230,7 @@ export async function part5(opts: { dryRun: boolean; rehearse?: boolean; ownerAp
     const store = new MemoryStore();
     // Not linked: the alert the guard would send is still built, and printed here and kept in the evidence.
     store.putUser({ account: WALLET, agentKeyRef: 'local:canary', agentAddress: guardAddress.toLowerCase() as Hex, region: 'allowed', telegramChatId: chatId && botToken ? chatId : 'console', killSwitch: false, builderApproved: false });
-    store.putPolicy(WALLET, { policy, hash: policyHash(policy), signature, signatureVerified: verified, confirmedAt: Date.now() });
+    store.putPolicy(WALLET, { policy, hash: policyHash(policy), signature, signatureVerified: verified, confirmedAt: Date.now(), chainId: 42161, signedNetwork: net });
     const notifier = chatId && botToken ? new TelegramNotifier(botToken) : new ConsoleNotifier();
     const alerts: Array<{ at: string; text: string }> = [];
     const engine = new GuardEngine({

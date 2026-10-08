@@ -94,7 +94,11 @@ export class CommandSigner {
     return this.signer.signDigest(digestOf(l1TypedData(l1ActionHash({ action: wire, nonce }), this.isMainnet)));
   }
 
-  async signUnwindStep(cmd: UserCommand, step: UnwindStep, snapshot: AccountSnapshot, nonce: number, now: number): Promise<Signature> {
+  /**
+   * `price`: the mark the step was planned from and the user's slippage. An IOC close must be priced within that
+   * slippage of the mark (plus one tick of rounding); security review F9.
+   */
+  async signUnwindStep(cmd: UserCommand, step: UnwindStep, snapshot: AccountSnapshot, nonce: number, now: number, price?: { mark: number; maxSlippagePct: number }): Promise<Signature> {
     checkFresh(cmd, now);
     if (cmd.kind !== 'unwind') throw new CommandRejected('not an unwind command');
     const pos = snapshot.positions.find((p) => p.coin === step.coin);
@@ -106,6 +110,9 @@ export class CommandSigner {
     } else {
       const o = w.orders[0];
       if (w.orders.length !== 1 || !o || !o.r || o.b !== isBuy || o.a !== pos.asset.assetId || Number(o.s) > Math.abs(pos.size) + 1e-12 || w.builder) throw new CommandRejected('unwind order is not a reduce-only close of this position');
+      if (!price || !(price.mark > 0)) throw new CommandRejected('unwind order has no mark to check its price against');
+      const away = Math.abs(Number(o.p) - price.mark) / price.mark;
+      if (away > price.maxSlippagePct / 100 + 1e-3) throw new CommandRejected(`unwind price ${o.p} is ${(away * 100).toFixed(2)}% from the mark, beyond your ${price.maxSlippagePct}% slippage`);
     }
     return this.signL1(w, nonce);
   }

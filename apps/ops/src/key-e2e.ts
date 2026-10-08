@@ -44,7 +44,7 @@ async function main() {
   log('me', { keyCustody: me.body.keyCustody, newKeyCustody: me.body.newKeyCustody, refKind: me.body.user?.agentKeyRef.split(':')[0] });
 
   const issuedAt = Date.now();
-  const signature = await account.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: account.address, command: 'wipe', minutes: 0, issuedAt: BigInt(issuedAt) } });
+  const signature = await account.signTypedData({ domain: policyConfirmationDomain(42161), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { network: 'testnet', account: account.address, command: 'wipe', minutes: 0, issuedAt: BigInt(issuedAt) } });
   const wipe = await call<Record<string, unknown>>('/v1/commands', { body: { command: 'wipe', issuedAt, signature, chainId: 42161 }, token });
   log('wipe sent', { status: wipe.status });
 

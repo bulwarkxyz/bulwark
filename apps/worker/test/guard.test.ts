@@ -5,15 +5,16 @@ import { HttpError, NonceManager, parseExchangeResponse, type Hex, type SignedRe
 import { LocalDigestSigner } from '@bulwarkxyz/signer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { verifyChain } from '@bulwarkxyz/store';
-import { ABSTRACTION_TTL_MS, BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, positionsKey, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
+import { ABSTRACTION_TTL_MS, OPERATOR_STOP_TTL_MS, OPERATOR_STOP_WHY, RESIGN_NOTICE_WHY, BACKSTOP_EVERY_MS, EXCHANGE_DOWN_HOLD_MS, GuardEngine, KEY_CHECK_EVERY_MS, positionsKey, STATUS_WRITE_EVERY_MS } from '../src/guard.js';
 import { RETRY_ALERT_AFTER } from '@bulwarkxyz/guard-core';
 import { ConsoleNotifier } from '../src/notify.js';
 import { MemoryStore, type GuardUser } from '@bulwarkxyz/store';
+import { OTHER_WALLET, TEST_WALLET, addr, signed, signedCommand } from './signed.js';
 
 const fx = (n: string) => JSON.parse(readFileSync(new URL(`../../../packages/guard-core/test/fixtures/${n}`, import.meta.url), 'utf8'));
 const assets = buildAssetIndex(fx('perpDexs.json'), fx('allPerpMetas.json'));
 const collateral = dexCollateral(fx('perpDexs.json'), fx('allPerpMetas.json'));
-const ACCOUNT = '0x9959260f1aa229f8a70e0c495ca9b251106c1a86' as Hex;
+const ACCOUNT = addr(TEST_WALLET) as Hex;
 
 function xyzState(size: number, mark: number, equity: number): RawClearinghouseState {
   const mm = maintenanceMargin(assets.get('xyz:CL')!.tiers, size * mark);
@@ -39,6 +40,7 @@ const policy: Policy = {
   ],
   execution: { maxSlippagePct: 1 },
 };
+const SIGNED = await signed(policy);
 
 let t = 1_791_150_000_000;
 let store: MemoryStore;
@@ -58,7 +60,7 @@ function setup(user: Partial<GuardUser> = {}) {
   orderReplies = [];
   agents = [{ address: AGENT, validUntil: null }];
   store.putUser({ account: ACCOUNT, agentKeyRef: 'local:test', agentAddress: AGENT, region: 'allowed', telegramChatId: '42', killSwitch: false, builderApproved: false, ...user });
-  store.putPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x00', signatureVerified: true, confirmedAt: t });
+  store.putPolicy(ACCOUNT, { ...SIGNED, confirmedAt: t });
   let oid = 100;
   engine = new GuardEngine({
     network: 'testnet',
@@ -137,9 +139,9 @@ describe('guard engine', () => {
   });
 
   it('when Hyperliquid refuses a request for one account (429), the others still run and nothing rejects', async () => {
-    const OTHER = '0x00000000000000000000000000000000000b0b00';
+    const OTHER = addr(OTHER_WALLET);
     store.putUser({ account: OTHER, agentKeyRef: 'local:test', agentAddress: AGENT, region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
-    store.putPolicy(OTHER, { policy: { ...policy, account: OTHER }, hash: policyHash({ ...policy, account: OTHER }), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    store.putPolicy(OTHER, await signed({ ...policy, account: OTHER }, OTHER_WALLET, t));
     (engine as unknown as { deps: { abstraction: (u: string) => Promise<string> } }).deps.abstraction = async (u) => {
       if (u.toLowerCase() === OTHER) throw new HttpError(429, 'null');
       return 'default';
@@ -272,7 +274,7 @@ describe('guard engine', () => {
     expect(mine).toHaveLength(1);
     (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = async () => [{ coin: 'xyz:CL', oid: mine[0]!.oid, side: 'A', reduceOnly: true, isTrigger: true }, { coin: 'xyz:CL', oid: 999, side: 'A', reduceOnly: true, isTrigger: true }];
     sent = [];
-    const r = await engine.command({ id: 1, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t });
+    const r = await engine.command({ id: 1, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t, ...(await signedCommand('stop', 0, t)) });
     expect(r).toMatchObject({ cancelled: 1 });
     expect(sent[0]!.action).toEqual({ type: 'cancel', cancels: [{ a: assets.get('xyz:CL')!.assetId, o: mine[0]!.oid }] });
     expect(await store.guardOrders(ACCOUNT)).toEqual([]);
@@ -284,21 +286,21 @@ describe('guard engine', () => {
     const open = async () => (await store.guardOrders(ACCOUNT)).map((o) => ({ coin: o.coin, oid: o.oid, side: 'A', reduceOnly: true, isTrigger: true }));
     (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = open;
     // Before 8 Oct 2026 both of these were refused as "command expired" and marked done.
-    expect(await engine.command({ id: 3, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t + 10_000, acceptedAt: t })).toMatchObject({ cancelled: mine.length });
+    expect(await engine.command({ id: 3, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t + 10_000, acceptedAt: t, ...(await signedCommand('stop', 0, t + 10_000)) })).toMatchObject({ cancelled: mine.length });
     await feed(91.5); // the guard places its backstop again (the kill switch flag is the API's)
     const accepted = t;
     t += 10 * 60_000;
-    expect(await engine.command({ id: 4, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: accepted, acceptedAt: accepted })).not.toHaveProperty('error', expect.stringMatching(/expired/));
+    expect(await engine.command({ id: 4, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: accepted, acceptedAt: accepted, ...(await signedCommand('stop', 0, accepted)) })).not.toHaveProperty('error', expect.stringMatching(/expired/));
     t += 6 * 60_000;
     await feed(91.5);
     // Past the queue limit a command is refused (an unwind signs as long as a position is open).
-    await expect(engine.command({ id: 5, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: accepted, acceptedAt: accepted })).rejects.toThrow(/expired/);
+    await expect(engine.command({ id: 5, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: accepted, acceptedAt: accepted, ...(await signedCommand('unwind', 10, accepted)) })).rejects.toThrow(/expired/);
   });
 
   it('panic unwind closes positions reduce-only', async () => {
     await feed(91.5);
     sent = [];
-    const r = (await engine.command({ id: 2, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t, acceptedAt: t })) as { steps: Array<{ ok: boolean }> };
+    const r = (await engine.command({ id: 2, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t, acceptedAt: t, ...(await signedCommand('unwind', 10, t)) })) as { steps: Array<{ ok: boolean }> };
     expect(r.steps).toHaveLength(1);
     expect(sent[0]!.action).toMatchObject({ type: 'order', orders: [{ b: false, r: true, s: '0.24' }] }); // $22 < $100 → IOC close
   });
@@ -502,7 +504,7 @@ describe('guard status', () => {
     await feed(91.5);
     expect(await status()).toMatchObject({ state: 'alerts_only' });
     setup();
-    store.putPolicy(ACCOUNT, { policy: { ...policy, rules: [] }, hash: policyHash({ ...policy, rules: [] }), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    store.putPolicy(ACCOUNT, await signed({ ...policy, rules: [] }, TEST_WALLET, t));
     await feed(91.5);
     expect(await status()).toMatchObject({ state: 'no_rules', reason: null });
   });
@@ -580,7 +582,7 @@ describe('backstops priced as if the pool moves together', () => {
     expect(second.find((o) => o.coin === 'xyz:CL')!.triggerPx).toBeLessThan(first.find((o) => o.coin === 'xyz:CL')!.triggerPx);
     // New rules (lowest line 1.5): re-priced at once, without waiting for the minute's sync.
     const raised: Policy = { ...policy, version: 2, rules: policy.rules.map((r) => (r.id === 'stage-3' ? { ...r, when: { kind: 'buffer' as const, below: 1.5 } } : r)) };
-    store.putPolicy(ACCOUNT, { policy: raised, hash: policyHash(raised), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    store.putPolicy(ACCOUNT, await signed(raised, TEST_WALLET, t));
     t += 1000;
     await engine.onMarks(new Map([['xyz:CL', 99.99], ['xyz:GOLD', 3999.9]]), t);
     const third = await store.guardOrders(ACCOUNT);
@@ -631,8 +633,87 @@ describe('repeat choice for policies signed before it existed', () => {
 
   it('says nothing once every stage has a choice', async () => {
     const chosen: Policy = { ...policy, version: 2, rules: policy.rules.map((r) => ({ ...r, repeat: { mode: 'everyCrossing' as const } })) };
-    store.putPolicy(ACCOUNT, { policy: chosen, hash: policyHash(chosen), signature: '0x00', signatureVerified: true, confirmedAt: t });
+    store.putPolicy(ACCOUNT, await signed(chosen, TEST_WALLET, t));
     await feed(91.5);
     expect(store.audit.raw(ACCOUNT).filter((e) => e.why === 'A new setting needs your choice')).toEqual([]);
+  });
+});
+
+describe('security review (8 Oct 2026): the worker checks for itself', () => {
+  beforeEach(() => setup());
+  const orders = () => sent.filter((r) => (r.action as { type: string }).type === 'order');
+  const status = async () => (await store.guardStatus(ACCOUNT)) as { state: string; reason: string | null };
+
+  it('F3: rules whose stored signature is forged get no action, whatever the stored "verified" flag says; one notice', async () => {
+    const forged = await signed(policy, OTHER_WALLET); // signed by someone else for this account's rules
+    store.putPolicy(ACCOUNT, { ...forged, signatureVerified: true });
+    await feed(69); // deep below every line
+    expect(orders()).toEqual([]);
+    expect(await status()).toMatchObject({ state: 'paused', reason: 'resign_required' });
+    await tick(68);
+    await tick(67);
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.why === RESIGN_NOTICE_WHY)).toHaveLength(1);
+  });
+
+  it('F5: rules signed before signatures named the network, or for mainnet, need a re-sign; resting backstops are left alone', async () => {
+    await feed(91.5); // calm: the guard places its backstop under the signed rules
+    const placed = await store.guardOrders(ACCOUNT);
+    expect(placed.length).toBeGreaterThan(0);
+    store.putPolicy(ACCOUNT, { ...SIGNED, chainId: null, signedNetwork: null, confirmedAt: t }); // a pre-8-Oct row
+    sent = [];
+    await tick(69);
+    expect(sent).toEqual([]); // no new action, and no cancel of the resting backstop
+    expect(await store.guardOrders(ACCOUNT)).toEqual(placed);
+    expect(await status()).toMatchObject({ reason: 'resign_required' });
+    store.putPolicy(ACCOUNT, await signed(policy, TEST_WALLET, t, 'mainnet'));
+    await tick(68);
+    expect(orders()).toEqual([]);
+  });
+
+  it('global stop: nothing is evaluated, signed or cancelled for anyone; backstops stand; each user is told once; resume restores', async () => {
+    await feed(91.5);
+    const placed = await store.guardOrders(ACCOUNT);
+    await store.setOperatorState('global_stop', { on: true, reason: 'maintenance' }, t);
+    sent = [];
+    t += OPERATOR_STOP_TTL_MS + 1;
+    await tick(69);
+    await tick(68);
+    expect(sent).toEqual([]);
+    expect(await store.guardOrders(ACCOUNT)).toEqual(placed);
+    expect(await status()).toMatchObject({ state: 'paused', reason: 'operator_stop' });
+    expect(store.audit.raw(ACCOUNT).filter((e) => e.why === OPERATOR_STOP_WHY)).toHaveLength(1);
+    expect(notifier.sent.at(-1)?.text).toMatch(/paused the guard for every account \(maintenance\)/);
+    await store.setOperatorState('global_stop', { on: false }, t);
+    t += OPERATOR_STOP_TTL_MS + 1;
+    await tick(69);
+    expect(orders().length).toBeGreaterThan(0); // acting again
+  });
+
+  it('regions at every action: a user whose latest request came from a blocked country gets alerts only', async () => {
+    setup({ residency: 'IN', citizenship: 'IN', lastCountry: 'US' });
+    await feed(69);
+    expect(orders()).toEqual([]);
+    expect(await status()).toMatchObject({ state: 'alerts_only' });
+  });
+
+  it('commands: one whose signature does not verify (or names mainnet) is not carried out', async () => {
+    await feed(91.5);
+    sent = [];
+    const forged = await signedCommand('stop', 0, t, OTHER_WALLET);
+    expect(await engine.command({ id: 9, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t, ...forged })).toMatchObject({ unverified: true });
+    const mainnet = await signedCommand('stop', 0, t, TEST_WALLET, 'mainnet');
+    expect(await engine.command({ id: 10, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t, ...mainnet })).toMatchObject({ unverified: true });
+    // A wipe's stop step is checked against the wipe the user signed.
+    const wipe = await signedCommand('wipe', 0, t);
+    expect(await engine.command({ id: 11, account: ACCOUNT, command: 'stop', signedAs: 'wipe', minutes: 0, issuedAt: t, acceptedAt: t, ...wipe })).not.toHaveProperty('unverified');
+    expect(await engine.command({ id: 12, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t, ...wipe })).toMatchObject({ unverified: true });
+  });
+
+  it('F9: an unwind is refused when prices are older than the guard allows', async () => {
+    await feed(91.5);
+    t += 60_000; // no new price for a minute
+    sent = [];
+    expect(await engine.command({ id: 13, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t, acceptedAt: t, ...(await signedCommand('unwind', 10, t)) })).toMatchObject({ error: expect.stringMatching(/too old to unwind/) });
+    expect(sent).toEqual([]);
   });
 });

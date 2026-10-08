@@ -10,8 +10,11 @@ The parts of the Bulwark API the app relies on. Field names here are stable. A c
 
 **What the API checks:** the same three signatures, however the wallet is connected (injected, WalletConnect, hardware):
 - **Sign-in:** an EIP-4361 (SIWE) message. The domain must be `bulwark.0xo.in`. The message's chain id can be any chain.
-- **Policies:** EIP-712 `BulwarkPolicy`, in the domain `{ name: 'Bulwark', version: '1', chainId }`.
-- **Commands:** EIP-712 `BulwarkCommand`, in the same domain.
+- **Policies:** EIP-712 `BulwarkPolicy { account: address, network: string, version: uint256, policyHash: bytes32 }`, in the domain `{ name: 'Bulwark', version: '1', chainId }`.
+- **Commands:** EIP-712 `BulwarkCommand { account: address, network: string, command: string, minutes: uint256, issuedAt: uint256 }`, in the same domain.
+- **`network`** is `'testnet'` or `'mainnet'`, the API's own network (8 Oct 2026, security review F5). A signature for the other network, or without `network`, answers `401`. The types are `POLICY_CONFIRMATION_TYPES` and `COMMAND_TYPES` in `@bulwarkxyz/guard-core`.
+- **Each signed command is accepted once.** Sending the same signature again answers `409 { error }`: sign it again.
+- **Sessions name their network** (JWT audience `bulwark:<network>`). A session from before 8 Oct 2026, or from the other network, answers `401`: sign in again.
 
 **For policies and commands:**
 - Send the `chainId` the wallet actually signed with; any chain works.
@@ -95,6 +98,8 @@ CL, the old default, had none.
 | `agent` | `{ address, approved, validUntil } \| null` | The active guard key, and whether Hyperliquid lists it as approved |
 | `pendingAgent` | `{ address } \| null` | A replacement waiting for the user's approval on Hyperliquid |
 | `policy.needsRepeatChoice` | `string[]` | Rule ids that still need the once/every-time choice. Empty when none |
+| `policy.needsResign` | boolean | The whole policy must be signed again (it was signed before signatures named the network, or for another network). The guard does not act on it meanwhile; its status is `paused` with reason `resign_required`. Per policy, not per rule. To re-sign, send the same rules as version current + 1 to `POST /v1/policy` |
+| `regionNow` | `'allowed' \| 'alerts_only' \| 'blocked' \| null` | The strictest of the user's declarations and the latest country their connection came from; what the guard uses |
 
 ### `POST /v1/onboarding/agent`: create the guard key
 
@@ -104,7 +109,10 @@ CL, the old default, had none.
 | `202 { status: 'creating' }` | Encrypted custody (fallback): the signing service creates it. Poll `/v1/me` |
 | `409` | The region step isn't done |
 | `403` | The guard is off in the user's region |
+| `429 { error, limit, retryAfter }` | A cost cap: `limit` is `keys_account` (3 per account per 24 h) or `keys_all` (50 across all accounts per 24 h). `retryAfter` is in seconds, also sent as the `Retry-After` header. Show `error` |
 | `503` | Keys are unavailable; retry later |
+
+Two requests at once create one key.
 
 The user then approves `agentAddress` on Hyperliquid as the named agent `bulwark-guard`.
 
@@ -241,7 +249,7 @@ The user places TP/SL and other orders with their own trading key in the browser
 ```
 
 - **`state`:** `protected`, `acting`, `at_risk`, `paused`, `stopped`, `no_rules` or `alerts_only`.
-- **`reason`:** only when `paused`. One of `stale_data`, `exchange_unreachable`, `signer_error` or `agent_expired`.
+- **`reason`:** only when `paused`. One of `stale_data`, `exchange_unreachable`, `signer_error`, `agent_expired`, `resign_required` (sign the policy again; see `/v1/me` `policy.needsResign`) or `operator_stop` (Bulwark paused the guard for everyone; backstops stay).
 - **Behaviour:** see the B7 report and `app.ts`.
 
 ## `GET /v1/guard-orders`: orders the guard left resting on Hyperliquid
@@ -260,6 +268,32 @@ The user places TP/SL and other orders with their own trading key in the browser
 | `pricing` | `'single' \| 'together' \| null` | How a backstop was priced: that position alone, or every position in its pool moving against the user at once |
 
 Orders placed before these fields existed have `null` for them.
+
+## `GET /v1/region`: may this user trade here, now (for the trade ticket)
+
+```json
+{ "verdict": "allowed", "trading": true, "guard": true, "country": "SG" }
+```
+
+- **`verdict`:** the strictest of where this request comes from now and the user's declarations: `allowed`, `alerts_only` or `blocked`.
+- **`trading`:** `false` when `blocked`. The ticket should not place orders then.
+- **`guard`:** `true` only when `allowed`.
+- **`country`:** from the request, or `null` when unknown.
+- Ask it when the ticket opens and before each order; it records the country for the guard too.
+
+## Translator caps
+
+`POST /v1/rules/draft` needs a user who finished the region step (`409` otherwise) and is not blocked (`403`). Caps answer `429 { error, limit, retryAfter }` with `Retry-After`: `drafts_account` (per account per hour) or `drafts_all` (300 per hour across all accounts).
+
+## `GET /v1/audit?limit=&before=`: the audit log, newest first
+
+- **`limit`:** at most 500; a missing or bad value means the default.
+- **`before`:** a `seq`; returns entries older than it. A non-positive value answers `400`.
+- To check the whole chain, page with `before` = the oldest `seq` received until entry `1` arrives (`apps/app/lib/audit.ts` `fetchAudit`).
+
+## `GET /health/guard` (no auth)
+
+`200 { ok: true, … }` while the worker's heartbeat is under 60 s old, its newest mark under 30 s old and it runs on this API's network; otherwise `503 { ok: false, problems: [...] }`.
 
 ## `POST /v1/policy`: sign a policy version
 

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { BUILDER_ADDRESS, BUILDER_FEE_TENTHS_BPS, regionVerdict, strictestVerdict } from '@bulwarkxyz/config';
+import { BUILDER_ADDRESS, BUILDER_FEE_TENTHS_BPS, currentVerdict, regionVerdict, strictestVerdict } from '@bulwarkxyz/config';
 import {
   COMMAND_TYPES,
   Execution,
@@ -28,6 +28,8 @@ import { CONTRACT_WALLET_ERROR, isContractCode, isContractWalletSignature, norma
 
 export interface ApiDeps {
   store: ApiStore;
+  /** When set, only these accounts (lowercase) can sign in: a closed mainnet canary (mainnet prerequisites). Unset: anyone. */
+  signupAllowlist?: Set<string> | undefined;
   info: Pick<InfoClient, 'extraAgents' | 'maxBuilderFee' | 'userAbstraction' | 'clearinghouseState' | 'spotClearinghouseState' | 'perpDexs' | 'allPerpMetas' | 'metaAndAssetCtxs' | 'candleSnapshot'>;
   jwtSecret: Uint8Array;
   /** The web app's server proxy proves itself with this; only then are its location headers trusted. */
@@ -61,6 +63,10 @@ export interface ApiDeps {
   translator?: TranslatorProvider;
   /** The Telegram bot's username (public), for the one-tap link the app shows next to a link code. */
   telegramBot?: string;
+  /** Cost caps (security review F6); defaults below. */
+  limits?: { keysPerAccountPerDay?: number; keysPerDay?: number; draftsPerHour?: number };
+  /** Sends an alert to the operator (Telegram), for /health/guard failures; absent until the operator links a chat. */
+  operatorAlert?: (text: string) => Promise<void>;
   /** Bytecode at an address (Arbitrum), used only to explain a failed signature from a smart-contract wallet. */
   codeAt?: (address: Hex) => Promise<Hex>;
   now: () => number;
@@ -68,6 +74,14 @@ export interface ApiDeps {
 
 /** Translator calls per account per hour (cost cap). */
 export const DRAFTS_PER_HOUR = 30;
+/** Translator calls per hour across all accounts (F6: fresh wallets would otherwise bypass the per-account cap). */
+export const DRAFTS_PER_HOUR_ALL = 300;
+/** Guard keys (each an AWS KMS key, about $1 a month) per account per day, and across all accounts per day (F6). */
+export const KEYS_PER_ACCOUNT_PER_DAY = 3;
+export const KEYS_PER_DAY = 50;
+/** The worker's heartbeat older than this, or its newest price older than MARK_STALE_MS: /health/guard fails. */
+export const HEARTBEAT_STALE_MS = 60_000;
+export const MARK_STALE_MS = 30_000;
 
 type Env = { Variables: { account: Hex } };
 
@@ -85,6 +99,15 @@ export function createApp(deps: ApiDeps) {
   // Keyed by the nonce itself (one per request), so asking for a nonce with someone else's address cannot replace
   // theirs; expired ones are swept and the map is capped, so unauthenticated requests cannot grow it without bound.
   const nonces = new Map<string, { address: string; exp: number; domain: string }>();
+  /** Last recorded location per account (so the database is written only when it changes). */
+  const lastSeen = new Map<string, string>();
+  /** Key creation: one at a time per account, and how many were created in the last day (F6, F7). */
+  const keyLocks = new Map<string, Promise<void>>();
+  const keyTimes = new Map<string, number[]>();
+  let allKeyTimes: number[] = [];
+  /** Translator calls across all accounts in the last hour (F6). */
+  let allDraftTimes: number[] = [];
+  let watchdog: () => Promise<void> = async () => undefined;
   const putNonce = (nonce: string, v: { address: string; exp: number; domain: string }) => {
     if (nonces.size >= NONCE_MAX) {
       const now = deps.now();
@@ -124,6 +147,41 @@ export function createApp(deps: ApiDeps) {
 
   app.get('/health', (c) => c.json({ ok: true }));
 
+  // The guard's health, from the worker's own heartbeat: fails when the worker is dead or its prices are stale.
+  // Public, for an uptime monitor; the API also alerts the operator itself (watchdog, run by main every 30 s).
+  const guardHealth = async () => {
+    const hb = await deps.store.operatorState<{ network: string; lastMarkAt: number; staleAccounts: number; tracked: number }>('worker_heartbeat').catch(() => null);
+    const stop = await deps.store.operatorState<{ on: boolean; reason?: string | null }>('global_stop').catch(() => null);
+    const now = deps.now();
+    const problems: string[] = [];
+    if (!hb) problems.push('no worker heartbeat');
+    else {
+      if (now - hb.at > HEARTBEAT_STALE_MS) problems.push(`worker heartbeat ${Math.round((now - hb.at) / 1000)} s old`);
+      if (!hb.value.lastMarkAt || now - hb.value.lastMarkAt > MARK_STALE_MS) problems.push('worker prices are stale');
+      if (hb.value.network !== deps.network) problems.push(`worker is on ${hb.value.network}`);
+    }
+    return { ok: problems.length === 0, problems, network: deps.network, heartbeatAgeS: hb ? Math.round((now - hb.at) / 1000) : null, staleAccounts: hb?.value.staleAccounts ?? null, tracked: hb?.value.tracked ?? null, globalStop: Boolean(stop?.value.on) };
+  };
+  app.get('/health/guard', async (c) => {
+    const h = await guardHealth();
+    return c.json(h, h.ok ? 200 : 503);
+  });
+  let failing = 0;
+  let alerted = false;
+  /** One watchdog step: alerts the operator after two failed checks in a row, and once more on recovery. */
+  watchdog = async () => {
+    if (!deps.operatorAlert) return;
+    const h = await guardHealth();
+    failing = h.ok ? 0 : failing + 1;
+    if (failing >= 2 && !alerted) {
+      alerted = true;
+      await deps.operatorAlert(`Bulwark ${deps.network}: the guard is unhealthy: ${h.problems.join('; ')}. Users' resting backstops stay on Hyperliquid.`).catch(() => (alerted = false));
+    } else if (h.ok && alerted) {
+      alerted = false;
+      await deps.operatorAlert(`Bulwark ${deps.network}: the guard is healthy again.`).catch(() => undefined);
+    }
+  };
+
   // -------------------------------------------------------------- market activity (public, cached)
   const activity = marketActivity(deps.info, deps.now);
   app.get('/markets/activity', async (c) => {
@@ -161,9 +219,13 @@ export function createApp(deps: ApiDeps) {
     if (isContractWalletSignature(signature) || !(await verifyMessage({ address: parsed.address, message, signature: normalizeSignature(signature) }).catch(() => false)))
       return refuseSignature(c, parsed.address, signature);
     nonces.delete(parsed.nonce as string);
+    if (deps.signupAllowlist && !deps.signupAllowlist.has(parsed.address.toLowerCase()))
+      return c.json({ error: 'Bulwark is open to invited accounts only on this network for now.', code: 'not_invited' }, 403);
     const token = await new SignJWT({})
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(parsed.address.toLowerCase())
+      // Sessions name their network (F5): a testnet session is refused by a mainnet API even if a secret were shared.
+      .setAudience(`bulwark:${deps.network}`)
       .setIssuedAt()
       .setExpirationTime(`${SESSION_HOURS}h`)
       .sign(deps.jwtSecret);
@@ -174,10 +236,17 @@ export function createApp(deps: ApiDeps) {
   app.use('/v1/*', async (c, next) => {
     const auth = c.req.header('authorization') ?? '';
     try {
-      const { payload } = await jwtVerify(auth.replace(/^Bearer /, ''), deps.jwtSecret);
+      const { payload } = await jwtVerify(auth.replace(/^Bearer /, ''), deps.jwtSecret, { audience: `bulwark:${deps.network}` });
       c.set('account', payload.sub as Hex);
     } catch {
       return c.json({ error: 'sign in' }, 401);
+    }
+    // Where the user's latest request came from: regions are re-checked with it at every guard action.
+    const loc = location(c);
+    const acct = c.get('account');
+    if (loc.country && lastSeen.get(acct) !== `${loc.country}|${loc.subdivision ?? ''}`) {
+      lastSeen.set(acct, `${loc.country}|${loc.subdivision ?? ''}`);
+      void deps.store.setLastSeen(acct, loc.country, loc.subdivision).catch(() => lastSeen.delete(acct));
     }
     await next();
   });
@@ -206,8 +275,19 @@ export function createApp(deps: ApiDeps) {
       keyStatus: user?.agentKeyRef === 'wiped' ? 'wiped' : user?.agentAddress ? 'ready' : keyMeta.length || user?.agentKeyRef === 'requested' ? 'creating' : 'none',
       pendingAgent: pending ? { address: pending.address } : null,
       builder: { address: BUILDER_ADDRESS, feeTenthsBps: BUILDER_FEE_TENTHS_BPS, approvedMaxTenthsBps: maxFee },
-      policy: confirmed ? { version: confirmed.policy.version, hash: confirmed.hash, confirmedAt: confirmed.confirmedAt, policy: confirmed.policy, needsRepeatChoice: needsRepeatChoice(confirmed.policy) } : null,
+      policy: confirmed ? { version: confirmed.policy.version, hash: confirmed.hash, confirmedAt: confirmed.confirmedAt, policy: confirmed.policy, needsRepeatChoice: needsRepeatChoice(confirmed.policy), needsResign: confirmed.signedNetwork !== deps.network } : null,
+      regionNow: user ? currentVerdict(user) : null,
     });
+  });
+
+  // The region for this request: where it comes from now and what the user declared. The trade ticket asks this
+  // before it offers to place orders. Orders are signed in the browser and sent to Hyperliquid directly, so this
+  // gates Bulwark's own interface; it cannot stop anyone trading on Hyperliquid itself.
+  app.get('/v1/region', async (c) => {
+    const user = await deps.store.user(c.get('account'));
+    const loc = location(c);
+    const verdict = strictestVerdict(regionVerdict(loc.country, loc.subdivision), ...(user ? [currentVerdict(user)] : []));
+    return c.json({ verdict, trading: verdict !== 'blocked', guard: verdict === 'allowed', country: loc.country });
   });
 
   // -------------------------------------------------------------- onboarding
@@ -237,10 +317,39 @@ export function createApp(deps: ApiDeps) {
 
   app.post('/v1/onboarding/agent', async (c) => {
     const account = c.get('account');
+    // One key creation per account at a time (F7: two requests at once created two KMS keys).
+    const prior = keyLocks.get(account) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((r) => (release = r));
+    const chain = prior.then(() => mine);
+    keyLocks.set(account, chain);
+    await prior;
+    try {
+      return await createKey(c, account);
+    } finally {
+      release();
+      if (keyLocks.get(account) === chain) keyLocks.delete(account);
+    }
+  });
+  /** A cost cap was reached (F6): which one, and when the oldest use in the window expires (also as Retry-After). */
+  function limited(c: Context<Env>, limit: string, error: string, times: number[], windowMs: number) {
+    const retryAfter = Math.max(1, Math.ceil((Math.min(...times) + windowMs - deps.now()) / 1000));
+    c.header('Retry-After', String(retryAfter));
+    return c.json({ error, limit, retryAfter }, 429);
+  }
+  async function createKey(c: Context<Env>, account: Hex) {
     const user = await deps.store.user(account);
     if (!user) return c.json({ error: 'complete the region step first' }, 409);
     if (user.agentAddress && user.agentKeyRef !== 'pending') return c.json({ agentAddress: user.agentAddress });
-    if (user.region !== 'allowed') return c.json({ error: 'the guard is off in your region' }, 403);
+    if (currentVerdict(user) !== 'allowed') return c.json({ error: 'the guard is off in your region' }, 403);
+    // Cost caps (F6): per account and across all accounts, per day. Kept in memory (one API instance).
+    const day = deps.now() - 86_400_000;
+    const mineToday = (keyTimes.get(account) ?? []).filter((t) => t > day);
+    allKeyTimes = allKeyTimes.filter((t) => t > day);
+    if (mineToday.length >= (deps.limits?.keysPerAccountPerDay ?? KEYS_PER_ACCOUNT_PER_DAY)) return limited(c, 'keys_account', 'too many guard keys created for this account today; try again tomorrow', mineToday, 86_400_000);
+    if (allKeyTimes.length >= (deps.limits?.keysPerDay ?? KEYS_PER_DAY)) return limited(c, 'keys_all', 'Bulwark has reached its limit of new guard keys for today; please try again tomorrow', allKeyTimes, 86_400_000);
+    keyTimes.set(account, [...mineToday, deps.now()]);
+    allKeyTimes.push(deps.now());
     if (deps.keyCustody === 'sealed') {
       // The signing service creates the key; this only files the request (idempotent).
       await deps.store.requestAgentKey(account, deps.network, 'create', deps.now());
@@ -260,7 +369,7 @@ export function createApp(deps: ApiDeps) {
     await deps.store.upsertUser({ ...user, agentKeyRef: `kms:${key.keyId}`, agentAddress: key.address }, now);
     await deps.store.audit.append({ account, at: now, kind: 'key', why: 'You asked for a guard key', what: `Guard key created in AWS KMS (address ${key.address}); its private key cannot leave KMS`, proof: { address: key.address, kmsKeyId: key.keyId } });
     return c.json({ agentAddress: key.address });
-  });
+  }
 
   // Replace the guard key. The new key takes over once the user approves it on Hyperliquid; the old one
   // is then wiped (encrypted) or disabled and scheduled for deletion (KMS).
@@ -309,12 +418,14 @@ export function createApp(deps: ApiDeps) {
       domain: policyConfirmationDomain(body.chainId),
       types: POLICY_CONFIRMATION_TYPES,
       primaryType: 'BulwarkPolicy',
-      message: { account, version: BigInt(policy.version), policyHash: hash },
+      // The network is the API's own, never the request's (F5).
+      message: { account, network: deps.network, version: BigInt(policy.version), policyHash: hash },
       signature: normalizeSignature(body.signature),
     }).catch(() => false));
     if (!ok) return refuseSignature(c, account, body.signature, 'signature does not match');
     const now = deps.now();
-    await deps.store.confirmPolicy(account, { policy, hash, signature: body.signature, signatureVerified: true, confirmedAt: now });
+    // Stored with what it was signed with, so the worker verifies it itself (F3).
+    await deps.store.confirmPolicy(account, { policy, hash, signature: body.signature, signatureVerified: true, confirmedAt: now, chainId: body.chainId, signedNetwork: deps.network });
     // Baselines for rules measured from the moment of confirmation.
     const fromConfirm = policy.rules.filter((r) => (r.when.kind === 'drawdown' && r.when.baseline === 'rule_confirmed') || (r.when.kind === 'priceMove' && r.when.from === 'rule_confirmed'));
     if (fromConfirm.length) {
@@ -341,9 +452,16 @@ export function createApp(deps: ApiDeps) {
     }
     const current = { policy: base };
     const now = deps.now();
+    // Only for onboarded users in a region where Bulwark is offered (F6: no free calls for fresh wallets).
+    const user = await deps.store.user(account);
+    if (!user) return c.json({ error: 'complete the region step first' }, 409);
+    if (currentVerdict(user) === 'blocked') return c.json({ error: 'Bulwark is not available in your region' }, 403);
     const recent = (draftTimes.get(account) ?? []).filter((t) => now - t < 3_600_000);
-    if (recent.length >= DRAFTS_PER_HOUR) return c.json({ error: 'too many translations this hour; try again later' }, 429);
+    if (recent.length >= (deps.limits?.draftsPerHour ?? DRAFTS_PER_HOUR)) return limited(c, 'drafts_account', 'too many translations this hour; try again later', recent, 3_600_000);
+    allDraftTimes = allDraftTimes.filter((t) => now - t < 3_600_000);
+    if (allDraftTimes.length >= DRAFTS_PER_HOUR_ALL) return limited(c, 'drafts_all', 'the translator is busy for everyone this hour; use the stage editor, or try again later', allDraftTimes, 3_600_000);
     draftTimes.set(account, [...recent, now]);
+    allDraftTimes.push(now);
 
     const r = await compileRule(deps.translator, { text, policy: current.policy, markets: await markets() });
     if (r.kind === 'clarify') return c.json({ kind: 'clarify', question: r.question });
@@ -430,7 +548,13 @@ export function createApp(deps: ApiDeps) {
   app.get('/v1/guard-orders', async (c) => c.json(await deps.store.guardOrders(c.get('account'))));
 
   // -------------------------------------------------------------- audit
-  app.get('/v1/audit', async (c) => c.json(await deps.store.audit.list(c.get('account'), Math.min(500, Number(c.req.query('limit') ?? 100)))));
+  // Newest first; `before` pages back through the whole chain (F8: the app verifies all of it, not only 500 entries).
+  app.get('/v1/audit', async (c) => {
+    const limit = Math.max(1, Math.min(500, Math.floor(Number(c.req.query('limit') ?? 100)) || 100));
+    const before = c.req.query('before') !== undefined ? Math.floor(Number(c.req.query('before'))) : undefined;
+    if (before !== undefined && !(before > 0)) return c.json({ error: 'before must be a positive sequence number' }, 400);
+    return c.json(await deps.store.audit.list(c.get('account'), limit, before));
+  });
 
   // -------------------------------------------------------------- commands (each signed by the user)
   app.post('/v1/commands', async (c) => {
@@ -445,16 +569,24 @@ export function createApp(deps: ApiDeps) {
       domain: policyConfirmationDomain(body.chainId),
       types: COMMAND_TYPES,
       primaryType: 'BulwarkCommand',
-      message: { account, command: body.command, minutes, issuedAt: BigInt(body.issuedAt) },
+      message: { account, network: deps.network, command: body.command, minutes, issuedAt: BigInt(body.issuedAt) },
       signature: normalizeSignature(body.signature),
     }).catch(() => false));
     if (!ok) return refuseSignature(c, account, body.signature, 'signature does not match');
+    // Every command is recorded, resume too, and a signature is used once (F5: no replay within its 60 s).
+    let id: number;
+    try {
+      id = await deps.store.addCommand({ account, command: body.command, minutes, issuedAt: body.issuedAt, signature: body.signature, chainId: body.chainId, network: deps.network }, deps.now());
+    } catch (e) {
+      if (/commands_signature_once|duplicate key/.test(String((e as Error).message))) return c.json({ error: 'this signed command was already used; sign it again' }, 409);
+      throw e;
+    }
+    if (body.command === 'resume') await deps.store.finishCommand(id, { resumed: true }, deps.now());
     // Stop (and wipe, which implies stop) take effect at once; the worker cancels guard orders, then wipes.
     if (body.command === 'stop' || body.command === 'wipe') await deps.store.setKillSwitch(account, true);
     if (body.command === 'resume') await deps.store.setKillSwitch(account, false);
-    const id = body.command === 'resume' ? null : await deps.store.addCommand({ account, command: body.command, minutes, issuedAt: body.issuedAt, signature: body.signature }, deps.now());
     await deps.store.audit.append({ account, at: deps.now(), kind: 'command', why: 'You signed this command', what: body.command === 'unwind' ? `Panic unwind over ${minutes} min` : body.command === 'stop' ? 'Kill switch on' : body.command === 'wipe' ? 'Guard stopped; stored guard key to be wiped' : 'Guard resumed', proof: { signature: body.signature } });
-    return c.json({ id, command: body.command });
+    return c.json({ id: body.command === 'resume' ? null : id, command: body.command });
   });
 
   // -------------------------------------------------------------- telegram linking
@@ -483,7 +615,7 @@ export function createApp(deps: ApiDeps) {
     return c.json({ code, expiresInMinutes: 15, bot: bot ? `@${bot}` : null, link: bot ? `https://t.me/${bot}?start=${code}` : null });
   });
 
-  return app;
+  return Object.assign(app, { watchdog: () => watchdog() });
 }
 
 /** Current account value and marks, from Hyperliquid's own state. */

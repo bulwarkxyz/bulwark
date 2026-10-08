@@ -1,0 +1,160 @@
+---
+title: Security model
+description: What each part of Bulwark can and cannot do with your account, what protects it, and what is not protected.
+---
+
+<Callout type="info" title="In short">
+  Bulwark never holds your funds, and no part of it can withdraw them: Hyperliquid does not let agent keys withdraw. The worst outcome of a compromise of Bulwark is **trades on your account** while the attacker is in control. That is still serious: trades can lose money, including on purpose in a thin market. This page says what limits that, and what does not.
+</Callout>
+
+This page is a self-review by Bulwark's maintainer, not an independent audit. It was written after a review on 8 October 2026, and describes the code once that review's fixes were deployed. The code is [open source](/open-source).
+
+## The parts, and what each can do
+
+| Part | What it holds | What it can do on Hyperliquid | What it can never do |
+|---|---|---|---|
+| **Your wallet** | Your account's own key. Bulwark never sees it | Everything, including withdrawals | n/a |
+| **Guard key** | One key per user, in AWS KMS ([Key storage](/key-storage)) | Place and cancel orders, move funds between your own balances | Withdraw |
+| **Trading key** (optional) | A key in your browser | The same as the guard key | Withdraw |
+| **Bulwark's servers** | Your rules and signatures, the guard key's record (not the key), your audit log ([Privacy](/privacy)) | Through the guard key only, within the checks below | Withdraw, or act without a guard key you approved |
+
+The guard key can do more than Bulwark lets it. The limits on what it signs are **Bulwark's code**, not Hyperliquid's. The rest of this page is about those limits and where they stop.
+
+## What limits the guard
+
+Every guard action passes the [seven checks](/how-the-guard-works#the-checks-before-every-signature) twice: once when it is decided, and again in the signer just before signing. In particular:
+
+- **Reduce-only.** Every order reduces an open position, on the opposite side, no larger than the position. The guard cannot open a position, add to one or raise leverage.
+- **Your slippage.** Every order is priced no further from Hyperliquid's mark price than the limit you set.
+- **Your own balances only.** Top-ups move USDC between your own balances and into a pool that needs margin. The destination is always your own account; the signer does not take it from the decision.
+- **Exactly what was checked.** The signer rebuilds the exchange order from the checked action and refuses to sign anything that differs.
+- **Your rules only.** Every action traces to a rule in the policy you signed, and the guard checks your signature on that policy itself before acting. With the kill switch on, nothing is signed.
+- **Your region, now.** Before every action, the guard re-checks your region using the latest country your connection came from, as well as what you declared.
+- **A rate cap.** At most 20 guard actions per minute per account.
+- **Fresh data only.** The guard does nothing unless prices are under 10 seconds old and account data under 30 seconds old.
+- **No double action.**
+  - Each stage remembers it acted before the order is sent.
+  - A retry waits for account data newer than the last attempt.
+  - An order whose answer was lost is looked up on Hyperliquid before anything is sent again.
+- **One guard at a time.** During a deploy, the new guard waits until the old one has stopped.
+
+### What these checks do not stop
+
+- **A trade that follows your rules can still lose money.** A reduce-only trim at your slippage limit realises a loss. A wrongly written rule does what it says. See [Risks](/risks).
+- **A bad mark price.** An oracle error or a bad print that moves Hyperliquid's mark triggers the guard and your backstops, as it triggers liquidations.
+- **Wrong account data.** Account state comes from Hyperliquid and, when configured, from an indexing service, with Hyperliquid's own feeds as the fallback. If a source were wrong but fresh, the guard would act on it, still within the checks above.
+- **Bugs.** The checks are tested, but they are software.
+- **The code that runs the checks.** Anyone who could change or run code on Bulwark's guard service could have the guard key sign orders without these checks. See below.
+
+## Keys
+
+| Key | If it were compromised | How to cut it off |
+|---|---|---|
+| **Guard key (KMS)** | Someone controlling Bulwark's signing service, or its AWS access, could have KMS sign trades on your account while they had that access. The key cannot be copied | On Hyperliquid, approve a different key under the name `bulwark-guard`, or let the approval expire. Then wipe it in Bulwark |
+| **Guard key (encrypted fallback)** | Someone with Bulwark's signing service and its master key could copy the key and trade with it until the approval ends | The same. Then replace it with a KMS key (Settings › Account shows which kind you have) |
+| **Trading key** | Anyone who can run code on the app's page in your browser, or read your browser profile, can trade with it | Forget it in Settings, and approve a different key under `bulwark-web` on Hyperliquid or let the approval expire. Forgetting it only removes it from that browser |
+
+**Trades, not withdrawals, but trades can be abused.** A key that can trade can buy far above the market in a thin market where someone else is waiting with orders. That moves value out of your account without a withdrawal. An approval with a short expiry limits how long any key is useful. You choose the expiry when you approve it on Hyperliquid.
+
+How keys are created, stored, replaced and wiped: [Key storage](/key-storage).
+
+## Signing in and what your signatures protect
+
+- **Sign-in** uses Sign-In with Ethereum. The message names Bulwark's site and carries a one-time code that expires after 10 minutes and works once. A message signed for another site is refused.
+- **Your session** lasts 12 hours and lives in the browser tab's storage. It is not a cookie, so other sites cannot use it on your behalf.
+- **A stolen session cannot change your rules or stop the guard.** A new rule version and every command (kill switch, resume, panic unwind, wipe) need a fresh signature from your wallet. Commands must reach Bulwark within 60 seconds of signing, and each signed command is accepted once.
+- **Signatures name their network.** What you sign includes `testnet` or `mainnet`, so a signature made on one network is never valid on the other. Sessions are also issued for one network only.
+- **A stolen session can still:**
+  - read your rules, alerts and audit log;
+  - link another Telegram chat to receive your alerts;
+  - unlink yours.
+
+  Sessions cannot be revoked early. They expire after 12 hours.
+- **Ordinary wallets only.** Smart-contract wallets are refused, because a Hyperliquid account signs with an ordinary key.
+- **Each account sees only its own data.** Every request is tied to the account you signed in with. Nothing in a request can name another account.
+
+**Where your signature is checked.** Bulwark's API checks your signature when you send a rule version or a command. The guard then checks it again itself, from the signed rules and signature stored with them, before it acts; it does not rely on a stored "verified" mark. Someone who could only change Bulwark's database therefore cannot make the guard act on rules you did not sign, or carry out a command you did not sign. It could put back an older version of your rules that you did sign.
+
+This does not cover someone who can change or run code on the guard service itself (see [What these checks do not stop](#what-these-checks-do-not-stop)). Someone with the database could still stop the guard, for one account or all of them; your backstops on Hyperliquid stay in place when it stops.
+
+**Rules signed before 8 October 2026** did not name the network. They are not converted: the guard shows them as needing a new signature and does not act on them until you sign them again. Backstops already resting on Hyperliquid stay in place until then.
+
+**When a command cannot be carried out.** The kill switch stops the guard at once. Cancelling the guard's resting stops is a separate step on Bulwark's guard service. If that step fails (for example, the service is down), the app says so, and those stops stay on Hyperliquid as reduce-only stops until you cancel them there.
+
+**Telegram** only sends messages. It cannot trade, withdraw or stop the guard: `/stop` sends you to the kill switch, which your wallet signs. A chat is linked with a one-time code from the app that expires after 15 minutes.
+
+## The AI translator
+
+The translator turns a sentence into a draft rule ([Rules](/rules#the-ai-translator)). It is switched off until it passes its full test set, including every adversarial sentence.
+
+- **It has no keys, no tools and no access to the exchange.** It can only return a draft.
+- **A draft is checked before you see it.**
+  - Every number must be one you typed.
+  - It can only add a rule, never change or remove one, or your slippage limit.
+  - It cannot express opening a position, raising leverage or sending funds, because rules have no such actions.
+- **The rule shown to you is generated from the rule itself,** not from the model's words. Nothing applies until you sign it.
+
+**Not stopped:**
+- The model can still misread you and pick the wrong market, action or target.
+- A number you typed can end up in the wrong field.
+- Read the rule before you sign it.
+
+## The audit log
+
+Every guard action, refusal, command, signature and key event is recorded with a hash of the entry before it ([Audit log](/audit-log)). Editing or deleting an entry in the middle breaks every hash after it, and the database refuses edits and deletes.
+
+The app reads the log back to its first entry, page by page (up to 20,000 entries), and recomputes the whole chain in your browser. If it could not reach the first entry, it says so and does not show the chain as verified. The database refuses to empty the log in one statement, too.
+
+**Its limits:**
+- The log is tamper-evident, not tamper-proof, and it is checked against data from the same server. Someone with full control of Bulwark's database could rewrite a whole chain consistently, or remove the newest entries.
+
+## Where Bulwark runs
+
+| What | Where |
+|---|---|
+| Web app and these docs | Vercel |
+| API, guard service and database | Railway (Singapore) |
+| Guard keys | AWS KMS (Singapore), one key per user |
+| AI translator (when on) | OpenAI's API, with storage off |
+| Alerts | Telegram's Bot API |
+
+**A stop for everyone.** If something goes wrong on Bulwark's side, the operator can pause the guard for every account at once. While paused, the guard places and cancels nothing, says so in the app, and your backstops on Hyperliquid stay in place. The guard also reports that it is alive every 10 seconds, and the operator is alerted if those reports stop or its data goes stale.
+
+**Limits on cost abuse.** New guard keys are limited per account and per day across all accounts, and AI translations are limited per account and per hour across all accounts. When a limit is reached, the app says which one and when to try again.
+
+**Secrets**, such as database credentials, the session signing secret, AWS access for the two key roles and the alert bot's token, are kept as environment settings on those hosts, never in the code.
+
+**The code is checked before it goes public.**
+- The public repository is scanned for keys and tokens on every change, across its whole history.
+- Every change runs the full test suite in CI.
+
+**Not stopped:**
+- Bulwark is run by one maintainer. Whoever controls the maintainer's accounts with these providers controls Bulwark's servers. Within the limits above, that includes the guard key's signing.
+- A compromised software dependency of the web app could run in your browser, where the optional trading key lives.
+
+## Known gaps
+
+These were found in the same review and are not fixed yet. None lets anyone withdraw your funds.
+
+- **No enforced Content Security Policy in the app.** The optional trading key lives in your browser's storage, so a script injected into the app (for example through a compromised dependency) could read it. Framing and other browser protections are being added, with the policy reported before it is enforced.
+- **The builder-fee check in the guard cannot fail today** (I7). It does not matter yet: the guard never attaches a builder code to its own orders. It will be fixed before it does.
+- **Build hygiene.** The CI workflow's token permissions and action versions are not pinned, the services run as root with development tools installed, and dependency updates are not automated.
+- **Bad input can return a generic error** in a few API endpoints, instead of a clear message. Nothing is exposed.
+- **One session secret per deployment.** Sessions name their network, but the testnet and a future mainnet deployment must also use different secrets; that is a deployment step, not a code check.
+
+## Dependency check
+
+On **8 October 2026**, `pnpm audit` reported **33 advisories**: 5 critical, 11 high, 16 moderate and 1 low.
+
+- **Where they are.** All of them are in:
+  - the web framework used by the app and these docs (Next.js and the image and CSS libraries it bundles);
+  - the wallet-connection libraries in the app;
+  - the test runner, which does not run in production.
+- **What is clean.** None is in the packages the API, the guard service, the signer or the guard engine run in production.
+- **Exposure.** Most of the framework advisories concern features the app does not use. The framework upgrade is still due.
+
+This section will be updated with each check.
+
+## Reporting a problem
+
+Write to the address on [Privacy](/privacy#contact). Please do not test against other people's accounts.

@@ -33,3 +33,12 @@ describe('builder switch', () => {
     expect(builderField('mainnet', { BUILDER_CODE_ENABLED_MAINNET: 'true' })).toEqual({ b: '0x813843cf39a4d312182af6c5b85cff9290c42981', f: 30 });
   });
 });
+
+describe('NETWORK is read strictly (mainnet prerequisites)', () => {
+  it('only the two exact values; anything else stops the service', async () => {
+    const { parseNetwork } = await import('../src/network.js');
+    expect(parseNetwork('testnet')).toBe('testnet');
+    expect(parseNetwork('mainnet')).toBe('mainnet');
+    for (const bad of [undefined, '', 'Mainnet', 'main', 'testnet ']) expect(() => parseNetwork(bad)).toThrow(/exactly/);
+  });
+});

@@ -22,13 +22,13 @@ import postgres from 'postgres';
 import { GuardEngine, STATUS_WRITE_EVERY_MS } from './guard.js';
 import { KeyService, SEALED_PREFIX } from './keys.js';
 import { ConsoleNotifier, TelegramNotifier } from './notify.js';
-import { PgStore, migrate } from '@bulwarkxyz/store';
+import { PgStore, migrate, stampNetwork } from '@bulwarkxyz/store';
 import { HyperliquidStream, MAX_COIN_STREAMS, MAX_USERS_PER_CONNECTION, marksFromCtxs } from './stream.js';
 import { BuilderStream, HYDRO_POLL_MS, HydromancerFeed, NATIVE_FALLBACK_EVERY_MS, NativeFallbackPoller, StateArbiter } from './statefeed.js';
-import { BUILDER_ADDRESS } from '@bulwarkxyz/config';
+import { BUILDER_ADDRESS, parseNetwork } from '@bulwarkxyz/config';
 import { TelegramBot } from './telegram-bot.js';
 
-const network = (process.env.NETWORK ?? 'testnet') as Network;
+const network = parseNetwork(process.env.NETWORK) as Network;
 const WS_URL = network === 'mainnet' ? 'wss://api.hyperliquid.xyz/ws' : 'wss://api.hyperliquid-testnet.xyz/ws';
 /**
  * Every info request this process makes shares one budget, under Hyperliquid's 1200 weight a minute per IP
@@ -133,6 +133,7 @@ process.on('SIGTERM', () => {
 async function main() {
   await withRetry('database', () => becomeTheOnlyWorker());
   await withRetry('database', () => migrate(sql));
+  await stampNetwork(store, network, Date.now());
   let meta = await withRetry('Hyperliquid', loadAssets);
   const status = { network, startedAt: new Date().toISOString(), users: 0, lastMarkAt: 0, streams: 0 };
 
@@ -284,6 +285,11 @@ async function main() {
   setInterval(() => void readUsage().catch(() => undefined), 15 * 60_000);
   // Keeps every account's guard status current while prices and positions are still.
   setInterval(() => void engine.heartbeat().catch((e) => console.error('heartbeat', e)), STATUS_WRITE_EVERY_MS);
+  // The worker's own heartbeat, for the API's /health/guard and the operator alert: written every 10 s.
+  setInterval(() => {
+    const staleAccounts = [...tracked].filter((u) => !['', 'xyz'].every((d) => arbiter.hydroFresh(u, d) || Date.now() - (arbiter.nativeAt(u, d) ?? 0) <= 30_000)).length;
+    void store.setOperatorState('worker_heartbeat', { network, lastMarkAt: status.lastMarkAt, staleAccounts, tracked: tracked.size }, Date.now()).catch((e) => console.error('worker heartbeat', e));
+  }, 10_000);
   setInterval(() => void loadAssets().then((m) => (meta = m)).catch((e) => console.error('loadAssets', e)), 10 * 60_000);
 
   const keys = new KeyService({
@@ -309,12 +315,17 @@ async function main() {
       for (const cmd of await store.pendingCommands()) {
         // A stop (and the stop inside a wipe) that the exchange did not carry out stays queued and is tried again,
         // until it works or the queue limit passes; a wipe never destroys the key while its stops may still rest.
-        const retryable = (r: Record<string, unknown>) => Boolean(r.error) && Date.now() - cmd.acceptedAt < COMMAND_QUEUE_MAX_MS;
+        // An unverifiable signature is final: never retried, and a wipe never goes ahead on one.
+        const retryable = (r: Record<string, unknown>) => Boolean(r.error) && !r.unverified && Date.now() - cmd.acceptedAt < COMMAND_QUEUE_MAX_MS;
         let result: Record<string, unknown>;
         if (cmd.command === 'wipe') {
           // Cancel the guard's own orders while the key still exists, then destroy the key.
-          const cancelled = (await engine.command({ ...cmd, command: 'stop' }).catch((e) => ({ error: String(e) }))) as Record<string, unknown>;
+          const cancelled = (await engine.command({ ...cmd, command: 'stop', signedAs: 'wipe' }).catch((e) => ({ error: String(e) }))) as Record<string, unknown>;
           if (retryable(cancelled)) continue;
+          if (cancelled.unverified) {
+            await store.finishCommand(cmd.id, { cancelled, wiped: false }, Date.now());
+            continue;
+          }
           const wiped = await keys.wipe(cmd.account, 'You signed a command to wipe your guard key');
           result = { cancelled, wiped };
         } else {

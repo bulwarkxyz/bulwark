@@ -7,21 +7,23 @@ import { MemoryStore } from '@bulwarkxyz/store';
 import { describe, expect, it } from 'vitest';
 import { GuardEngine } from '../src/guard.js';
 import { ConsoleNotifier } from '../src/notify.js';
+import { TEST_WALLET, addr, signed } from './signed.js';
 
 // Recorded on testnet, 7 Oct 2026 (apps/ops testrun part3multi): BTC + ETH in the main pool, GOLD in the xyz pool,
 // one line at 15×, then a 0.23 USDC deposit into the main pool. The live guard placed three backstops, then re-priced
 // BTC's and ETH's once each and left GOLD's alone. The same engine, fed the same states, must do exactly that.
 const fx = JSON.parse(readFileSync(new URL('../../../packages/guard-core/test/fixtures/multi-position-testnet-2026-10-07.json', import.meta.url), 'utf8'));
-const ACCOUNT = '0x00000000000000000000000000000000000c0ffe' as Hex;
+const ACCOUNT = addr(TEST_WALLET) as Hex;
 const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'line', when: { kind: 'buffer', below: fx.line }, then: [{ kind: 'alert' }], repeat: { mode: 'everyCrossing' } }], execution: { maxSlippagePct: 1 } };
 type State = { dexStates: Record<string, RawClearinghouseState & { assetPositions: Array<{ position: { coin: string; szi: string; positionValue: string } }> }>; spot: never };
 const marksOf = (s: State) => new Map(Object.values(s.dexStates).flatMap((d) => d.assetPositions.map((p) => [p.position.coin, Number(p.position.positionValue) / Math.abs(Number(p.position.szi))] as [string, number])));
 
+const SIGNED = await signed(policy);
 function setup() {
   let t = 1_791_370_400_000;
   const store = new MemoryStore();
   store.putUser({ account: ACCOUNT, agentKeyRef: 'local:test', agentAddress: '0x00000000000000000000000000000000000a6e47', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
-  store.putPolicy(ACCOUNT, { policy, hash: policyHash(policy), signature: '0x00', signatureVerified: true, confirmedAt: t });
+  store.putPolicy(ACCOUNT, { ...SIGNED, confirmedAt: t });
   // A fake exchange that keeps resting triggers, as Hyperliquid does, so the guard sees its own orders.
   const resting = new Map<number, { coin: string; triggerPx: number; size: number }>();
   const sent: SignedRequest[] = [];

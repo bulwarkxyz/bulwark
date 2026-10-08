@@ -60,9 +60,9 @@ describe('signatures from any EOA wallet connection', () => {
     const { message, signature } = await siwe();
     const token = ((await (await verify(message, signature)).json()) as { token: string }).token;
     const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }], execution: { maxSlippagePct: 1 } };
-    const sig = await user.signTypedData({ domain: policyConfirmationDomain(1), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: user.address, version: 1n, policyHash: policyHash(policy) } });
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(1), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { network: 'testnet', account: user.address, version: 1n, policyHash: policyHash(policy) } });
     expect((await app.request('/v1/policy', { method: 'POST', headers: authed(token), body: JSON.stringify({ policy, signature: withV01(sig), chainId: 1 }) })).status).toBe(200);
-    const cmd = await user.signTypedData({ domain: policyConfirmationDomain(8453), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: user.address, command: 'stop', minutes: 0, issuedAt: BigInt(now) } });
+    const cmd = await user.signTypedData({ domain: policyConfirmationDomain(8453), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { network: 'testnet', account: user.address, command: 'stop', minutes: 0, issuedAt: BigInt(now) } });
     store.putUser({ account: ACCOUNT, agentKeyRef: 'kms:k', region: 'allowed', telegramChatId: null, killSwitch: false, builderApproved: false });
     expect((await app.request('/v1/commands', { method: 'POST', headers: authed(token), body: JSON.stringify({ command: 'stop', issuedAt: now, signature: compact(cmd), chainId: 8453 }) })).status).toBe(200);
   });
@@ -71,7 +71,7 @@ describe('signatures from any EOA wallet connection', () => {
     const { message, signature } = await siwe();
     const token = ((await (await verify(message, signature)).json()) as { token: string }).token;
     const policy: Policy = { version: 1, account: ACCOUNT, rules: [{ id: 'stage-1', when: { kind: 'buffer', below: 2 }, then: [{ kind: 'alert' }], repeat: { mode: 'oncePerBreach' } }], execution: { maxSlippagePct: 1 } };
-    const sig = await user.signTypedData({ domain: policyConfirmationDomain(1), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: user.address, version: 1n, policyHash: policyHash(policy) } });
+    const sig = await user.signTypedData({ domain: policyConfirmationDomain(1), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { network: 'testnet', account: user.address, version: 1n, policyHash: policyHash(policy) } });
     expect((await app.request('/v1/policy', { method: 'POST', headers: authed(token), body: JSON.stringify({ policy, signature: sig, chainId: 42161 }) })).status).toBe(401);
   });
 });

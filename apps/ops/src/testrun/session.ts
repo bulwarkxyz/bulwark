@@ -124,7 +124,7 @@ export class Session {
 
   /** Signs a policy version with the wallet (EIP-712 BulwarkPolicy) and saves it, as the app's Sign button does. */
   async signPolicy(policy: Policy): Promise<{ status: number; body: unknown }> {
-    const signature = await this.need().signTypedData({ domain: policyConfirmationDomain(WALLET_CHAIN_ID), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: WALLET, version: BigInt(policy.version), policyHash: policyHash(policy) } });
+    const signature = await this.need().signTypedData({ domain: policyConfirmationDomain(WALLET_CHAIN_ID), types: POLICY_CONFIRMATION_TYPES, primaryType: 'BulwarkPolicy', message: { account: WALLET, network: NET, version: BigInt(policy.version), policyHash: policyHash(policy) } });
     const res = await this.api('/v1/policy', { body: { policy, signature, chainId: WALLET_CHAIN_ID } });
     this.log.write('policy signed', { version: policy.version, hash: policyHash(policy), status: res.status, response: res.body, rules: policy.rules });
     return res;

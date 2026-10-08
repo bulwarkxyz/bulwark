@@ -17,6 +17,9 @@ export interface GuardUser {
   killSwitch: boolean;
   /** The user's maxBuilderFee covers our fee (read from the exchange at onboarding and refresh). */
   builderApproved: boolean;
+  /** Country (and subdivision) of the user's latest request through the app's proxy; regions are re-checked with it. */
+  lastCountry?: string | null;
+  lastSubdivision?: string | null;
 }
 
 export interface ConfirmedPolicy {
@@ -26,6 +29,10 @@ export interface ConfirmedPolicy {
   signature: Hex;
   signatureVerified: boolean;
   confirmedAt: number;
+  /** The wallet chain id the signature was made with (needed to verify it again). Null for old rows. */
+  chainId?: number | null;
+  /** The network the signature names (F5). Null: signed before signatures named the network, so it needs a re-sign. */
+  signedNetwork?: 'mainnet' | 'testnet' | null;
 }
 
 export interface Baseline {
@@ -61,9 +68,9 @@ export interface RuleMemory {
 /** What the guard is doing for an account, as the worker last judged it. */
 export type GuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
 /** Why the guard is paused. */
-export type PausedReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired';
+export type PausedReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired' | 'resign_required' | 'operator_stop';
 export const GUARD_STATES: readonly GuardState[] = ['protected', 'acting', 'at_risk', 'paused', 'stopped', 'no_rules', 'alerts_only'];
-export const PAUSED_REASONS: readonly PausedReason[] = ['stale_data', 'exchange_unreachable', 'signer_error', 'agent_expired'];
+export const PAUSED_REASONS: readonly PausedReason[] = ['stale_data', 'exchange_unreachable', 'signer_error', 'agent_expired', 'resign_required', 'operator_stop'];
 
 export interface GuardStatus {
   state: GuardState;
@@ -76,6 +83,11 @@ export interface GuardStatus {
 }
 
 export interface GuardStore {
+  /** Operator-wide state (the global stop, the worker's heartbeat), as JSON by key. */
+  operatorState<T = unknown>(key: string): Promise<{ value: T; at: number } | null>;
+  setOperatorState(key: string, value: unknown, now: number): Promise<void>;
+  /** Records where the user's latest request came from (the app's proxy headers). */
+  setLastSeen(account: string, country: string | null, subdivision: string | null): Promise<void>;
   users(): Promise<GuardUser[]>;
   user(account: string): Promise<GuardUser | null>;
   policy(account: string): Promise<ConfirmedPolicy | null>;
@@ -122,6 +134,10 @@ export interface PendingCommand {
   issuedAt: number;
   /** When the API verified the signature and accepted it (the server's clock, not the browser's). */
   acceptedAt: number;
+  /** The signature and what it was made with, so the worker verifies it itself (F3). */
+  signature?: string;
+  chainId?: number | null;
+  network?: string | null;
 }
 
 export type AgentKeyStatus = 'pending' | 'active' | 'retired' | 'wiped';
@@ -190,7 +206,7 @@ export interface ApiStore extends GuardStore {
   setKillSwitch(account: string, on: boolean): Promise<void>;
   confirmPolicy(account: string, cp: ConfirmedPolicy): Promise<void>;
   createTelegramCode(code: string, account: string, expiresAt: number): Promise<void>;
-  addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string }, now: number): Promise<number>;
+  addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string; chainId?: number; network?: string }, now: number): Promise<number>;
   pendingCommands(): Promise<PendingCommand[]>;
   finishCommand(id: number, result: Record<string, unknown>, now: number): Promise<void>;
   /** One of the account's commands with its result (null for another account's id). */
@@ -213,6 +229,17 @@ export class MemoryStore implements ApiStore, KeyVault {
   private readonly o = new Map<string, GuardOrder[]>();
   private readonly a = new Map<string, number[]>();
   private k = (x: string) => x.toLowerCase();
+  private readonly ops = new Map<string, { value: unknown; at: number }>();
+  async operatorState<T = unknown>(key: string) {
+    return (this.ops.get(key) as { value: T; at: number } | undefined) ?? null;
+  }
+  async setOperatorState(key: string, value: unknown, now: number) {
+    this.ops.set(key, { value, at: now });
+  }
+  async setLastSeen(account: string, country: string | null, subdivision: string | null) {
+    const u = this.u.get(this.k(account));
+    if (u) this.u.set(this.k(account), { ...u, lastCountry: country, lastSubdivision: subdivision });
+  }
 
   putUser(user: GuardUser) {
     this.u.set(this.k(user.account), user);
@@ -295,9 +322,10 @@ export class MemoryStore implements ApiStore, KeyVault {
     this.putTelegramCode(code, account, expiresAt);
   }
   private readonly cmds: Array<Omit<PendingCommand, 'acceptedAt'> & { createdAt: number; doneAt?: number; result?: Record<string, unknown> }> = [];
-  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number }, now = 0) {
+  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature?: string; chainId?: number; network?: string }, now = 0) {
+    if (c.signature && this.cmds.some((x) => x.signature === c.signature)) throw new Error('duplicate key value violates unique constraint "commands_signature_once"');
     const id = this.cmds.length + 1;
-    this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt, createdAt: now });
+    this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt, createdAt: now, ...(c.signature ? { signature: c.signature } : {}), chainId: c.chainId ?? null, network: c.network ?? null });
     return id;
   }
   async command(account: string, id: number): Promise<CommandRecord | null> {
@@ -321,7 +349,7 @@ export class MemoryStore implements ApiStore, KeyVault {
     return next;
   }
   async pendingCommands() {
-    return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt, createdAt }) => ({ id, account, command, minutes, issuedAt, acceptedAt: createdAt }));
+    return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt, createdAt, signature, chainId, network }) => ({ id, account, command, minutes, issuedAt, acceptedAt: createdAt, ...(signature ? { signature } : {}), chainId: chainId ?? null, network: network ?? null }));
   }
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     const c = this.cmds.find((x) => x.id === id);
@@ -413,4 +441,14 @@ export class MemoryStore implements ApiStore, KeyVault {
     for (const [k, u] of this.u) if (u.telegramChatId === chatId) (this.u.set(k, { ...u, telegramChatId: null }), out.push(k));
     return out;
   }
+}
+
+/**
+ * A database belongs to one network (mainnet prerequisites, 8 Oct 2026). The first service to start stamps it; a service
+ * for the other network then refuses to start against it, so tables and sessions never cross networks.
+ */
+export async function stampNetwork(store: Pick<GuardStore, 'operatorState' | 'setOperatorState'>, network: 'testnet' | 'mainnet', now: number): Promise<void> {
+  const stamp = await store.operatorState<{ network: string }>('network');
+  if (!stamp) return store.setOperatorState('network', { network }, now);
+  if (stamp.value.network !== network) throw new Error(`this database belongs to ${stamp.value.network}; refusing to run ${network} against it`);
 }

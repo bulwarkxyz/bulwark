@@ -232,7 +232,13 @@ describe('user commands', () => {
       ['xyz:NVDA', 'order'],
     ]);
     expect(steps[0]!.wire).toMatchObject({ twap: { b: false, r: true, s: '2', m: 10 } });
-    for (const s of steps) await expect(cmdSigner.signUnwindStep(cmd, s, big, 1, now)).resolves.toBeDefined();
+    const markOf = (coin: string) => big.positions.find((p) => p.coin === coin)!.markAtSnapshot;
+    for (const s of steps) await expect(cmdSigner.signUnwindStep(cmd, s, big, 1, now, { mark: markOf(s.coin), maxSlippagePct: 1 })).resolves.toBeDefined();
+    // F9 (8 Oct 2026): an IOC close priced beyond the user's slippage of the mark is refused (before: only its shape was checked).
+    const ioc = steps[1]!;
+    const far = { ...ioc, wire: { ...(ioc.wire as unknown as { orders: Array<Record<string, unknown>> }), orders: [{ ...(ioc.wire as unknown as { orders: Array<Record<string, unknown>> }).orders[0]!, p: String(markOf('xyz:NVDA') * 0.9) }] } } as never;
+    await expect(cmdSigner.signUnwindStep(cmd, far, big, 3, now, { mark: markOf('xyz:NVDA'), maxSlippagePct: 1 })).rejects.toThrow(/beyond your 1% slippage/);
+    await expect(cmdSigner.signUnwindStep(cmd, ioc, big, 4, now)).rejects.toThrow(/no mark/);
     // tampering with the side is refused at signing
     const flipped = { ...steps[0]!, wire: { ...(steps[0]!.wire as never as { twap: object }), type: 'twapOrder', twap: { ...(steps[0]!.wire as { twap: object }).twap, b: true } } } as never;
     await expect(cmdSigner.signUnwindStep(cmd, flipped, big, 2, now)).rejects.toBeInstanceOf(CommandRejected);

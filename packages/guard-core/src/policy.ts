@@ -122,10 +122,24 @@ export function policyHash(policy: Policy): `0x${string}` {
 export const POLICY_CONFIRMATION_TYPES = {
   BulwarkPolicy: [
     { name: 'account', type: 'address' },
+    { name: 'network', type: 'string' },
     { name: 'version', type: 'uint64' },
     { name: 'policyHash', type: 'bytes32' },
   ],
 } as const;
+/**
+ * The shape signed before 8 Oct 2026, without the network (security review F5): a testnet signature would also have
+ * been valid on a mainnet deployment. Kept only to recognise such policies and ask for a re-sign; never accepted.
+ */
+export const POLICY_CONFIRMATION_TYPES_LEGACY = {
+  BulwarkPolicy: [
+    { name: 'account', type: 'address' },
+    { name: 'version', type: 'uint64' },
+    { name: 'policyHash', type: 'bytes32' },
+  ],
+} as const;
+/** The Hyperliquid network a signature is for, as signed (F5). */
+export type SignedNetwork = 'mainnet' | 'testnet';
 
 export function policyConfirmationDomain(chainId: number) {
   return { name: 'Bulwark', version: '1', chainId } as const;
@@ -138,6 +152,7 @@ export function policyConfirmationDomain(chainId: number) {
 export const COMMAND_TYPES = {
   BulwarkCommand: [
     { name: 'account', type: 'address' },
+    { name: 'network', type: 'string' },
     { name: 'command', type: 'string' },
     { name: 'minutes', type: 'uint32' },
     { name: 'issuedAt', type: 'uint64' },

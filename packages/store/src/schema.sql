@@ -163,3 +163,35 @@ alter table latches add column if not exists fires jsonb not null default '{}'::
 alter table users add column if not exists in_app_alerts boolean not null default true;
 -- The newest alert (audit seq) the user has seen, on any device.
 alter table users add column if not exists alerts_seen_seq bigint not null default 0;
+
+-- Security review F3/F5 (8 Oct 2026): what a signature was made with, so the worker can verify it itself, and which
+-- network it names (null: signed before signatures named the network; such policies need a re-sign).
+alter table policies add column if not exists chain_id integer;
+alter table policies add column if not exists signed_network text;
+alter table commands add column if not exists chain_id integer;
+alter table commands add column if not exists network text;
+-- A command's signature is used once (F5: no replay).
+-- Rows from before this index may repeat a signature (they are long past the 60 s window); if so, the index covers only
+-- rows written after it, rather than failing the start-up.
+do $$ begin
+  if not exists (select 1 from pg_indexes where indexname = 'commands_signature_once') then
+    if exists (select 1 from commands group by signature having count(*) > 1) then
+      execute format('create unique index commands_signature_once on commands (signature) where id > %s', (select max(id) from commands));
+    else
+      create unique index commands_signature_once on commands (signature);
+    end if;
+  end if;
+end $$;
+-- F8: the audit log cannot be emptied in one statement either.
+drop trigger if exists audit_log_no_truncate on audit_log;
+create trigger audit_log_no_truncate before truncate on audit_log
+  for each statement execute function audit_log_append_only();
+-- An operator stop that halts the guard for every account at once (backstops left standing), and the worker's heartbeat.
+create table if not exists operator_state (
+  key    text primary key,
+  value  jsonb not null,
+  at     bigint not null
+);
+-- The country of the user's latest request, from the app's proxy (regions are re-checked at every guard action).
+alter table users add column if not exists last_country text;
+alter table users add column if not exists last_subdivision text;

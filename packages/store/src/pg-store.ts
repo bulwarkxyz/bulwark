@@ -27,9 +27,9 @@ class PgAudit implements AuditStore {
       return entry;
     }) as Promise<AuditEntry>;
   }
-  async list(account: string, limit = 100): Promise<AuditEntry[]> {
+  async list(account: string, limit = 100, before?: number): Promise<AuditEntry[]> {
     const rows = await this.sql<Array<{ account: string; seq: number; at: string; kind: AuditEntry['kind']; why: string; what: string; proof: Record<string, unknown> | null; prev_hash: string; hash: string }>>`
-      select * from audit_log where account = ${account.toLowerCase()} order by seq desc limit ${limit}`;
+      select * from audit_log where account = ${account.toLowerCase()} and seq < ${before ?? 2_147_483_647} order by seq desc limit ${limit}`;
     return rows.map((r) => ({ account: r.account, seq: r.seq, at: Number(r.at), kind: r.kind, why: r.why, what: r.what, ...(r.proof ? { proof: r.proof } : {}), prevHash: r.prev_hash, hash: r.hash }));
   }
 }
@@ -52,7 +52,20 @@ export class PgStore implements ApiStore, KeyVault {
       agentAddress: (r.agent_address as Hex | null) ?? null,
       residency: (r.residency as string | null) ?? null,
       citizenship: (r.citizenship as string | null) ?? null,
+      lastCountry: (r.last_country as string | null) ?? null,
+      lastSubdivision: (r.last_subdivision as string | null) ?? null,
     };
+  }
+  async operatorState<T = unknown>(key: string) {
+    const [r] = await this.sql`select value, at from operator_state where key = ${key}`;
+    return r ? { value: r.value as T, at: Number(r.at) } : null;
+  }
+  async setOperatorState(key: string, value: unknown, now: number) {
+    await this.sql`insert into operator_state (key, value, at) values (${key}, ${this.sql.json(value as never)}, ${now})
+      on conflict (key) do update set value = excluded.value, at = excluded.at`;
+  }
+  async setLastSeen(account: string, country: string | null, subdivision: string | null) {
+    await this.sql`update users set last_country = ${country}, last_subdivision = ${subdivision} where account = ${this.k(account)} and (last_country is distinct from ${country} or last_subdivision is distinct from ${subdivision})`;
   }
   async upsertUser(u: GuardUser, now: number): Promise<void> {
     await this.sql`insert into users (account, agent_key_ref, agent_address, region, residency, citizenship, telegram_chat_id, kill_switch, builder_approved, created_at)
@@ -71,14 +84,14 @@ export class PgStore implements ApiStore, KeyVault {
   async confirmPolicy(account: string, cp: ConfirmedPolicy): Promise<void> {
     await this.sql.begin(async (tx) => {
       await tx`update policies set active = false where account = ${this.k(account)} and active`;
-      await tx`insert into policies (account, version, body, hash, signature, signature_verified, confirmed_at, active)
-        values (${this.k(account)}, ${cp.policy.version}, ${tx.json(cp.policy as never)}, ${cp.hash}, ${cp.signature}, ${cp.signatureVerified}, ${cp.confirmedAt}, true)`;
+      await tx`insert into policies (account, version, body, hash, signature, signature_verified, confirmed_at, active, chain_id, signed_network)
+        values (${this.k(account)}, ${cp.policy.version}, ${tx.json(cp.policy as never)}, ${cp.hash}, ${cp.signature}, ${cp.signatureVerified}, ${cp.confirmedAt}, true, ${cp.chainId ?? null}, ${cp.signedNetwork ?? null})`;
     });
   }
   async policy(account: string): Promise<ConfirmedPolicy | null> {
     const [r] = await this.sql`select * from policies where account = ${this.k(account)} and active`;
     if (!r) return null;
-    return { policy: Policy.parse(r.body), hash: r.hash, signature: r.signature, signatureVerified: r.signature_verified, confirmedAt: Number(r.confirmed_at) };
+    return { policy: Policy.parse(r.body), hash: r.hash, signature: r.signature, signatureVerified: r.signature_verified, confirmedAt: Number(r.confirmed_at), chainId: r.chain_id ?? null, signedNetwork: r.signed_network ?? null };
   }
   async latched(account: string) {
     const [r] = await this.sql`select keys from latches where account = ${this.k(account)}`;
@@ -145,14 +158,14 @@ export class PgStore implements ApiStore, KeyVault {
   async setKillSwitch(account: string, on: boolean) {
     await this.sql`update users set kill_switch = ${on} where account = ${this.k(account)}`;
   }
-  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string }, now: number) {
-    const [row] = await this.sql`insert into commands (account, command, minutes, issued_at, signature, created_at)
-      values (${this.k(c.account)}, ${c.command}, ${c.minutes}, ${c.issuedAt}, ${c.signature}, ${now}) returning id`;
+  async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number; signature: string; chainId?: number; network?: string }, now: number) {
+    const [row] = await this.sql`insert into commands (account, command, minutes, issued_at, signature, created_at, chain_id, network)
+      values (${this.k(c.account)}, ${c.command}, ${c.minutes}, ${c.issuedAt}, ${c.signature}, ${now}, ${c.chainId ?? null}, ${c.network ?? null}) returning id`;
     return Number(row?.id);
   }
   async pendingCommands(): Promise<PendingCommand[]> {
-    const rows = await this.sql`select id, account, command, minutes, issued_at, created_at from commands where done_at is null order by created_at`;
-    return rows.map((r) => ({ id: Number(r.id), account: r.account, command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at), acceptedAt: Number(r.created_at) }));
+    const rows = await this.sql`select id, account, command, minutes, issued_at, created_at, signature, chain_id, network from commands where done_at is null order by created_at`;
+    return rows.map((r) => ({ id: Number(r.id), account: r.account, command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at), acceptedAt: Number(r.created_at), signature: r.signature, chainId: r.chain_id ?? null, network: r.network ?? null }));
   }
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     await this.sql`update commands set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;

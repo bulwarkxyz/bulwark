@@ -117,6 +117,8 @@ The app shows what the guard is doing right now, as the guard itself reports it:
 | At risk | A line is crossed and that stage has already acted; the next line has not been reached |
 | Paused | The guard cannot act right now. The reason is shown: data too old, Hyperliquid not answering, the signer could not use your guard key, or your guard key's approval on Hyperliquid has expired or been removed |
 | Stopped | You turned on the kill switch |
+| Paused: needs a new signature | Your rules were signed before signatures named the network (8 October 2026). Sign them again; your backstops stay in place meanwhile |
+| Paused for everyone | Bulwark's operator paused the guard for all accounts. Your backstops stay in place |
 | No rules | You have not signed any rules yet |
 | Alerts only | Automatic action is off in your region; the guard alerts you instead |
 
@@ -131,7 +133,7 @@ Every action passes seven checks twice: once when it is decided, and again in th
 | I1 | Every order is reduce-only, opposes the open position, and is no larger than it |
 | I2 | Nothing raises leverage or changes margin mode; isolated margin can only be added |
 | I3 | Funds move only between your own balances, only into a pool that needs margin, and never take a source pool below your highest line |
-| I4 | Only under a policy whose hash matches your verified signature, with the kill switch off and automation allowed in your region |
+| I4 | Only under a policy the guard has itself checked against your signature for this network, with the kill switch off and automation allowed in your region as it stands now (including the latest country your connection came from) |
 | I5 | Every action traces to a rule in the policy you signed |
 | I6 | At most 20 guard actions per minute; orders meet the $10 minimum unless closing |
 | I7 | A builder code is attached only when enabled and approved; if the exchange rejects it, the order is retried without it |

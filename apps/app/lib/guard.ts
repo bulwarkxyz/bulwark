@@ -57,7 +57,7 @@ export const GUARD_CHIP: Record<GuardState, string> = {
  * paused / stale_data. The app's own data-age check below is used only when this endpoint can't be reached.
  */
 export type ApiGuardState = 'protected' | 'acting' | 'at_risk' | 'paused' | 'stopped' | 'no_rules' | 'alerts_only';
-export type PauseReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired';
+export type PauseReason = 'stale_data' | 'exchange_unreachable' | 'signer_error' | 'agent_expired' | 'resign_required' | 'operator_stop';
 export interface GuardStatus {
   state: ApiGuardState;
   reason?: PauseReason | null;
@@ -80,6 +80,8 @@ export const PAUSE_TEXT: Record<PauseReason, string> = {
   exchange_unreachable: 'The guard can’t reach Hyperliquid.',
   signer_error: 'The guard’s signer failed.',
   agent_expired: 'Your guard key’s approval on Hyperliquid has expired. Approve it again in setup.',
+  resign_required: 'Your rules were signed before signatures named the network. Sign them again in Guard rules; until then the guard takes no new action, and its resting backstops stay on Hyperliquid.',
+  operator_stop: 'Bulwark has paused the guard for everyone. Your resting backstops stay on Hyperliquid.',
 };
 /**
  * The guard reports agent_expired both when an approval has run out and before a key was ever approved;

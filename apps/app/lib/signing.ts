@@ -112,7 +112,8 @@ export async function signPolicy(sign: SignTypedData, walletChainId: number, pol
     domain: policyConfirmationDomain(walletChainId) as unknown as Record<string, unknown>,
     types: POLICY_CONFIRMATION_TYPES as unknown as Record<string, unknown>,
     primaryType: 'BulwarkPolicy',
-    message: { account: policy.account, version: BigInt(policy.version), policyHash: policyHash(policy) },
+    // The network is part of what the user signs (security review F5): a testnet signature is never valid on mainnet.
+    message: { account: policy.account, network: NETWORK, version: BigInt(policy.version), policyHash: policyHash(policy) },
   });
 }
 
@@ -121,6 +122,6 @@ export async function signCommand(sign: SignTypedData, walletChainId: number, ac
     domain: policyConfirmationDomain(walletChainId) as unknown as Record<string, unknown>,
     types: COMMAND_TYPES as unknown as Record<string, unknown>,
     primaryType: 'BulwarkCommand',
-    message: { account, command, minutes, issuedAt: BigInt(issuedAt) },
+    message: { account, network: NETWORK, command, minutes, issuedAt: BigInt(issuedAt) },
   });
 }

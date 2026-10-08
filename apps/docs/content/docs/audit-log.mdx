@@ -13,4 +13,4 @@ When an order is [retried](/how-the-guard-works#when-an-order-does-not-fill), ea
 
 ## Tamper evidence
 
-Each entry includes the hash of the entry before it, one chain per account. Changing or deleting any entry breaks every hash after it. The database refuses updates and deletes on the log, and the app **recomputes the whole chain in your browser** and shows whether it is intact.
+Each entry includes the hash of the entry before it, one chain per account. Changing or deleting any entry breaks every hash after it. The database refuses updates and deletes on the log, and the app reads your log back to its first entry (up to 20,000 entries) and **recomputes the whole chain in your browser**, showing whether it is intact. If it cannot reach the first entry, it says so instead of showing the chain as verified.

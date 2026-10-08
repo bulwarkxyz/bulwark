@@ -10,6 +10,7 @@
     "simulator",
     "audit-log",
     "---Trust---",
+    "security-model",
     "key-storage",
     "risks",
     "backtests",

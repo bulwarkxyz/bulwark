@@ -1,4 +1,5 @@
-import { executeActions, planUnwind, stopCancels, type CommandSigner, type Exchange, type ExecutionRecord, type GuardedSigner } from '@bulwarkxyz/executor';
+import { currentVerdict } from '@bulwarkxyz/config';
+import { executeActions, planUnwind, stopCancels, verifyCommandSignature, verifyPolicySignature, type CommandSigner, type Exchange, type ExecutionRecord, type GuardedSigner } from '@bulwarkxyz/executor';
 import {
   assessRisk,
   buildSnapshot,
@@ -42,6 +43,11 @@ export const DEGRADED_ALERT_AFTER_MS = 20_000;
 export const BACKSTOP_EVERY_MS = 60_000;
 export const OPEN_ORDERS_TTL_MS = 15_000;
 export const CHOICE_NOTICE_WHY = 'A new setting needs your choice';
+/** Audit reasons for the one-time notices when the guard will not act (each sent once per cause, across restarts). */
+export const RESIGN_NOTICE_WHY = 'Your rules need a new signature';
+export const OPERATOR_STOP_WHY = 'Bulwark paused the guard for everyone';
+/** How often the worker re-reads the operator's global stop. */
+export const OPERATOR_STOP_TTL_MS = 3_000;
 /** After Hyperliquid refuses an open-orders request, wait this long before that account asks again. */
 export const OPEN_ORDERS_RETRY_MS = 5_000;
 /** The status is written when it changes, and at least this often while the account is evaluated. */
@@ -127,6 +133,8 @@ interface AccountCache {
   policyHash?: string;
   /** Policy hash we last asked the user to make the repeat choice for. */
   choiceNoticeFor?: string;
+  /** One-time notices already sent by this process. */
+  notices?: Set<string>;
 }
 
 const coinsOf = (c: AccountCache) => new Set(Object.values(c.dexStates).flatMap((s) => s.assetPositions.map((p) => p.position.coin)));
@@ -315,6 +323,25 @@ export class GuardEngine {
     if (c.lastEvaluatedAt === undefined) c.lastEvaluatedAt = (await store.guardStatus(account))?.lastEvaluatedAt ?? null;
     const report = (state: GuardState, reason: PausedReason | null = null) => this.report(account, c, user.killSwitch ? 'stopped' : state, user.killSwitch ? null : reason, now);
     if (!confirmed || confirmed.policy.rules.length === 0) return report('no_rules');
+    // The operator's global stop: nothing is evaluated, signed or cancelled for anyone; resting backstops stand.
+    const stop = await this.operatorStop(now);
+    if (stop) {
+      await this.noticeOnce(account, user.telegramChatId, OPERATOR_STOP_WHY, `stop:${stop.at}`, `Bulwark has paused the guard for every account${stop.reason ? ` (${stop.reason})` : ''}. Nothing is being signed. Your resting backstops stay on Hyperliquid.`, now);
+      return report('paused', 'operator_stop');
+    }
+    // The rules' own signature, verified here (security review F3: a stored "verified" flag is never trusted) and for
+    // this network (F5). Rules signed before signatures named the network need a new signature; until then the
+    // guard takes no new action and leaves its resting backstops as they are.
+    const sig = await this.policySignature(account, confirmed);
+    if (sig !== 'ok') {
+      const what = sig === 'resign'
+        ? 'Your rules were signed before signatures named the network. Sign them again in Guard rules; until then the guard takes no new action, and its resting backstops stay on Hyperliquid.'
+        : 'Your rules\' signature could not be verified for this network, so the guard takes no action under them. Sign them again in Guard rules.';
+      await this.noticeOnce(account, user.telegramChatId, RESIGN_NOTICE_WHY, confirmed.hash, what, now);
+      return report('paused', 'resign_required');
+    }
+    // The region now, not only at onboarding: the strictest of the declarations and the latest request's country.
+    const region = currentVerdict(user);
     if (c.stateAt === 0) return report('paused', 'stale_data');
     if (!c.abstraction || now - (c.abstractionAt ?? 0) >= ABSTRACTION_TTL_MS) {
       // A failed re-read keeps the last known mode; with none known yet, the run fails and is retried.
@@ -385,7 +412,7 @@ export class GuardEngine {
       latched: await store.latched(account),
       breaches: memory.breaches,
       fires: memory.fires,
-      automationAllowed: user.region === 'allowed',
+      automationAllowed: region === 'allowed',
       guardOwnedOids: new Set(guardOrders.map((o) => o.oid)),
     };
     const decision = evaluate(policy, snapshot, marks, ctx);
@@ -426,7 +453,7 @@ export class GuardEngine {
       c.policyHash = confirmed.hash;
       c.lastBackstopAt = 0; // rules changed: re-price backstops now
     }
-    if (now - c.lastBackstopAt >= BACKSTOP_EVERY_MS && user.region === 'allowed' && !user.killSwitch) {
+    if (now - c.lastBackstopAt >= BACKSTOP_EVERY_MS && region === 'allowed' && !user.killSwitch) {
       c.lastBackstopAt = now;
       await this.backstops(account, user, confirmed, snapshot, marks, ctx);
     }
@@ -434,13 +461,54 @@ export class GuardEngine {
     const paused = this.pausedReason(c, now);
     const acting = chains.length > 0 || records.some((r) => r.action.type !== 'alert' && r.status !== 'rejected');
     if (paused) return report('paused', paused);
-    if (user.region !== 'allowed') return report('alerts_only');
+    if (region !== 'allowed') return report('alerts_only');
     if (acting) return report('acting');
     if (decision.active.size > 0) return report('at_risk');
     return report('protected');
   }
 
   /** Whether the "needs your choice" notice for this policy version is already in the audit log. */
+  private verifiedPolicies = new Map<string, 'ok' | 'resign' | 'bad'>();
+  /** 'ok' when the stored signature recovers to the account for this network; cached by policy hash. */
+  private async policySignature(account: Hex, confirmed: NonNullable<Awaited<ReturnType<GuardStore['policy']>>>): Promise<'ok' | 'resign' | 'bad'> {
+    // Keyed by everything the verdict depends on: the same rules with another signature are checked again.
+    const key = `${account.toLowerCase()}:${confirmed.hash}:${confirmed.signature}:${confirmed.chainId ?? ''}:${confirmed.signedNetwork ?? ''}`;
+    const known = this.verifiedPolicies.get(key);
+    if (known) return known;
+    let v: 'ok' | 'resign' | 'bad';
+    if (!confirmed.signedNetwork || !confirmed.chainId) v = 'resign';
+    else if (confirmed.signedNetwork !== this.deps.network) v = 'bad';
+    else v = (await verifyPolicySignature({ account, policy: confirmed.policy, signature: confirmed.signature, chainId: confirmed.chainId, network: confirmed.signedNetwork })) ? 'ok' : 'bad';
+    this.verifiedPolicies.set(key, v);
+    return v;
+  }
+
+  private stopCache: { at: number; value: { at: number; reason: string | null } | null } | null = null;
+  /** The operator's global stop, if on (re-read every few seconds). */
+  async operatorStop(now: number): Promise<{ at: number; reason: string | null } | null> {
+    if (this.stopCache && now - this.stopCache.at < OPERATOR_STOP_TTL_MS) return this.stopCache.value;
+    try {
+      const st = await this.deps.store.operatorState<{ on: boolean; reason?: string | null }>('global_stop');
+      this.stopCache = { at: now, value: st?.value.on ? { at: st.at, reason: st.value.reason ?? null } : null };
+    } catch {
+      // The database could not be read: keep the last known value (and try again next time).
+      this.stopCache = { at: now, value: this.stopCache?.value ?? null };
+    }
+    return this.stopCache.value;
+  }
+
+  /** One alert (audit and Telegram) per cause, also across restarts. */
+  private async noticeOnce(account: Hex, chatId: string | null, why: string, key: string, what: string, now: number): Promise<void> {
+    const c = this.entry(account);
+    const id = `${why}|${key}`;
+    if (c.notices?.has(id)) return;
+    (c.notices ??= new Set()).add(id);
+    const recent = await this.deps.store.audit.list(account, 200).catch(() => []);
+    if (recent.some((e) => e.why === why && (e.proof as { key?: string } | undefined)?.key === key)) return;
+    await this.audit({ account, at: now, kind: 'alert', why, what, proof: { key } });
+    if (chatId) await this.deps.notifier.send(chatId, `Bulwark: ${what}`).catch(() => undefined);
+  }
+
   private async choiceNoticeLogged(account: Hex, version: number): Promise<boolean> {
     const recent = await this.deps.store.audit.list(account, 200).catch(() => []);
     return recent.some((e) => e.kind === 'alert' && e.why === CHOICE_NOTICE_WHY && (e.proof as { policyVersion?: number } | undefined)?.policyVersion === version);
@@ -496,7 +564,8 @@ export class GuardEngine {
     const builder = this.deps.builder && user.builderApproved ? this.deps.builder : null;
     const execCtx: ExecutionContext = {
       ...ctx,
-      confirmation: { policyHash: confirmed.hash, signatureVerified: confirmed.signatureVerified },
+      // I4 checks the signature this worker verified itself (F3), never the stored flag.
+      confirmation: { policyHash: confirmed.hash, signatureVerified: (await this.policySignature(account, confirmed)) === 'ok' },
       killSwitch: user.killSwitch,
       recentActions: await store.recentActions(account, now() - 60_000),
       builder: builder ? { enabled: true, approvedMaxTenthsBps: Math.max(builder.f, 0), feeTenthsBps: builder.f } : null,
@@ -586,9 +655,21 @@ export class GuardEngine {
   }
 
   /** Carries out a command the user signed (the API verified the signature before queueing it). */
-  async command(cmd: PendingCommand): Promise<Record<string, unknown>> {
+  /**
+   * Carries out a command the user signed. The worker verifies the command's own signature, for this network
+   * (security review F3, F5), and never trusts the queue. `signedAs`: the command the user signed when it differs
+   * (a wipe starts with the stop step).
+   */
+  async command(cmd: PendingCommand & { signedAs?: PendingCommand['command'] }): Promise<Record<string, unknown>> {
     const account = cmd.account as Hex;
     const now = this.deps.now();
+    const verified =
+      Boolean(cmd.signature && cmd.chainId && cmd.network === this.deps.network) &&
+      (await verifyCommandSignature({ account, command: cmd.signedAs ?? cmd.command, minutes: cmd.minutes, issuedAt: cmd.issuedAt, signature: cmd.signature as Hex, chainId: cmd.chainId as number, network: cmd.network as 'mainnet' | 'testnet' }));
+    if (!verified) {
+      await this.audit({ account, at: now, kind: 'rejected', why: 'A queued command whose signature could not be verified', what: `Not carried out: ${cmd.signedAs ?? cmd.command}`, proof: { commandId: cmd.id } });
+      return { error: 'the command signature could not be verified for this network; sign it again', unverified: true };
+    }
     const signer = await this.deps.commandSignerFor(account);
     const signed = { kind: cmd.command, minutes: cmd.minutes, issuedAt: cmd.issuedAt, acceptedAt: cmd.acceptedAt, verified: true } as const;
     if (cmd.command === 'stop') {
@@ -609,13 +690,18 @@ export class GuardEngine {
       const confirmed = await this.deps.store.policy(account);
       const c = this.entry(account);
       if (!c.stateAt) return { error: 'no account state yet' };
+      // The same freshness limits as the guard's own actions (F9): no unwind priced from old data.
+      const held = [...coinsOf(c)];
+      const staleMark = held.find((coin) => !this.marks.has(coin) || now - (this.marks.get(coin) as { at: number }).at > MARK_MAX_AGE_MS);
+      if (now - c.stateAt > STATE_MAX_AGE_MS || staleMark) return { error: `account data or prices are too old to unwind safely${staleMark ? ` (${staleMark})` : ''}; sign it again in a moment` };
       const snapshot = this.snapshot(account, c);
-      const marks = Object.fromEntries([...coinsOf(c)].flatMap((coin) => (this.marks.has(coin) ? [[coin, (this.marks.get(coin) as { px: number }).px]] : [])));
-      const steps = planUnwind({ ...signed, kind: 'unwind' }, snapshot, marks, confirmed?.policy.execution.maxSlippagePct ?? 1);
+      const marks = Object.fromEntries(held.map((coin) => [coin, (this.marks.get(coin) as { px: number }).px]));
+      const slip = confirmed?.policy.execution.maxSlippagePct ?? 1;
+      const steps = planUnwind({ ...signed, kind: 'unwind' }, snapshot, marks, slip);
       const results: Array<Record<string, unknown>> = [];
       for (const step of steps) {
         const nonce = this.deps.nonces.next(signer.address);
-        const sig = await signer.signUnwindStep({ ...signed, kind: 'unwind' }, step, snapshot, nonce, this.deps.now());
+        const sig = await signer.signUnwindStep({ ...signed, kind: 'unwind' }, step, snapshot, nonce, this.deps.now(), { mark: marks[step.coin] as number, maxSlippagePct: slip });
         const res = await this.deps.exchange.send({ action: step.wire, nonce, signature: sig });
         results.push({ coin: step.coin, type: step.wire.type, ok: res.ok, error: res.error ?? null });
       }

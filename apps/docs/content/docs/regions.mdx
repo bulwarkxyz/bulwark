@@ -18,3 +18,5 @@ In the **EU and EEA** you can trade and receive alerts, but the automatic guard 
 ## How it is checked
 
 Bulwark takes the strictest of three signals: the country your connection comes from, the country you say you live in, and your citizenship. If any of the three is a country where Bulwark is not available, access is refused; if any is in the EU or EEA, the automatic guard is off.
+
+The guard checks again before every action, using the latest country your connection came from. If you connect from a country where automatic action is off, the guard switches to alerts only from then on.

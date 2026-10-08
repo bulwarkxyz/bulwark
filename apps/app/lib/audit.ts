@@ -5,15 +5,36 @@ import { useQuery } from '@tanstack/react-query';
 import { api, useSignedIn } from './api';
 import { useReview, useViewer } from './review';
 
-/** The audit log (GET /v1/audit), newest 500. Shared by the Audit log screen and the guard actions panel. */
-export function useAudit({ enabled = true }: { enabled?: boolean } = {}) {
+const PAGE = 500;
+/** Pages the Audit log screen reads back through (GET /v1/audit?before=), so the whole chain can be checked: 20,000 entries. */
+export const MAX_PAGES = 40;
+
+/** Newest first, paging back with `before` until entry #1 or `pages` pages, whichever comes first. */
+export async function fetchAudit(pages: number, get: (path: string) => Promise<AuditEntry[]> = (p) => api<AuditEntry[]>(p)): Promise<AuditEntry[]> {
+  const out: AuditEntry[] = [];
+  let before: number | null = null;
+  for (let i = 0; i < pages; i++) {
+    const page = await get(before === null ? `/v1/audit?limit=${PAGE}` : `/v1/audit?limit=${PAGE}&before=${before}`);
+    out.push(...page);
+    const oldest = page.reduce((m, e) => Math.min(m, e.seq), Infinity);
+    if (page.length < PAGE || oldest <= 1) break;
+    before = oldest;
+  }
+  return out;
+}
+
+/**
+ * The audit log (GET /v1/audit). Shared by the Audit log screen (`whole`: the whole chain, so it can be verified) and the
+ * guard actions panel (the newest 500).
+ */
+export function useAudit({ enabled = true, whole = false }: { enabled?: boolean; whole?: boolean } = {}) {
   const review = useReview();
   const { address } = useViewer();
   const signedIn = useSignedIn();
   return useQuery({
-    queryKey: ['audit', address, review.on],
+    queryKey: ['audit', address, review.on, whole],
     enabled: enabled && Boolean(address && (signedIn || review.on)),
-    queryFn: async () => (review.on ? reviewEntries() : api<AuditEntry[]>('/v1/audit?limit=500')),
+    queryFn: async () => (review.on ? reviewEntries() : fetchAudit(whole ? MAX_PAGES : 1)),
     refetchInterval: 30_000,
   });
 }

@@ -46,7 +46,8 @@ export function entryHash(prevHash: string, input: AuditInput & { seq: number })
 
 export interface AuditStore {
   append(input: AuditInput): Promise<AuditEntry>;
-  list(account: string, limit?: number): Promise<AuditEntry[]>;
+  /** Newest first; `before`: only entries with a lower seq (to page back through the whole chain). */
+  list(account: string, limit?: number, before?: number): Promise<AuditEntry[]>;
 }
 
 /** Recomputes every hash in order; returns the first broken seq, or null if the chain is intact. */
@@ -73,8 +74,9 @@ export class MemoryAuditStore implements AuditStore {
     this.chains.set(key, chain);
     return entry;
   }
-  async list(account: string, limit = 100): Promise<AuditEntry[]> {
-    return (this.chains.get(account.toLowerCase()) ?? []).slice(-limit).reverse();
+  async list(account: string, limit = 100, before?: number): Promise<AuditEntry[]> {
+    const all = (this.chains.get(account.toLowerCase()) ?? []).filter((e) => before === undefined || e.seq < before);
+    return all.slice(-limit).reverse();
   }
   /** Test helper: direct access to the stored chain. */
   raw(account: string): AuditEntry[] {

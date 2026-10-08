@@ -63,3 +63,17 @@ export function strictestVerdict(...verdicts: RegionVerdict[]): RegionVerdict {
   if (verdicts.includes('guardOff')) return 'guardOff';
   return 'allowed';
 }
+
+/**
+ * The verdict for an account now: the strictest of its declared residency and citizenship and the country of its
+ * latest request (the app's proxy). Checked at every guard action, not only at onboarding. An account with no
+ * declarations (onboarded before they were asked) keeps its stored verdict as one of the signals.
+ */
+export function currentVerdict(u: { region?: RegionVerdict | null; residency?: string | null; citizenship?: string | null; lastCountry?: string | null; lastSubdivision?: string | null }): RegionVerdict {
+  const signals: RegionVerdict[] = [];
+  if (u.residency) signals.push(regionVerdict(u.residency));
+  if (u.citizenship) signals.push(regionVerdict(u.citizenship));
+  if (u.lastCountry) signals.push(regionVerdict(u.lastCountry, u.lastSubdivision));
+  if (!u.residency && !u.citizenship && u.region) signals.push(u.region);
+  return signals.length ? strictestVerdict(...signals) : 'blocked';
+}
