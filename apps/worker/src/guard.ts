@@ -590,7 +590,7 @@ export class GuardEngine {
     const account = cmd.account as Hex;
     const now = this.deps.now();
     const signer = await this.deps.commandSignerFor(account);
-    const signed = { kind: cmd.command, minutes: cmd.minutes, issuedAt: cmd.issuedAt, verified: true } as const;
+    const signed = { kind: cmd.command, minutes: cmd.minutes, issuedAt: cmd.issuedAt, acceptedAt: cmd.acceptedAt, verified: true } as const;
     if (cmd.command === 'stop') {
       const c = this.entry(account);
       const open = await this.openOrders(account, c);
@@ -598,7 +598,7 @@ export class GuardEngine {
       const wire = stopCancels(mine.map((o) => ({ asset: (this.deps.assets.get(o.coin) as { assetId: number }).assetId, oid: o.oid })));
       if (!wire) return { cancelled: 0 };
       const nonce = this.deps.nonces.next(signer.address);
-      const sig = await signer.signStopCancel({ kind: 'stop', issuedAt: cmd.issuedAt, verified: true }, wire, new Set(mine.map((o) => o.oid)), nonce, now);
+      const sig = await signer.signStopCancel({ kind: 'stop', issuedAt: cmd.issuedAt, acceptedAt: cmd.acceptedAt, verified: true }, wire, new Set(mine.map((o) => o.oid)), nonce, now);
       const res = await this.deps.exchange.send({ action: wire, nonce, signature: sig });
       if (res.ok) await this.deps.store.removeGuardOrders(account, mine.map((o) => o.oid));
       c.openOrders = c.openByDex = undefined;

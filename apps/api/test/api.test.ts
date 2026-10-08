@@ -42,6 +42,19 @@ const authed = (token: string, extra: Record<string, string> = {}) => ({ authori
 const fromProxy = (country: string, subdivision?: string) => ({ 'x-bulwark-proxy-secret': PROXY, 'x-bulwark-country': country, ...(subdivision ? { 'x-bulwark-subdivision': subdivision } : {}) });
 
 describe('sign in', () => {
+  it('someone asking for a nonce with your address cannot break your sign-in, and a nonce works for its own address only', async () => {
+    const mine = (await (await app.request('/auth/nonce', { method: 'POST', body: JSON.stringify({ address: user.address }) })).json()) as { nonce: string };
+    // Before 8 Oct 2026 this replaced the pending nonce for that address, so the user's sign-in failed.
+    await app.request('/auth/nonce', { method: 'POST', body: JSON.stringify({ address: user.address }) });
+    const message = createSiweMessage({ address: user.address, chainId: 42161, domain: DOMAIN, nonce: mine.nonce, uri: `https://${DOMAIN}`, version: '1', issuedAt: new Date(now) });
+    const res = await app.request('/auth/verify', { method: 'POST', body: JSON.stringify({ message, signature: await user.signMessage({ message }) }) });
+    expect(res.status).toBe(200);
+    // Someone else's nonce, used with this address: refused.
+    const theirs = (await (await app.request('/auth/nonce', { method: 'POST', body: JSON.stringify({ address: stranger.address }) })).json()) as { nonce: string };
+    const m2 = createSiweMessage({ address: user.address, chainId: 42161, domain: DOMAIN, nonce: theirs.nonce, uri: `https://${DOMAIN}`, version: '1', issuedAt: new Date(now) });
+    expect((await app.request('/auth/verify', { method: 'POST', body: JSON.stringify({ message: m2, signature: await user.signMessage({ message: m2 }) }) })).status).toBe(401);
+  });
+
   it('issues a session for a valid SIWE signature and refuses replays and other domains', async () => {
     const token = await signIn();
     expect(token).toMatch(/^ey/);

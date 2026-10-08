@@ -151,8 +151,8 @@ export class PgStore implements ApiStore, KeyVault {
     return Number(row?.id);
   }
   async pendingCommands(): Promise<PendingCommand[]> {
-    const rows = await this.sql`select id, account, command, minutes, issued_at from commands where done_at is null order by created_at`;
-    return rows.map((r) => ({ id: Number(r.id), account: r.account, command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at) }));
+    const rows = await this.sql`select id, account, command, minutes, issued_at, created_at from commands where done_at is null order by created_at`;
+    return rows.map((r) => ({ id: Number(r.id), account: r.account, command: r.command, minutes: r.minutes, issuedAt: Number(r.issued_at), acceptedAt: Number(r.created_at) }));
   }
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     await this.sql`update commands set done_at = ${now}, result = ${this.sql.json(result as never)} where id = ${id}`;

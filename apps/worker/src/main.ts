@@ -14,7 +14,7 @@
  */
 import http from 'node:http';
 import { builderField, type Network as ConfigNetwork } from '@bulwarkxyz/config';
-import { CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
+import { COMMAND_QUEUE_MAX_MS, CommandSigner, GuardedSigner } from '@bulwarkxyz/executor';
 import { buildAssetIndex, dexCollateral, type AssetIndex, type OpenOrder, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
 import { ExchangeClient, InfoClient, NonceManager, WeightLimiter, limitedFetch, type Hex, type Network } from '@bulwarkxyz/hyperliquid';
 import { AwsKmsBackend, KmsDigestSigner, LocalDigestSigner, SealedDigestSigner, parseMasterKeys, type DigestSigner } from '@bulwarkxyz/signer';
@@ -307,14 +307,19 @@ async function main() {
     try {
       await keys.processRequests();
       for (const cmd of await store.pendingCommands()) {
+        // A stop (and the stop inside a wipe) that the exchange did not carry out stays queued and is tried again,
+        // until it works or the queue limit passes; a wipe never destroys the key while its stops may still rest.
+        const retryable = (r: Record<string, unknown>) => Boolean(r.error) && Date.now() - cmd.acceptedAt < COMMAND_QUEUE_MAX_MS;
         let result: Record<string, unknown>;
         if (cmd.command === 'wipe') {
           // Cancel the guard's own orders while the key still exists, then destroy the key.
-          const cancelled = await engine.command({ ...cmd, command: 'stop' }).catch((e) => ({ error: String(e) }));
+          const cancelled = (await engine.command({ ...cmd, command: 'stop' }).catch((e) => ({ error: String(e) }))) as Record<string, unknown>;
+          if (retryable(cancelled)) continue;
           const wiped = await keys.wipe(cmd.account, 'You signed a command to wipe your guard key');
           result = { cancelled, wiped };
         } else {
           result = await engine.command(cmd).catch((e) => ({ error: String(e) }));
+          if (cmd.command === 'stop' && retryable(result)) continue;
         }
         await store.finishCommand(cmd.id, result, Date.now());
       }

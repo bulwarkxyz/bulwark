@@ -25,20 +25,32 @@ import type { DigestSigner } from '@bulwarkxyz/signer';
  *   https://hyperliquid.gitbook.io/hyperliquid-docs/trading/order-types (TWAP: 5 min – 7 days, $100 min)
  * - stop: cancel every order the guard placed (backstops included), nothing else.
  */
+/** `acceptedAt`: when the API verified the signature and queued it (server clock); absent for direct use. */
 export type UserCommand =
-  | { kind: 'unwind'; minutes: number; issuedAt: number; verified: boolean }
-  | { kind: 'stop'; issuedAt: number; verified: boolean };
+  | { kind: 'unwind'; minutes: number; issuedAt: number; verified: boolean; acceptedAt?: number }
+  | { kind: 'stop'; issuedAt: number; verified: boolean; acceptedAt?: number };
 
 export const TWAP_MIN_NOTIONAL = 100;
 export const TWAP_MIN_MINUTES = 5;
 export const TWAP_MAX_MINUTES = 7 * 24 * 60;
 /** A command must be used within this long of the user signing it (engine constant). */
 export const COMMAND_MAX_AGE_MS = 60_000;
+/**
+ * A command the API accepted (signature verified, signed within COMMAND_MAX_AGE_MS of the API's clock) may wait in the
+ * queue this long before the worker carries it out. Measured on the servers' clocks: until 8 Oct 2026 the worker
+ * measured the browser's signing time against its own clock with 60 s and a 5 s skew allowance, so a kill switch
+ * could be accepted and then dropped during a deploy or with a browser clock a few seconds fast.
+ */
+export const COMMAND_QUEUE_MAX_MS = 15 * 60_000;
 
 export class CommandRejected extends Error {}
 
 function checkFresh(cmd: UserCommand, now: number) {
   if (!cmd.verified) throw new CommandRejected('command signature not verified');
+  if (cmd.acceptedAt !== undefined) {
+    if (now - cmd.acceptedAt > COMMAND_QUEUE_MAX_MS) throw new CommandRejected('command expired');
+    return;
+  }
   if (now - cmd.issuedAt > COMMAND_MAX_AGE_MS || cmd.issuedAt > now + 5_000) throw new CommandRejected('command expired');
 }
 

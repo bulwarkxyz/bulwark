@@ -120,6 +120,8 @@ export interface PendingCommand {
   command: CommandName;
   minutes: number;
   issuedAt: number;
+  /** When the API verified the signature and accepted it (the server's clock, not the browser's). */
+  acceptedAt: number;
 }
 
 export type AgentKeyStatus = 'pending' | 'active' | 'retired' | 'wiped';
@@ -292,7 +294,7 @@ export class MemoryStore implements ApiStore, KeyVault {
   async createTelegramCode(code: string, account: string, expiresAt: number) {
     this.putTelegramCode(code, account, expiresAt);
   }
-  private readonly cmds: Array<PendingCommand & { createdAt: number; doneAt?: number; result?: Record<string, unknown> }> = [];
+  private readonly cmds: Array<Omit<PendingCommand, 'acceptedAt'> & { createdAt: number; doneAt?: number; result?: Record<string, unknown> }> = [];
   async addCommand(c: { account: string; command: CommandName; minutes: number; issuedAt: number }, now = 0) {
     const id = this.cmds.length + 1;
     this.cmds.push({ id, account: this.k(c.account), command: c.command, minutes: c.minutes, issuedAt: c.issuedAt, createdAt: now });
@@ -319,7 +321,7 @@ export class MemoryStore implements ApiStore, KeyVault {
     return next;
   }
   async pendingCommands() {
-    return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt }) => ({ id, account, command, minutes, issuedAt }));
+    return this.cmds.filter((c) => c.doneAt === undefined).map(({ id, account, command, minutes, issuedAt, createdAt }) => ({ id, account, command, minutes, issuedAt, acceptedAt: createdAt }));
   }
   async finishCommand(id: number, result: Record<string, unknown>, now: number) {
     const c = this.cmds.find((x) => x.id === id);

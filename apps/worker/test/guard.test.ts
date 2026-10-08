@@ -272,16 +272,33 @@ describe('guard engine', () => {
     expect(mine).toHaveLength(1);
     (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = async () => [{ coin: 'xyz:CL', oid: mine[0]!.oid, side: 'A', reduceOnly: true, isTrigger: true }, { coin: 'xyz:CL', oid: 999, side: 'A', reduceOnly: true, isTrigger: true }];
     sent = [];
-    const r = await engine.command({ id: 1, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t });
+    const r = await engine.command({ id: 1, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t, acceptedAt: t });
     expect(r).toMatchObject({ cancelled: 1 });
     expect(sent[0]!.action).toEqual({ type: 'cancel', cancels: [{ a: assets.get('xyz:CL')!.assetId, o: mine[0]!.oid }] });
     expect(await store.guardOrders(ACCOUNT)).toEqual([]);
   });
 
+  it('a kill switch accepted by the API is carried out even with a browser clock 10 s fast, or 10 minutes later; not after 15', async () => {
+    await feed(91.5);
+    const mine = await store.guardOrders(ACCOUNT);
+    const open = async () => (await store.guardOrders(ACCOUNT)).map((o) => ({ coin: o.coin, oid: o.oid, side: 'A', reduceOnly: true, isTrigger: true }));
+    (engine as unknown as { deps: { openOrders: unknown } }).deps.openOrders = open;
+    // Before 8 Oct 2026 both of these were refused as "command expired" and marked done.
+    expect(await engine.command({ id: 3, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: t + 10_000, acceptedAt: t })).toMatchObject({ cancelled: mine.length });
+    await feed(91.5); // the guard places its backstop again (the kill switch flag is the API's)
+    const accepted = t;
+    t += 10 * 60_000;
+    expect(await engine.command({ id: 4, account: ACCOUNT, command: 'stop', minutes: 0, issuedAt: accepted, acceptedAt: accepted })).not.toHaveProperty('error', expect.stringMatching(/expired/));
+    t += 6 * 60_000;
+    await feed(91.5);
+    // Past the queue limit a command is refused (an unwind signs as long as a position is open).
+    await expect(engine.command({ id: 5, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: accepted, acceptedAt: accepted })).rejects.toThrow(/expired/);
+  });
+
   it('panic unwind closes positions reduce-only', async () => {
     await feed(91.5);
     sent = [];
-    const r = (await engine.command({ id: 2, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t })) as { steps: Array<{ ok: boolean }> };
+    const r = (await engine.command({ id: 2, account: ACCOUNT, command: 'unwind', minutes: 10, issuedAt: t, acceptedAt: t })) as { steps: Array<{ ok: boolean }> };
     expect(r.steps).toHaveLength(1);
     expect(sent[0]!.action).toMatchObject({ type: 'order', orders: [{ b: false, r: true, s: '0.24' }] }); // $22 < $100 → IOC close
   });

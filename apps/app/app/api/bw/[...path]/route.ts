@@ -28,7 +28,8 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   const t0 = performance.now();
   let res: Response;
   try {
-    res = await fetch(url, { method: req.method, headers, ...(req.method === 'GET' ? {} : { body: await req.text() }) });
+    const text = req.method === 'GET' ? '' : await req.text();
+    res = await fetch(url, { method: req.method, headers, ...(text ? { body: text } : {}) });
   } catch {
     // Say what actually failed: this deployment could not reach the API (not "the server could not answer").
     return Response.json({ error: 'This deployment of the app cannot reach the Bulwark API.', code: 'api_unreachable' }, { status: 502 });
@@ -41,4 +42,5 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
   return new Response(body, { status: res.status, headers: out });
 }
 
-export { forward as GET, forward as POST };
+// PUT and DELETE too: the alerts switch and "Unlink Telegram" use them (they got a 405 here until 8 Oct 2026).
+export { forward as GET, forward as POST, forward as PUT, forward as DELETE };

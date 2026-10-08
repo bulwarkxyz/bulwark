@@ -72,6 +72,8 @@ export const DRAFTS_PER_HOUR = 30;
 type Env = { Variables: { account: Hex } };
 
 /** A command must be submitted within this long of the user signing it (engine constant). */
+/** Sign-in nonces kept at most (expired ones are swept first, then the oldest dropped). */
+export const NONCE_MAX = 50_000;
 export const COMMAND_MAX_AGE_MS = 60_000;
 /** The worker refreshes the status at least every 15 s; older than this, it has stopped reporting. */
 export const STATUS_MAX_AGE_MS = 60_000;
@@ -80,7 +82,17 @@ const SESSION_HOURS = 12;
 
 export function createApp(deps: ApiDeps) {
   const app = new Hono<Env>();
-  const nonces = new Map<string, { nonce: string; exp: number; domain: string }>();
+  // Keyed by the nonce itself (one per request), so asking for a nonce with someone else's address cannot replace
+  // theirs; expired ones are swept and the map is capped, so unauthenticated requests cannot grow it without bound.
+  const nonces = new Map<string, { address: string; exp: number; domain: string }>();
+  const putNonce = (nonce: string, v: { address: string; exp: number; domain: string }) => {
+    if (nonces.size >= NONCE_MAX) {
+      const now = deps.now();
+      for (const [k, e] of nonces) if (e.exp < now) nonces.delete(k);
+      while (nonces.size >= NONCE_MAX) nonces.delete(nonces.keys().next().value as string);
+    }
+    nonces.set(nonce, v);
+  };
   const siweDomains = new Set([deps.siweDomain, ...(deps.siweExtraDomains ?? [])]);
   const draftTimes = new Map<string, number[]>();
   /** A refused signature: say "smart-contract wallet" when that's why, otherwise "bad signature". */
@@ -134,20 +146,21 @@ export function createApp(deps: ApiDeps) {
     // The app's proxy names the site the request came from; only our own sites are used, else production's.
     const site = c.req.header('x-bulwark-site') ?? '';
     const domain = siweDomains.has(site) ? site : deps.siweDomain;
-    nonces.set(getAddress(address), { nonce, exp: deps.now() + NONCE_TTL_MS, domain });
+    putNonce(nonce, { address: getAddress(address), exp: deps.now() + NONCE_TTL_MS, domain });
     return c.json({ nonce, domain });
   });
 
   app.post('/auth/verify', async (c) => {
     const { message, signature } = await c.req.json<{ message: string; signature: Hex }>();
     const parsed = parseSiweMessage(message);
-    const expected = parsed.address ? nonces.get(getAddress(parsed.address)) : undefined;
+    const entry = parsed.nonce ? nonces.get(parsed.nonce) : undefined;
+    const expected = entry && parsed.address && entry.address === getAddress(parsed.address) ? entry : undefined;
     if (!parsed.address || !parsed.domain || !siweDomains.has(parsed.domain) || (expected && expected.domain !== parsed.domain))
       return c.json({ error: 'This site is not allowed to sign in to Bulwark.', code: 'wrong_domain' }, 401);
-    if (!expected || expected.nonce !== parsed.nonce || expected.exp < deps.now()) return c.json({ error: 'nonce expired' }, 401);
+    if (!expected || expected.exp < deps.now()) return c.json({ error: 'nonce expired' }, 401);
     if (isContractWalletSignature(signature) || !(await verifyMessage({ address: parsed.address, message, signature: normalizeSignature(signature) }).catch(() => false)))
       return refuseSignature(c, parsed.address, signature);
-    nonces.delete(getAddress(parsed.address));
+    nonces.delete(parsed.nonce as string);
     const token = await new SignJWT({})
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(parsed.address.toLowerCase())
