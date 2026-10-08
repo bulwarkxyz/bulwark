@@ -23,20 +23,26 @@ const base = args.find((a) => !a.startsWith('--')) ?? 'http://localhost:3230';
 const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) && !bare;
 let failed = 0;
 const browser = await chromium.launch();
-// A navigation that never reaches "load" (8 Oct 2026: /app once took 85 s, once over 30 s): name the requests still
-// open when it times out, with how long each has been open, before failing.
+// Opens the app and waits for "Connect wallet". When either times out (8 Oct 2026: /app once took 85 s, once over 30 s,
+// and once the button was not shown for 30 s), it names the requests still open and the slowest finished ones first.
 async function go(page, url) {
   const open = new Map();
+  const done = [];
   const start = (r) => open.set(r, Date.now());
-  const end = (r) => open.delete(r);
+  const end = (r) => {
+    if (open.has(r)) done.push([Date.now() - open.get(r), r]);
+    open.delete(r);
+  };
   page.on('request', start);
   page.on('requestfinished', end);
   page.on('requestfailed', end);
   try {
     await page.goto(url);
+    await page.getByRole('button', { name: 'Connect wallet' }).filter({ visible: true }).first().waitFor({ timeout: 30_000 });
   } catch (e) {
-    console.log(`slow load of ${url}: requests still open after ${String(e.message).match(/Timeout (\d+)ms/)?.[1] ?? '?'} ms:`);
-    for (const [r, t] of open) console.log(`  ${Date.now() - t} ms  ${r.resourceType()}  ${r.url().slice(0, 160)}`);
+    console.log(`slow: ${url} (${String(e.message).split('\n')[0]})`);
+    for (const [r, t] of open) console.log(`  open ${Date.now() - t} ms  ${r.resourceType()}  ${r.url().slice(0, 160)}`);
+    for (const [ms, r] of done.sort((a, b) => b[0] - a[0]).slice(0, 8)) console.log(`  took ${ms} ms  ${r.resourceType()}  ${r.url().slice(0, 160)}`);
     throw e;
   } finally {
     page.off('request', start);

@@ -22,7 +22,10 @@ fail() {
   say "FAILED: $*"
   if [ -n "${PREV_URL:-}" ] && [ "$(serving id)" != "$PREV_ID" ]; then
     say "Rolling back to the deployment that was serving before"
-    vercel rollback "$PREV_URL" --yes >/dev/null 2>&1 && [ "$(serving id)" = "$PREV_ID" ] && echo "rolled back" || echo "ROLLBACK FAILED: roll back by hand now"
+    # The switch can take a while to show (8 Oct 2026: checked at once, it reported a failed rollback); wait up to 2 min.
+    vercel rollback "$PREV_URL" --yes > /tmp/bw-rollback.log 2>&1 || { echo "ROLLBACK FAILED (see /tmp/bw-rollback.log): roll back by hand now"; exit 1; }
+    for i in $(seq 1 30); do [ "$(serving id)" = "$PREV_ID" ] && { echo "rolled back"; exit 1; }; sleep 4; done
+    echo "ROLLBACK NOT SERVING after 2 min (see /tmp/bw-rollback.log): roll back by hand now"
   fi
   exit 1
 }

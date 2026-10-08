@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { builderField } from '@bulwarkxyz/config';
-import { POLICY_CONFIRMATION_TYPES, assessRisk, buildAssetIndex, buildSnapshot, dexCollateral, policyConfirmationDomain, policyHash, type Policy, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
+import { COMMAND_TYPES, POLICY_CONFIRMATION_TYPES, assessRisk, buildAssetIndex, buildSnapshot, dexCollateral, policyConfirmationDomain, policyHash, type Policy, type RawPerpDexs, type RawPerpMeta } from '@bulwarkxyz/guard-core';
 import { ExchangeClient, InfoClient, WeightLimiter, l1ActionHash, limitedFetch, l1TypedData, userSignedTypedData, type ExchangeResult, type Hex, type L1Action, type UserSignedAction } from '@bulwarkxyz/hyperliquid';
 import { parseSignature } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
@@ -128,6 +128,17 @@ export class Session {
     const res = await this.api('/v1/policy', { body: { policy, signature, chainId: WALLET_CHAIN_ID } });
     this.log.write('policy signed', { version: policy.version, hash: policyHash(policy), status: res.status, response: res.body, rules: policy.rules });
     return res;
+  }
+
+  /** Signs a command with the wallet (EIP-712 BulwarkCommand) and sends it, as the app's buttons do. Returns the signature too. */
+  async command(command: 'stop' | 'resume' | 'unwind', minutes = 0, issuedAt = Date.now()): Promise<{ status: number; body: { id?: number | null; error?: string }; signature: Hex }> {
+    const signature = await this.need().signTypedData({ domain: policyConfirmationDomain(WALLET_CHAIN_ID), types: COMMAND_TYPES, primaryType: 'BulwarkCommand', message: { account: WALLET, network: NET, command, minutes, issuedAt: BigInt(issuedAt) } });
+    const res = await this.api<{ id?: number | null; error?: string }>('/v1/commands', { body: { command, minutes, issuedAt, signature, chainId: WALLET_CHAIN_ID } });
+    this.log.write('command sent', { command, status: res.status, response: res.body });
+    return { ...res, signature };
+  }
+  async resend(command: string, issuedAt: number, signature: Hex, minutes = 0) {
+    return this.api<{ error?: string }>('/v1/commands', { body: { command, minutes, issuedAt, signature, chainId: WALLET_CHAIN_ID } });
   }
 
   // ---------------------------------------------------------------- reading state

@@ -14,6 +14,9 @@ import { part4 } from './part4.js';
 import { part5 } from './part5.js';
 import { part6 } from './part6.js';
 import { demoState } from './demo-state.js';
+import { resign } from './resign.js';
+import { flatten } from './flatten.js';
+import { commandsCheck } from './commands-check.js';
 import { linkTelegram } from './link-telegram.js';
 
 const [part, ...rest] = process.argv.slice(2);
@@ -41,6 +44,9 @@ const parts: Record<string, () => Promise<void>> = {
   'link-telegram': () => linkTelegram(),
   part6: () => part6({ dryRun }),
   'demo-state': () => demoState({ ...approval }),
+  resign: () => resign(),
+  flatten: () => flatten({ ...approval }),
+  'commands-check': () => commandsCheck({ ...approval }),
   part5: () => part5({ dryRun, rehearse: rest.includes('--rehearse'), ...approval }),
 };
 
