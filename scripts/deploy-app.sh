@@ -52,6 +52,9 @@ for tab in $TABS; do
   echo "  $tab ok"
 done
 
+say "Warming up in a real browser: every tab fully loaded once (its scripts and assets)"
+node scripts/browser-warm.mjs "$SITE" || fail "a tab did not load in a real browser within 2 minutes"
+
 say "Wallet window, a visitor with no wallet (twice)"
 for run in 1 2; do
   node scripts/wallet-modal-check.mjs "$SITE" --no-test-wallet >/tmp/bw-modal-$run.log 2>&1 || fail "wallet-modal-check run $run (see /tmp/bw-modal-$run.log)"
