@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { InLayer, isPhoneWidth, useAnchored, useOutside } from './layer';
 
 /**
@@ -41,16 +41,18 @@ export function Popover({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose, anchor]);
-  // Focus the panel itself when it opens, so the keyboard and screen readers land inside it.
-  useEffect(() => {
-    if (open) requestAnimationFrame(() => box.current?.focus());
-  }, [open, phone]);
+  // Focus the panel itself the moment it mounts (it renders through a portal, after its position is
+  // measured), so the keyboard and screen readers land inside it. A stable callback ref runs only on mount.
+  const setBox = useCallback((n: HTMLDivElement | null) => {
+    box.current = n;
+    if (n) requestAnimationFrame(() => n.focus());
+  }, []);
   if (!open) return null;
   if (phone)
     return (
       <InLayer>
         <div className="sel-scrim" onClick={onClose} />
-        <div ref={box} className="pop pop-sheet" role="dialog" aria-label={label} tabIndex={-1}>
+        <div ref={setBox} className="pop pop-sheet" role="dialog" aria-label={label} tabIndex={-1}>
           <div className="grab" />
           {children}
         </div>
@@ -59,7 +61,7 @@ export function Popover({
   if (!pos) return null;
   return (
     <InLayer>
-      <div ref={box} className="pop" role="dialog" aria-label={label} tabIndex={-1} style={{ top: pos.above ? undefined : pos.top, bottom: pos.above ? window.innerHeight - pos.top : undefined, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}>
+      <div ref={setBox} className="pop" role="dialog" aria-label={label} tabIndex={-1} style={{ top: pos.above ? undefined : pos.top, bottom: pos.above ? window.innerHeight - pos.top : undefined, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}>
         {children}
       </div>
     </InLayer>

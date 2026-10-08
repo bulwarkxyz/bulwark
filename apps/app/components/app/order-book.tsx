@@ -53,16 +53,17 @@ export function OrderBook({ coin, ticker, depth = 9, forceLoading, stale, only }
 
   return (
     <>
-      <div className="tabs" role="tablist" aria-label="Book and trades">
+      <div className="tabs">
         {only ? null : (
-          <>
+          // The tabs alone form the tab list; the grouping select beside them is not a tab.
+          <div role="tablist" aria-label="Book and trades" style={{ display: 'contents' }}>
             <button type="button" role="tab" aria-selected={tab === 'book'} className={tab === 'book' ? 'on' : ''} onClick={() => setTab('book')}>
               Order book
             </button>
             <button type="button" role="tab" aria-selected={tab === 'trades'} className={tab === 'trades' ? 'on' : ''} onClick={() => setTab('trades')}>
               Trades
             </button>
-          </>
+          </div>
         )}
         <span className="sp" />
         {tab === 'book' && ticks.length ? (

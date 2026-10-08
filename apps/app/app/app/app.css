@@ -476,3 +476,5 @@ button.wallet[aria-expanded="true"]{border-color:var(--field-focus)}
 }
 /* Phones: the page's name in the top bar stays on one line (ellipsis when the bar is full). */
 .ptl{min-width:0;flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* On a banner's tinted background the faintest grey falls below 4.5:1; banners use the next grey up. */
+.banner .t3{color:var(--text-2)}
