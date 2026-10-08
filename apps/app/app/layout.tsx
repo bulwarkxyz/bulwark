@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from 'next-themes';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './base.css';
@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   // Review previews (lib/review.tsx) are never indexed; the flag is inlined at build time.
   ...(process.env.NEXT_PUBLIC_REVIEW_MODE === '1' ? { robots: { index: false, follow: false } } : {}),
 };
+
+/** Phones: draw under the home indicator so the tab bar can pad for it; zoom stays allowed. */
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

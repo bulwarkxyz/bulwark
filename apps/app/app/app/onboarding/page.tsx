@@ -56,19 +56,20 @@ function RegionStep() {
         <div className="field" style={{ width: 200 }}>
           <label htmlFor="res">Country you live in (2 letters)</label>
           <div className="input">
-            <input id="res" maxLength={2} placeholder="Two letters" value={residency} onChange={(e) => setResidency(e.target.value.toUpperCase())} />
+            <input id="res" maxLength={2} autoCapitalize="characters" placeholder="e.g. IN" value={residency} onChange={(e) => setResidency(e.target.value.toUpperCase())} />
           </div>
         </div>
         <div className="field" style={{ width: 200 }}>
           <label htmlFor="cit">Citizenship (2 letters)</label>
           <div className="input">
-            <input id="cit" maxLength={2} placeholder="Two letters" value={citizenship} onChange={(e) => setCitizenship(e.target.value.toUpperCase())} />
+            <input id="cit" maxLength={2} autoCapitalize="characters" placeholder="e.g. IN" value={citizenship} onChange={(e) => setCitizenship(e.target.value.toUpperCase())} />
           </div>
         </div>
         <button type="button" className="btn btn-ink" disabled={!valid || busy} onClick={submit}>
           {busy ? 'Checking…' : 'Confirm'}
         </button>
       </div>
+      <span className="tiny t3">Two-letter country codes: IN for India, DE for Germany, SG for Singapore, AE for the UAE.</span>
       {msg ? <span className={`small ${msg.ok ? '' : 'ct'}`}>{msg.text}</span> : null}
     </div>
   );
@@ -333,7 +334,7 @@ export default function OnboardingPage() {
             <div className="row" style={{ padding: '0 12px 12px' }}>
               {current < STEPS.length - 1 ? (
                 <button type="button" className="btn btn-sm" onClick={() => setStep(firstOpen === -1 ? current + 1 : Math.max(firstOpen, current + 1))}>
-                  Continue to step {(firstOpen === -1 ? current + 1 : Math.max(firstOpen, current + 1)) + 1}
+                  Next: {STEPS[firstOpen === -1 ? current + 1 : Math.max(firstOpen, current + 1)]!.name}
                 </button>
               ) : (
                 <Link className="btn btn-sm btn-ink" href="/app/positions">

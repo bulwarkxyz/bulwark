@@ -67,6 +67,8 @@ export async function installTestWallet(context, { name = 'Test Wallet', chainId
       const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail }));
       window.addEventListener('eip6963:requestProvider', announce);
       announce();
+      // Like a wallet's in-app browser on a phone, also the plain injected provider.
+      if (!window.ethereum) window.ethereum = provider;
     },
     { name, icon: ICON },
   );

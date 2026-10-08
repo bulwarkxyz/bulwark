@@ -38,6 +38,7 @@ import { Icon } from './icons';
 import { Select } from './select';
 import { useWalletChainId } from '@/lib/wallet';
 import { walletErrorText } from '@/lib/wallet-errors';
+import { FirstRulesNext } from './translator';
 
 /**
  * The user's rules as they edit them: the signed version plus local changes (rules added by hand,
@@ -451,7 +452,13 @@ export function ActiveRules({ s, status, loading, bare, title = 'Active rules' }
         </div>
       )}
       {s.changes.any && !s.next.ok ? <div className="pb tiny ct" style={{ paddingTop: 0 }}>{s.next.problem}</div> : null}
-      {s.msg ? <div className={`pb small ${s.msg.ok ? '' : 'ct'}`} style={{ paddingTop: 0 }}>{s.msg.text}</div> : null}
+      {s.msg ? (
+        <div className={`pb small col ${s.msg.ok ? '' : 'ct'}`} style={{ paddingTop: 0, gap: 8 }} role={s.msg.ok ? 'status' : 'alert'}>
+          {s.msg.text}
+          {/* A first signed version: say where to go next. */}
+          {s.msg.ok && /^Version 1 signed/.test(s.msg.text) ? <FirstRulesNext /> : null}
+        </div>
+      ) : null}
     </Box>
   );
 }

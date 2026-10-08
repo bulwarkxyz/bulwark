@@ -249,6 +249,18 @@ export function TradeScreen({ ticker }: { ticker: string }) {
           <div className="skb" style={{ flex: 1, minHeight: 220 }} />
           <span className="small t3">Loading candles from Hyperliquid…</span>
         </div>
+      ) : candles.isError && !candles.data?.length ? (
+        // A failed read is not "no trades": say what happened.
+        <div className="empty">
+          <div className="ico">{Icon.alert(18)}</div>
+          <b>Can’t load {m.ticker}’s candles from Hyperliquid right now.</b>
+          <span className="small" style={{ maxWidth: 420 }}>
+            {/429|rate/i.test(String((candles.error as Error | null)?.message)) ? 'Hyperliquid is limiting requests for a moment.' : 'Its data service didn’t answer.'} The app tries again every minute.
+          </span>
+          <button type="button" className="btn btn-sm" disabled={candles.isFetching} onClick={() => void candles.refetch()}>
+            {candles.isFetching ? 'Trying…' : 'Try again'}
+          </button>
+        </div>
       ) : candles.data?.length ? (
         <CandleChart key={`${m.coin}-${tf.id}`} candles={candles.data} lines={lines} stale={stale ? 'Stale: not updating' : undefined} note={marginTooLarge(g, m.coin) ? NO_BACKSTOP_LINE : undefined} onNeedOlder={candles.loadOlder} loadingOlder={candles.loadingOlder} noOlder={candles.noOlder} />
       ) : (

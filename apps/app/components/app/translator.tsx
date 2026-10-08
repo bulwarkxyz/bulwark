@@ -2,6 +2,7 @@
 
 import type { Policy, Rule } from '@bulwarkxyz/guard-core';
 import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useSignTypedData } from 'wagmi';
 import { api, ApiError } from '@/lib/api';
@@ -195,7 +196,14 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
           </div>
         ) : null}
         {err ? <span className="small ct">{err}</span> : null}
-        {done ? <span className="small">{done}</span> : null}
+        {done ? (
+          <span className="col" style={{ gap: 6 }}>
+            <span className="small" role="status">
+              {done}
+            </span>
+            <FirstRulesNext />
+          </span>
+        ) : null}
         <div className="disclose">
           {Icon.lines(14)}
           <span>
@@ -207,3 +215,17 @@ export function Translator({ forced, s, bare }: { forced: 'loading' | 'error' | 
   );
 }
 
+
+/** What to do once rules are signed: see the guard on your positions, or try them on a crash first. */
+export function FirstRulesNext() {
+  return (
+    <span className="row" style={{ gap: 8 }}>
+      <Link className="btn btn-sm btn-ink" href="/app/positions">
+        See the guard on your positions
+      </Link>
+      <Link className="btn btn-sm" href="/app/simulator">
+        Try your rules in the simulator
+      </Link>
+    </span>
+  );
+}

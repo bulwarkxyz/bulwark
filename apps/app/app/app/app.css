@@ -250,7 +250,7 @@ html.light .bw,html.light [data-rk]{
   .netband{font-size:11px;padding:4px 12px}
   .mguard{display:flex;flex-direction:column;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
   .mguard .meter{flex:1}
-  .mtabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:sticky;bottom:0;z-index:5;min-height:60px;border-top:1px solid var(--line);background:var(--surface)}
+  .mtabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:sticky;bottom:0;z-index:5;min-height:60px;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid var(--line);background:var(--surface)}
   .mtabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--text-3);font-weight:500;min-height:48px}
   .mtabbar a.on{color:var(--text)}
   .statusbar .hide-sm{display:none}

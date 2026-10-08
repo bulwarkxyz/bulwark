@@ -37,6 +37,18 @@ function useHistory(user: Hex | undefined) {
   });
 }
 
+/** A read that failed is not an empty list: say so, with a retry. */
+function LoadFailed({ what, q }: { what: string; q: { refetch: () => unknown; isFetching: boolean } }) {
+  return (
+    <span className="col" style={{ gap: 8, alignItems: 'center' }}>
+      <span>Can’t load {what} from Hyperliquid right now.</span>
+      <button type="button" className="btn btn-sm" disabled={q.isFetching} onClick={() => void q.refetch()}>
+        {q.isFetching ? 'Trying…' : 'Try again'}
+      </button>
+    </span>
+  );
+}
+
 function Empty({ children }: { children: React.ReactNode }) {
   return <div className="empty small">{children}</div>;
 }
@@ -111,7 +123,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
         </table>
       </div>
     ) : (
-      <Empty>No open orders.</Empty>
+      <Empty>{orders.isError ? <LoadFailed what="your open orders" q={orders} /> : 'No open orders.'}</Empty>
     );
   } else if (tab === 'guard') {
     body = !signedIn ? (
@@ -201,7 +213,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
         </table>
       </div>
     ) : (
-      <Empty>No trades yet.</Empty>
+      <Empty>{fills.isError ? <LoadFailed what="your trades" q={fills} /> : 'No trades yet.'}</Empty>
     );
   } else if (tab === 'funding') {
     body = funding.data?.length ? (
@@ -223,7 +235,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
         </table>
       </div>
     ) : (
-      <Empty>No funding in the last 7 days{NETWORK === 'testnet' ? ' (testnet funding is often zero)' : ''}.</Empty>
+      <Empty>{funding.isError ? <LoadFailed what="your funding payments" q={funding} /> : `No funding in the last 7 days${NETWORK === 'testnet' ? ' (testnet funding is often zero)' : ''}.`}</Empty>
     );
   } else {
     body = history.data?.length ? (
@@ -248,7 +260,7 @@ export function BottomPanel({ g, risk, address, connected, now, coin, loading }:
         </table>
       </div>
     ) : (
-      <Empty>No orders yet.</Empty>
+      <Empty>{history.isError ? <LoadFailed what="your order history" q={history} /> : 'No orders yet.'}</Empty>
     );
   }
 
