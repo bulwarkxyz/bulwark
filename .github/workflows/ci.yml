@@ -30,6 +30,8 @@ jobs:
       - run: pnpm check:contrast
       - run: pnpm check:review-mode
       - run: pnpm check:public
+      # The deploy scripts' rollback paths, against stubs (nothing is deployed).
+      - run: bash scripts/test/deploy-rollback.test.sh && bash scripts/test/deploy-together.test.sh
       - run: pnpm test
         env:
           FC_RUNS: '5000'
