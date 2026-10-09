@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The screens for the 8 Oct API contract on a local review build, at 1440 and 390 in both themes:
 //   rules that need signing again (Guard rules banner, and the guard bar's pause line);
-//   the trade ticket with the region blocked, alerts only, and unknown (no answer);
+//   the trade ticket in every region case: blocked (country, declaration, unknown place), alerts only, no answer, limited;
 //   the global stop in the guard bar.
 // Usage: node scripts/contract-shots.mjs <local review build url> <outDir>
 import { mkdirSync } from 'node:fs';
@@ -14,9 +14,12 @@ const SHOTS = [
   ['resign-rules', `/app/rules?${W}&resign=1&guard=paused:resign_required`, 'Sign your rules again'],
   ['resign-positions', `/app/positions?${W}&resign=1&guard=paused:resign_required`, 'Sign your rules again'],
   ['operator-stop', `/app/positions?${W}&guard=paused:operator_stop`, 'resumes when Bulwark lifts the stop'],
-  ['region-blocked', `/app/trade/GOLD?${W}&region=blocked`, 'aren’t available from United States'],
+  ['region-blocked-country', `/app/trade/GOLD?${W}&region=blocked`, 'Your connection comes from United States'],
+  ['region-blocked-declared', `/app/trade/GOLD?${W}&region=declared`, 'residence or citizenship you declared in setup'],
+  ['region-blocked-unknown-place', `/app/trade/GOLD?${W}&region=nowhere`, 'can’t tell which country'],
   ['region-alerts-only', `/app/trade/GOLD?${W}&region=alerts_only`, 'From Germany, the guard sends alerts'],
-  ['region-unknown', `/app/trade/GOLD?${W}&region=unknown`, 'Can’t check your region'],
+  ['region-no-answer', `/app/trade/GOLD?${W}&region=unknown`, 'didn’t answer the region check'],
+  ['region-limited', `/app/trade/GOLD?${W}&region=limited`, 'limiting region checks'],
 ];
 const browser = await chromium.launch();
 let failed = 0;
