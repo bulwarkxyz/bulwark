@@ -338,8 +338,8 @@ describe('guard retry', () => {
     expect(Number(retry!.p)).toBeGreaterThanOrEqual(68.5 * 0.99 - 1e-9);
     expect(Number(retry!.p)).toBeLessThan(68.5);
     expect(await store.retries(ACCOUNT)).toEqual([]); // filled
-    const entries = store.audit.raw(ACCOUNT).filter((e) => e.kind === 'guard_action' && /^order/.test(e.what));
-    expect(entries.map((e) => e.what)).toEqual(['order failed, filled 0 of 0.145: Order could not immediately match against any resting orders. asset=110000', 'order sent, filled 0.146 of 0.146 (attempt 2)']);
+    const entries = store.audit.raw(ACCOUNT).filter((e) => e.kind === 'guard_action' && /^Reduce /.test(e.what));
+    expect(entries.map((e) => e.what)).toEqual(['Reduce xyz:CL: sell order failed, filled 0 of 0.145: Order could not immediately match against any resting orders. asset=110000', 'Reduce xyz:CL: sell order sent, filled 0.146 of 0.146 (attempt 2)']);
     expect(entries[1]!.why).toMatch(/retry 1: the last order did not fully fill/);
 
     await tick(68.4);
@@ -364,7 +364,7 @@ describe('guard retry', () => {
     await tick(68.5);
     await tick(68.4);
     expect(iocs()).toHaveLength(1);
-    const e = store.audit.raw(ACCOUNT).filter((x) => x.kind === 'guard_action' && /^order/.test(x.what)).at(-1)!;
+    const e = store.audit.raw(ACCOUNT).filter((x) => x.kind === 'guard_action' && /^Reduce /.test(x.what)).at(-1)!;
     expect(e.what).toMatch(/Hyperliquid shows it filled, filled 0.145/);
   });
 

@@ -14,6 +14,7 @@ import {
   type AssetIndex,
   type BackstopPricing,
   type ExecutionContext,
+  type GuardAction,
   type GuardContext,
   type OpenOrder,
   type RawClearinghouseState,
@@ -153,6 +154,22 @@ export const positionsKey = (c: Pick<AccountCache, 'dexStates'>) =>
     ])
     .sort()
     .join('|');
+
+/** An order, transfer, margin or alert action in words, for its audit entry: "Reduce xyz:GOLD: sell order sent". */
+export function actionWords(a: GuardAction, status: string): string {
+  switch (a.type) {
+    case 'order':
+      return `Reduce ${a.coin}: ${a.isBuy ? 'buy' : 'sell'} order ${status}`;
+    case 'transfer':
+      return `Move ${a.amount} USDC to the ${a.toDex || 'main'} pool: ${status}`;
+    case 'isolatedMargin':
+      return `Add ${a.amount} USDC margin to ${a.coin}: ${status}`;
+    case 'alert':
+      return 'Alert sent';
+    default:
+      return `${a.type} ${status}`;
+  }
+}
 
 export class GuardEngine {
   private readonly marks = new Map<string, { px: number; at: number }>();
@@ -628,7 +645,7 @@ export class GuardEngine {
     return records;
   }
 
-  /** One audit entry per attempt, with what it filled. */
+  /** One audit entry per attempt, with what it filled. Entries name the market and side (10 Oct 2026; older entries keep their words, which the chain hashes). */
   private async auditRecords(account: Hex, records: readonly ExecutionRecord[]): Promise<void> {
     const now = this.deps.now;
     for (const r of records) {
@@ -648,7 +665,7 @@ export class GuardEngine {
               ? `Stop ${r.status === 'sent' ? 'resting' : r.status}: ${a.isBuy ? 'buy' : 'sell'} ${a.size} ${a.coin} if the mark ${a.isBuy ? 'rises to' : 'falls to'} ${a.triggerPx} (limit ${a.limitPx})${r.error ? `: ${r.error}` : ''}`
               : a.type === 'cancel'
                 ? `Cancel ${r.status === 'sent' ? 'done' : r.status}: ${a.coin} order ${a.oid}${r.error ? `: ${r.error}` : ''}`
-                : `${a.type} ${r.status}${fill}${attempt}${r.error ? `: ${r.error}` : ''}`,
+                : `${actionWords(a, r.status)}${fill}${attempt}${r.error ? `: ${r.error}` : ''}`,
         proof: { ruleId: a.ruleId, nonce: r.nonce, cloid: r.cloid, statuses: r.result?.statuses, latencyMs: r.latencyMs, builderRetried: r.builderRetried, ...(order ? { attempt: order.attempt ?? 1, filled: filledSize(r), limitPx: order.limitPx, keys: order.keys } : {}), ...(a.type === 'trigger' ? { coin: a.coin, triggerPx: a.triggerPx, limitPx: a.limitPx, size: a.size, line: a.line, pricing: a.pricing } : {}), ...(a.type === 'cancel' ? { coin: a.coin, oid: a.oid } : {}), ...(r.failedAt ? { failedAt: r.failedAt } : {}) },
       });
     }
