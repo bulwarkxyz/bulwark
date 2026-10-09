@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, sessionToken, setSessionToken } from '../lib/api';
-import { placeName, regionHold, regionNote, type TicketRegion } from '../lib/region';
+import { placeName, regionFailure, regionHold, regionNote, type TicketRegion } from '../lib/region';
 import { explainWalletError, retryIn } from '../lib/wallet-errors';
 
 const answer = (verdict: 'allowed' | 'alerts_only' | 'blocked', country: string | null = 'SG'): TicketRegion => ({ kind: 'answer', answer: { verdict, trading: verdict !== 'blocked', guard: verdict === 'allowed', country } });
@@ -10,22 +10,43 @@ describe('region at the ticket', () => {
     expect(regionHold(answer('allowed'), false)).toBeNull();
     expect(regionNote(answer('allowed'))).toBeNull();
   });
-  it('holds a new order where trading is blocked, naming the place, and says closing still works', () => {
+  it('names the connection’s country when that is what blocks', () => {
     const hold = regionHold(answer('blocked', 'US'), false)!;
-    expect(hold).toMatch(/aren’t available from United States/);
-    expect(hold).toMatch(/still close/);
+    expect(hold).toMatch(/Your connection comes from United States, where Bulwark doesn’t offer trading/);
+    expect(hold).toMatch(/Closing a position works/);
+  });
+  it('blames the declaration, not the place, when the connection’s country is allowed', () => {
+    const hold = regionHold(answer('blocked', 'SG'), false)!;
+    expect(hold).toMatch(/residence or citizenship you declared/);
+    expect(hold).not.toMatch(/Singapore/);
+  });
+  it('says when the connection’s country is unknown, and what to try', () => {
+    expect(regionHold(answer('blocked', null), false)).toMatch(/can’t tell which country.*VPN or proxy/);
+  });
+  it('names a sanctioned part of Ukraine without blaming the whole country', () => {
+    expect(regionHold(answer('blocked', 'UA'), false)).toMatch(/a part of Ukraine/);
   });
   it('never holds a reduce-only order, whatever the answer', () => {
-    for (const r of [answer('blocked'), { kind: 'signin' }, { kind: 'unknown' }, { kind: 'checking' }] as TicketRegion[]) expect(regionHold(r, true)).toBeNull();
+    const all: TicketRegion[] = [answer('blocked'), { kind: 'signin' }, { kind: 'unknown', why: 'unreachable' }, { kind: 'unknown', why: 'limited', retryAfter: 40 }, { kind: 'unknown', why: 'refused', text: 'x' }, { kind: 'checking' }];
+    for (const r of all) expect(regionHold(r, true)).toBeNull();
   });
-  it('holds new orders without a session or without an answer, rather than sending them unchecked', () => {
-    expect(regionHold({ kind: 'signin' }, false)).toMatch(/Sign in/);
-    expect(regionHold({ kind: 'unknown' }, false)).toMatch(/Can’t check your region/);
+  it('holds new orders without a session or an answer, saying why and what to do', () => {
+    expect(regionHold({ kind: 'signin' }, false)).toMatch(/Sign in \(top right\), then place the order/);
+    expect(regionHold({ kind: 'unknown', why: 'unreachable' }, false)).toMatch(/didn’t answer.*nothing was sent.*Check again in a minute/);
+    expect(regionHold({ kind: 'unknown', why: 'limited', retryAfter: 40 }, false)).toMatch(/limiting region checks.*Check again in about 40 seconds/);
+    expect(regionHold({ kind: 'unknown', why: 'refused', text: 'Finish setup first.' }, false)).toMatch(/refused the region check \(“Finish setup first\.”\)/);
     expect(regionHold({ kind: 'checking' }, false)).toMatch(/Checking/);
   });
-  it('notes that the guard only alerts where trading is allowed but the guard is not', () => {
+  it('sorts failed checks by what the user can do', () => {
+    expect(regionFailure(new ApiError(429, { retryAfter: 12 }))).toEqual({ why: 'limited', retryAfter: 12 });
+    expect(regionFailure(new ApiError(502, { code: 'api_unreachable' }))).toEqual({ why: 'unreachable' });
+    expect(regionFailure(new TypeError('Failed to fetch'))).toEqual({ why: 'unreachable' });
+    expect(regionFailure(new ApiError(409, { error: 'Finish setup first.' }))).toEqual({ why: 'refused', text: 'Finish setup first.' });
+  });
+  it('notes why the guard only alerts: the place, or the declaration', () => {
     expect(regionHold(answer('alerts_only', 'DE'), false)).toBeNull();
-    expect(regionNote(answer('alerts_only', 'DE'))).toMatch(/From Germany, the guard sends alerts but does not trade/);
+    expect(regionNote(answer('alerts_only', 'DE'))).toMatch(/From Germany, the guard sends alerts but does not trade for you \(EU and EEA rules\)/);
+    expect(regionNote(answer('alerts_only', 'SG'))).toMatch(/Because of the residence or citizenship you declared/);
   });
   it('names an unknown country plainly', () => {
     expect(placeName(null)).toBe('where you are');

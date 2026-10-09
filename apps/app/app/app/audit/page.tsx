@@ -51,6 +51,9 @@ function exportJson(entries: readonly AuditEntry[], account: string | undefined)
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/** Entries are shown as written (they are hashed into the chain), with only the first letter raised. */
+const sentence = (t: string) => (t ? t[0]!.toUpperCase() + t.slice(1) : t);
+
 export default function AuditPage() {
   const review = useReview();
   const { address, connected, pending } = useViewer();
@@ -179,7 +182,7 @@ export default function AuditPage() {
                       {open === e.seq ? 'Hide proof' : 'Proof'}
                     </button>
                   </div>
-                  <span className="small">{e.what}</span>
+                  <span className="small">{sentence(e.what)}</span>
                   <span className="tiny t2">{e.why}</span>
                   {pricedTogether(e) ? <span className="tag" style={{ alignSelf: 'flex-start' }}>priced together</span> : null}
                   {a ? (
@@ -217,7 +220,7 @@ export default function AuditPage() {
                         <span className={`chip chip-sm ${KIND_CHIP[e.kind] ?? ''}`}>{KIND_LABEL[e.kind] ?? e.kind}</span>
                       </td>
                       <td style={{ whiteSpace: 'normal', minWidth: 260 }}>
-                        {e.what}
+                        {sentence(e.what)}
                         {e.why ? <span className="tiny t3" style={{ display: 'block' }}>{e.why}</span> : null}
                         {pricedTogether(e) ? <span className="tag" style={{ marginTop: 4, display: 'inline-block' }}>priced together</span> : null}
                       </td>

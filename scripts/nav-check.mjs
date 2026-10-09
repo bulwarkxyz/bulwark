@@ -104,6 +104,10 @@ for (const w of [1440, 390]) {
     await r.goto(`${base}/app/positions?${WATCH}`);
     const shown = await r.getByText('Can’t load your account from Hyperliquid right now.').waitFor({ timeout: 30_000 }).then(() => true, () => false);
     check(shown && !(await r.getByText('No open positions.').count()), `${at}: an account Hyperliquid won't return says so, never "No open positions"`);
+    // Setup with the same failure: a funded account must never be told it has no USDC.
+    await r.goto(`${base}/app/onboarding?${WATCH}&step=3`);
+    const setupShown = await r.getByText('Can’t load your account from Hyperliquid right now.').waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    check(setupShown && !(await r.getByText('No USDC in your Hyperliquid account yet.').count()), `${at}: setup's funds step says the account can't be read, never "No USDC"`);
     await c3.close();
   }
 

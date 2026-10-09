@@ -75,7 +75,7 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
   const paidBps = realisedFeeBps(fills.data, m.coin);
   const hasKey = Boolean(address && tradingKey(address));
   // Asked when the ticket opens and again before each new order (submit).
-  const { region, refresh: refreshRegion } = useTicketRegion(connected);
+  const { region, refresh: refreshRegion, checking: regionChecking } = useTicketRegion(connected);
   const held = connected ? regionHold(region, reduceOnly) : null;
   const note = connected ? regionNote(region) : null;
   const ruleAt = (line: number) => g.rules.find((r) => r.when.kind === 'buffer' && r.when.below === line);
@@ -290,6 +290,11 @@ export function Ticket({ m, ctx, g, open, stale, loading, initialSide = 'long', 
         </button>
       )}
       {problem && connected && !stale ? <span className={held && held === problem && region.kind === 'answer' ? 'small ct' : 'tiny t3'}>{problem}</span> : null}
+      {held && region.kind === 'unknown' ? (
+        <button type="button" className="btn btn-sm" disabled={regionChecking} onClick={() => void refreshRegion()}>
+          {regionChecking ? 'Checking…' : 'Check again'}
+        </button>
+      ) : null}
       {note ? <span className="tiny t2">{note}</span> : null}
       {result ? (
         'error' in result && !('statuses' in result) ? (

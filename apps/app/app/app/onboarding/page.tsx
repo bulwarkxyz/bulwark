@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { AccountUnavailable } from '@/components/app/account-unavailable';
 import { ConnectButton, useSignIn } from '@/components/app/connect';
 import { fmtUsd } from '@/components/app/format';
 import { Icon } from '@/components/app/icons';
@@ -92,10 +93,13 @@ export default function OnboardingPage() {
   }, []);
 
   const funded = Boolean(view.data && view.data.risk.accountValue > 0) && review.state !== 'empty';
+  // The account read is still out, or failed: unknown, never "no USDC". An approved guard key means there was a
+  // deposit (Hyperliquid approves keys only after one), so the step counts as done without the read.
+  const fundsUnknown = connected && !view.data && review.state !== 'empty';
   const done = [
     Boolean(connected && signedIn && me.data),
     Boolean(me.data?.user),
-    funded,
+    funded || Boolean(me.data?.agent?.approved),
     Boolean(me.data?.agent?.approved) || me.data?.user?.region === 'guardOff',
     false, // the trading key is optional; the user moves on when ready
     ...(BUILDER_ON ? [(me.data?.builder.approvedMaxTenthsBps ?? 0) >= (me.data?.builder.feeTenthsBps ?? 1)] : []),
@@ -119,7 +123,7 @@ export default function OnboardingPage() {
   const firstOpen = done.findIndex((d) => !d);
   const current = step ?? (firstOpen === -1 ? STEPS.length - 1 : firstOpen);
   const name = STEPS[current]!.name;
-  const loading = pending || review.state === 'loading' || (connected && signedIn && !me.isFetched);
+  const loading = pending || review.state === 'loading' || (connected && signedIn && !me.isFetched) || (fundsUnknown && !view.isError && !me.data?.agent?.approved);
   const anyClosed = MARKETS.some((m) => !homeOpen(m.session, now));
 
   let body: React.ReactNode;
@@ -158,7 +162,11 @@ export default function OnboardingPage() {
   } else if (name === 'Funds on Hyperliquid') {
     body = (
       <div className="pb col" style={{ gap: 12 }}>
-        {funded ? (
+        {fundsUnknown && view.isError ? (
+          <AccountUnavailable view={view} />
+        ) : fundsUnknown ? (
+          <span className="sk" style={{ width: '60%' }} />
+        ) : funded ? (
           <>
             <span className="small t2">Bulwark trades from your own Hyperliquid account. Nothing is held by Bulwark.</span>
             <div className="kv line">
